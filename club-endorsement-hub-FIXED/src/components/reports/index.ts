@@ -1,0 +1,2 @@
+/** Report widgets (future). */
+export {};

@@ -1,0 +1,6 @@
+@ClubManagement_HostAddress = http://localhost:5275
+
+GET {{ClubManagement_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

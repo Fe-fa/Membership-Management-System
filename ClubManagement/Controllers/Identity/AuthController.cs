@@ -39,6 +39,34 @@ public class AuthController : ControllerBase
         return me is null ? Unauthorized() : Ok(me);
     }
 
+    [Authorize]
+    [HttpPut("me")]
+    public async Task<ActionResult<AuthUserDto>> UpdateMe([FromBody] UpdateMeRequest request, CancellationToken cancellationToken)
+    {
+        var id = User.UserId();
+        if (id is null) return Unauthorized();
+        try
+        {
+            var me = await _auth.UpdateMeAsync(id.Value, request, cancellationToken);
+            return me is null ? Unauthorized() : Ok(me);
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize]
+    [HttpPost("me/password")]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangeMyPasswordRequest request, CancellationToken cancellationToken)
+    {
+        var id = User.UserId();
+        if (id is null) return Unauthorized();
+        try
+        {
+            await _auth.ChangeMyPasswordAsync(id.Value, request, cancellationToken);
+            return Ok(new { message = "Password updated." });
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
     [AllowAnonymous]
     [HttpPost("set-password")]
     public async Task<IActionResult> SetPassword([FromBody] SetPasswordByTokenRequest request, CancellationToken cancellationToken)

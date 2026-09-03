@@ -31,6 +31,10 @@ namespace ClubManagement.Entities
         [Column("reason")]
         public string? Reason { get; set; }
 
+        [Column("action")]
+        [MaxLength(40)]
+        public string? Action { get; set; }
+
         public virtual MApplication Application { get; set; } = null!;
 
         public virtual ApplicationStatus? FromStatus { get; set; }

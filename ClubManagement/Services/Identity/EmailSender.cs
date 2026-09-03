@@ -10,6 +10,7 @@ public class SmtpOptions
     public string Host { get; set; } = string.Empty;
     public int Port { get; set; } = 587;
     public string From { get; set; } = "noreply@aeroclubea.com";
+    public string FromName { get; set; } = "Aero Club East Africa";
     public string User { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
     public bool EnableSsl { get; set; } = true;
@@ -45,9 +46,10 @@ public class EmailSender : IEmailSender
             return false;
         }
 
+        var fromName = string.IsNullOrWhiteSpace(_smtp.FromName) ? _smtp.From : _smtp.FromName;
         using var message = new MailMessage
         {
-            From = new MailAddress(_smtp.From),
+            From = new MailAddress(_smtp.From, fromName),
             Subject = subject,
             Body = body,
             IsBodyHtml = false

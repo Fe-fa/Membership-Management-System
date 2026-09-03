@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using ClubManagement.Data.MembershipApplication;
+using ClubManagement.DTOs.Common;
 using ClubManagement.DTOs.Identity;
 using ClubManagement.Entities;
 using ClubManagement.Entities.Identity;
@@ -12,7 +13,7 @@ namespace ClubManagement.Services.Identity;
 public interface IUserManagementService
 {
     Task EnsureSchemaAsync(CancellationToken cancellationToken);
-    Task<UserListResponse> ListAsync(string? search, string? status, string? role, int page, int pageSize, CancellationToken cancellationToken);
+    Task<PagedResult<UserListItemDto>> ListAsync(string? search, string? status, string? role, PagedRequest paging, CancellationToken cancellationToken);
     Task<IReadOnlyList<RoleOptionDto>> AssignableRolesAsync(CancellationToken cancellationToken);
     Task<UserDetailDto?> GetAsync(long userAccountId, CancellationToken cancellationToken);
     Task<CreateStaffUserResponse> CreateAsync(CreateStaffUserRequest request, long? actorUserId, CancellationToken cancellationToken);
@@ -97,11 +98,8 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
         await _db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<UserListResponse> ListAsync(string? search, string? status, string? role, int page, int pageSize, CancellationToken cancellationToken)
+    public async Task<PagedResult<UserListItemDto>> ListAsync(string? search, string? status, string? role, PagedRequest paging, CancellationToken cancellationToken)
     {
-        page = Math.Max(1, page);
-        pageSize = Math.Clamp(pageSize, 1, 50);
-
         var query = _db.UserAccounts.AsNoTracking()
             .Include(x => x.Profile)
             .Include(x => x.UserRoles).ThenInclude(x => x.Role)
@@ -129,20 +127,9 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
             query = query.Where(x => x.UserRoles.Any(r => r.Role.Code == roleCode));
         }
 
-        var total = await query.CountAsync(cancellationToken);
-        var rows = await query
+        return await query
             .OrderBy(x => x.Profile.LastName).ThenBy(x => x.Profile.FirstName)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync(cancellationToken);
-
-        return new UserListResponse
-        {
-            Items = rows.Select(MapList).ToList(),
-            Total = total,
-            Page = page,
-            PageSize = pageSize
-        };
+            .ToPagedResultAsync(paging, MapList, cancellationToken);
     }
 
     public async Task<IReadOnlyList<RoleOptionDto>> AssignableRolesAsync(CancellationToken cancellationToken)
@@ -535,11 +522,12 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
         return roles;
     }
 
-    /// <summary>Membership no. required unless every selected role is ADMIN-only.</summary>
+    /// <summary>Membership no. is not required for Admin, Applicant, or Receptionist (assigned by Admin/GM).</summary>
     private static bool RolesRequireMembershipNo(IEnumerable<string> roleCodes) =>
         roleCodes.Any(code =>
             !string.Equals(code, "ADMIN", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(code, "APPLICANT", StringComparison.OrdinalIgnoreCase));
+            && !string.Equals(code, "APPLICANT", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(code, "RECEPTIONIST", StringComparison.OrdinalIgnoreCase));
 
     private static bool RoleRequiresMembershipNo(string roleCode) =>
         RolesRequireMembershipNo([roleCode]);

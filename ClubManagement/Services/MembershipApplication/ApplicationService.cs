@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
 using ClubManagement.Data.MembershipApplication;
+using ClubManagement.DTOs.Common;
 using ClubManagement.DTOs.MembershipApplication;
 using ClubManagement.Entities;
 using ClubManagement.Entities.Lookups;
@@ -23,7 +24,7 @@ public class ApplicationWorkflowOptions
 
 public interface IApplicationService
 {
-    Task<IReadOnlyList<ApplicationListItemDto>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<PagedResult<ApplicationListItemDto>> GetAllAsync(PagedRequest paging, string? search, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ApplicationListItemDto>> GetMineAsync(long applicantProfileId, CancellationToken cancellationToken = default);
     Task<ApplicationDetailDto?> GetCurrentForProfileAsync(long applicantProfileId, CancellationToken cancellationToken = default);
     Task<ApplicationDetailDto?> GetByIdAsync(long applicationId, CancellationToken cancellationToken = default);
@@ -32,6 +33,7 @@ public interface IApplicationService
     Task<WorkflowValidationResultDto?> ValidateBeforeSubmitAsync(long applicationId, CancellationToken cancellationToken = default);
     Task<ApplicationDetailDto?> SubmitAsync(long applicationId, SubmitApplicationRequest request, CancellationToken cancellationToken = default);
     Task<ApplicationDetailDto?> ChangeStatusAsync(long applicationId, ChangeApplicationStatusRequest request, CancellationToken cancellationToken = default);
+    Task<ApplicationDetailDto?> RejectAndHandBackAsync(long applicationId, long? actorUserId, string reason, CancellationToken cancellationToken = default);
     Task<ApplicationDetailDto?> AdvanceStageAsync(long applicationId, long? actorUserId, string? reason, CancellationToken cancellationToken = default);
     Task<ApplicationDetailDto?> StartReviewAsync(long applicationId, long? actorUserId, string? reason, CancellationToken cancellationToken = default);
     Task<ApplicationDocumentDto?> AddDocumentAsync(long applicationId, CreateApplicationDocumentRequest request, CancellationToken cancellationToken = default);
@@ -49,37 +51,51 @@ public class ApplicationService : IApplicationService
     private readonly ApplicationWorkflowOptions _workflowOptions;
     private readonly IEndorsementInviteService _endorsementInvites;
     private readonly IManagerStageService _managerStage;
+    private readonly IApplicationDecisionNotifier _decisions;
 
     public ApplicationService(
         ApplicationModuleDbContext dbContext,
         IOptions<ApplicationWorkflowOptions> workflowOptions,
         IEndorsementInviteService endorsementInvites,
-        IManagerStageService managerStage)
+        IManagerStageService managerStage,
+        IApplicationDecisionNotifier decisions)
     {
         _dbContext = dbContext;
         _workflowOptions = workflowOptions.Value;
         _endorsementInvites = endorsementInvites;
         _managerStage = managerStage;
+        _decisions = decisions;
     }
 
-    public async Task<IReadOnlyList<ApplicationListItemDto>> GetAllAsync(CancellationToken cancellationToken = default)
+    public async Task<PagedResult<ApplicationListItemDto>> GetAllAsync(PagedRequest paging, string? search, CancellationToken cancellationToken = default)
     {
         // AsSplitQuery() avoids the (smaller, but still real) cartesian effect of
         // combining the Applicant.Country ThenInclude with the Status/ElectionType
         // Includes in a single joined statement as the table grows.
-        var rows = await _dbContext.Applications
+        var query = _dbContext.Applications
             .AsNoTracking()
             .AsSplitQuery()
             .Include(x => x.Applicant).ThenInclude(a => a.Country)
             .Include(x => x.Status)
             .Include(x => x.ElectionType)
             .Include(x => x.Endorsements)
-            .OrderByDescending(x => x.CreatedAt)
-            .ToListAsync(cancellationToken);
+            .AsQueryable();
 
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            query = query.Where(x =>
+                x.ApplicationNo.Contains(term) ||
+                x.Applicant.FirstName.Contains(term) ||
+                x.Applicant.LastName.Contains(term));
+        }
+
+        var ordered = query.OrderByDescending(x => x.CreatedAt);
+        var total = await ordered.CountAsync(cancellationToken);
+        var rows = await ordered.Skip(paging.Skip).Take(paging.PageSize).ToListAsync(cancellationToken);
         var paymentByProfile = await LoadPaymentStatusByProfileAsync(cancellationToken);
 
-        return rows.Select(x => MapListItem(x, paymentByProfile)).ToList();
+        return Paging.Create(rows.Select(x => MapListItem(x, paymentByProfile)), paging, total);
     }
 
     public async Task<IReadOnlyList<ApplicationListItemDto>> GetMineAsync(long applicantProfileId, CancellationToken cancellationToken = default)
@@ -92,6 +108,7 @@ public class ApplicationService : IApplicationService
             .Include(x => x.ElectionType)
             .Include(x => x.Endorsements)
             .Include(x => x.ApplicationExclusions)
+            .Include(x => x.ApplicationStatusHistories).ThenInclude(h => h.ToStatus)
             .Where(x => x.ApplicantProfileId == applicantProfileId)
             .OrderByDescending(x => x.CreatedAt)
             .ToListAsync(cancellationToken);
@@ -244,6 +261,7 @@ public class ApplicationService : IApplicationService
             SponsorCompletedAt = sponsor.CompletedAt,
             EndorsementsCompleted = sponsor.CompletedCount,
             EndorsementsRequired = sponsor.RequiredCount,
+            LastRejectionReason = LatestRejectionReason(x),
         };
     }
 
@@ -257,9 +275,13 @@ public class ApplicationService : IApplicationService
             .FirstOrDefault();
         if (code is "NotElected" or "Rejected")
         {
-            return until is DateOnly d
-                ? $"Rejected — you may reapply after {d:dd MMM yyyy}"
-                : "Rejected — you may reapply later per the rules";
+            var reason = LatestRejectionReason(x);
+            var untilCopy = until is DateOnly d
+                ? $"You may reapply after {d:dd MMM yyyy}"
+                : "You may reapply later per the rules";
+            return string.IsNullOrWhiteSpace(reason)
+                ? $"Rejected — {untilCopy}"
+                : $"Rejected — {reason}. {untilCopy}";
         }
         if (code is "Committee" or "CommitteeReview")
             return "Approved — pending signatures";
@@ -341,6 +363,29 @@ public class ApplicationService : IApplicationService
 
     public async Task<ApplicationDetailDto> CreateDraftAsync(CreateApplicationRequest request, CancellationToken cancellationToken = default)
     {
+        if (request.ApplicantProfileId is long profileId && profileId > 0)
+        {
+            var open = await _dbContext.Applications
+                .Include(x => x.Status)
+                .Where(x => x.ApplicantProfileId == profileId)
+                .OrderByDescending(x => x.UpdatedAt ?? x.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+            var code = NormalizeStatusCode(open?.Status?.Code);
+            if (open is not null && code is not "Rejected" and not "Withdrawn" and not "Approved" and not "NotElected")
+            {
+                var amend = new UpdateApplicationRequest
+                {
+                    FormDataJson = request.FormDataJson,
+                    CompletedSteps = request.CompletedSteps,
+                    ProposerProfileId = request.ProposerProfileId,
+                    SeconderProfileId = request.SeconderProfileId,
+                    UpdatedByUserId = request.CreatedByUserId
+                };
+                return await UpdateAsync(open.ApplicationId, amend, cancellationToken)
+                    ?? throw new InvalidOperationException("Existing application could not be updated.");
+            }
+        }
+
         var entity = new MApplication
         {
             ApplicationNo = string.IsNullOrWhiteSpace(request.ApplicationNo)
@@ -364,7 +409,8 @@ public class ApplicationService : IApplicationService
             CompletedStepsJson = request.CompletedSteps is null ? null : JsonSerializer.Serialize(request.CompletedSteps),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
-            CreatedByUserId = request.CreatedByUserId
+            CreatedByUserId = request.CreatedByUserId,
+            CurrentHandlerUserId = request.CreatedByUserId
         };
 
         _dbContext.Applications.Add(entity);
@@ -513,6 +559,8 @@ public class ApplicationService : IApplicationService
         entity.ApplicationStatusId = _workflowOptions.SubmittedStatusId;
         entity.UpdatedByUserId = request.ChangedByUserId;
         entity.UpdatedAt = DateTime.UtcNow;
+        entity.PreviousHandlerUserId = entity.CurrentHandlerUserId;
+        entity.CurrentHandlerUserId = request.ChangedByUserId ?? entity.CurrentHandlerUserId;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         await AddStatusHistoryInternalAsync(
@@ -521,7 +569,8 @@ public class ApplicationService : IApplicationService
             entity.ApplicationStatusId,
             request.ChangedByUserId,
             request.Reason ?? "Application submitted and is now Pre-requisites, awaiting admin screening.",
-            cancellationToken);
+            cancellationToken,
+            ApplicationWorkflowRouter.ReviewAction);
 
         var updated = await LoadApplicationAsync(applicationId, cancellationToken);
         return updated is null ? null : Map(updated);
@@ -542,13 +591,94 @@ public class ApplicationService : IApplicationService
             request.ToStatusId = status.ApplicationStatusId;
         }
 
+        var toStatus = await _dbContext.ApplicationStatuses.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.ApplicationStatusId == request.ToStatusId, cancellationToken);
+        var toCode = NormalizeStatusCode(toStatus?.Code ?? request.StatusCode);
+        if (toCode is "Rejected")
+        {
+            var reason = (request.Reason ?? "").Trim();
+            if (reason.Length < 5)
+                throw new InvalidOperationException("Enter a rejection reason of at least 5 characters.");
+            return await RejectAndHandBackAsync(applicationId, request.ChangedByUserId, reason, cancellationToken);
+        }
+
         var previousStatusId = entity.ApplicationStatusId;
         entity.ApplicationStatusId = request.ToStatusId;
         entity.UpdatedByUserId = request.ChangedByUserId;
         entity.UpdatedAt = DateTime.UtcNow;
+        AssignHandlers(entity, request.ChangedByUserId);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-        await AddStatusHistoryInternalAsync(applicationId, previousStatusId, request.ToStatusId, request.ChangedByUserId, request.Reason, cancellationToken);
+        var action = toCode is "Approved" ? ApplicationWorkflowRouter.ApproveAction : ApplicationWorkflowRouter.ReviewAction;
+        await AddStatusHistoryInternalAsync(applicationId, previousStatusId, request.ToStatusId, request.ChangedByUserId, request.Reason, cancellationToken, action);
+
+        if (toCode is "Approved")
+        {
+            var loaded = await LoadApplicationAsync(applicationId, cancellationToken);
+            if (loaded is not null)
+                await NotifyDecisionAsync(loaded, ApplicationDecisionKind.Approved, isFinal: true, request.Reason, toStatus?.Name ?? "Approved", null, cancellationToken);
+        }
+
+        var updated = await LoadApplicationAsync(applicationId, cancellationToken);
+        return updated is null ? null : Map(updated);
+    }
+
+    public async Task<ApplicationDetailDto?> RejectAndHandBackAsync(
+        long applicationId,
+        long? actorUserId,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        var comment = (reason ?? "").Trim();
+        if (comment.Length < 5)
+            throw new InvalidOperationException("Enter a rejection reason of at least 5 characters.");
+
+        var entity = await _dbContext.Applications
+            .Include(x => x.Status)
+            .Include(x => x.Applicant)
+            .Include(x => x.ApplicationStatusHistories)
+                .ThenInclude(h => h.ToStatus)
+            .FirstOrDefaultAsync(x => x.ApplicationId == applicationId, cancellationToken);
+        if (entity is null)
+            return null;
+
+        var current = NormalizeStatusCode(entity.Status?.Code);
+        var plan = ApplicationWorkflowRouter.PlanReject(
+            current,
+            entity.ApplicationStatusHistories.Select(h =>
+                new WorkflowHistoryEntry(h.ChangedByUserId, NormalizeStatusCode(h.ToStatus?.Code), h.ChangedAt)),
+            actorUserId,
+            entity.CurrentHandlerUserId,
+            entity.CreatedByUserId);
+
+        var target = await FindStatusByCodeAsync(plan.TargetStatusCode, cancellationToken)
+            ?? throw new InvalidOperationException($"Application status '{plan.TargetStatusCode}' was not found.");
+
+        var previousStatusId = entity.ApplicationStatusId;
+        entity.ApplicationStatusId = target.ApplicationStatusId;
+        entity.PreviousHandlerUserId = plan.NewPreviousHandlerId;
+        entity.CurrentHandlerUserId = plan.NewCurrentHandlerId;
+        entity.UpdatedByUserId = actorUserId;
+        entity.UpdatedAt = DateTime.UtcNow;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        await AddStatusHistoryInternalAsync(
+            applicationId,
+            previousStatusId,
+            target.ApplicationStatusId,
+            actorUserId,
+            comment,
+            cancellationToken,
+            plan.Action);
+
+        await NotifyDecisionAsync(
+            entity,
+            ApplicationDecisionKind.Rejected,
+            isFinal: plan.TargetStatusCode is "Rejected" or "NotElected",
+            comment,
+            target.Name,
+            plan.NotifyReturnedHandler ? plan.NewCurrentHandlerId : null,
+            cancellationToken);
 
         var updated = await LoadApplicationAsync(applicationId, cancellationToken);
         return updated is null ? null : Map(updated);
@@ -646,7 +776,8 @@ public class ApplicationService : IApplicationService
             reason ?? (string.Equals(current, "Endorsement", StringComparison.OrdinalIgnoreCase)
                 ? "Submitted to manager for Stage A review."
                 : "Admin started review."),
-            cancellationToken);
+            cancellationToken,
+            ApplicationWorkflowRouter.ReviewAction);
     }
 
     public async Task<ApplicationDocumentDto?> AddDocumentAsync(long applicationId, CreateApplicationDocumentRequest request, CancellationToken cancellationToken = default)
@@ -656,10 +787,16 @@ public class ApplicationService : IApplicationService
             return null;
         }
 
+        var documentTypeId = await ResolveDocumentTypeIdAsync(request, cancellationToken);
+        if (documentTypeId <= 0)
+        {
+            throw new InvalidOperationException("A valid document type is required.");
+        }
+
         var entity = new AplicationDocument
         {
             ApplicationId = applicationId,
-            DocumentTypeId = request.DocumentTypeId,
+            DocumentTypeId = documentTypeId,
             FileName = request.FileName,
             FileUrl = request.FileUrl,
             UploadedAt = request.UploadedAt ?? DateTime.UtcNow,
@@ -681,6 +818,51 @@ public class ApplicationService : IApplicationService
         try { await _managerStage.OnApplicantPrerequisitesChangedAsync(applicationId, cancellationToken); }
         catch { /* notification failures must not block uploads */ }
         return Map(entity);
+    }
+
+    private async Task<long> ResolveDocumentTypeIdAsync(
+        CreateApplicationDocumentRequest request,
+        CancellationToken cancellationToken)
+    {
+        var purpose = (request.Purpose ?? "").Trim().ToUpperInvariant().Replace("-", "").Replace("_", "");
+        var code = purpose switch
+        {
+            "PHOTO" => "PHOTO",
+            "CV" => "CV",
+            "LICENSE" => "LICENSE",
+            "IDPASSPORT" => "ID_PASSPORT",
+            "CHEQUE" => "CHEQUE",
+            "CHEQUEANNUAL" => "CHEQUE_ANNUAL",
+            "CHEQUEJOINING" => "CHEQUE_JOINING",
+            _ => null
+        };
+
+        if (code is not null)
+        {
+            var type = await _dbContext.DocumentTypes
+                .FirstOrDefaultAsync(x => x.Code == code, cancellationToken);
+            if (type is null && code is "CHEQUE" or "CHEQUE_ANNUAL" or "CHEQUE_JOINING")
+            {
+                type = new DocumentType
+                {
+                    Code = code,
+                    Name = code switch
+                    {
+                        "CHEQUE_ANNUAL" => "Annual subscription cheque",
+                        "CHEQUE_JOINING" => "Joining / entrance fee cheque",
+                        _ => "Cheque copy"
+                    },
+                    SortOrder = code == "CHEQUE_ANNUAL" ? 10 : code == "CHEQUE_JOINING" ? 11 : 12,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _dbContext.DocumentTypes.Add(type);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+            if (type is not null) return type.DocumentTypeId;
+        }
+
+        return request.DocumentTypeId;
     }
 
     public async Task<ApplicationDocumentDto?> VerifyDocumentAsync(
@@ -990,7 +1172,14 @@ public class ApplicationService : IApplicationService
             .FirstOrDefaultAsync(x => x.ApplicationId == applicationId, cancellationToken);
     }
 
-    private async Task AddStatusHistoryInternalAsync(long applicationId, long? fromStatusId, long toStatusId, long? changedByUserId, string? reason, CancellationToken cancellationToken)
+    private async Task AddStatusHistoryInternalAsync(
+        long applicationId,
+        long? fromStatusId,
+        long toStatusId,
+        long? changedByUserId,
+        string? reason,
+        CancellationToken cancellationToken,
+        string? action = null)
     {
         _dbContext.ApplicationStatusHistories.Add(new ApplicationStatusHistory
         {
@@ -999,16 +1188,17 @@ public class ApplicationService : IApplicationService
             ToStatusId = toStatusId,
             ChangedAt = DateTime.UtcNow,
             ChangedByUserId = changedByUserId,
-            Reason = reason
+            Reason = reason,
+            Action = action
         });
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         await WriteAuditAsync(
             "MApplication",
             applicationId,
-            "STATUS",
+            action ?? "STATUS",
             fromStatusId?.ToString(),
-            $"toStatusId={toStatusId}; reason={reason}",
+            $"toStatusId={toStatusId}; action={action}; reason={reason}; actor={changedByUserId}",
             changedByUserId,
             cancellationToken);
     }
@@ -1081,6 +1271,8 @@ public class ApplicationService : IApplicationService
             UpdatedAt = entity.UpdatedAt,
             CreatedByUserId = entity.CreatedByUserId,
             UpdatedByUserId = entity.UpdatedByUserId,
+            CurrentHandlerUserId = entity.CurrentHandlerUserId,
+            PreviousHandlerUserId = entity.PreviousHandlerUserId,
             // Surface the normalized workflow status code and the wizard payload so the React
             // client can rehydrate the draft (formDataJson / completedSteps).
             StatusCode = NormalizeStatusCode(entity.Status?.Code),
@@ -1093,8 +1285,22 @@ public class ApplicationService : IApplicationService
             Approvals = entity.ApplicationApprovals.OrderBy(x => x.ApplicationApprovalId).Select(Map).ToList(),
             StatusHistory = entity.ApplicationStatusHistories.OrderByDescending(x => x.ChangedAt).Select(Map).ToList(),
             Interviews = entity.Interviews.OrderByDescending(x => x.ScheduledAt).Select(Map).ToList(),
-            Exclusions = entity.ApplicationExclusions.OrderByDescending(x => x.ExcludedDate).Select(Map).ToList()
+            Exclusions = entity.ApplicationExclusions.OrderByDescending(x => x.ExcludedDate).Select(Map).ToList(),
+            LastRejectionReason = LatestRejectionReason(entity)
         };
+    }
+
+    private static string? LatestRejectionReason(MApplication entity)
+    {
+        if (entity.ApplicationStatusHistories is null || entity.ApplicationStatusHistories.Count == 0)
+            return null;
+        return entity.ApplicationStatusHistories
+            .Where(h =>
+                h.Action is ApplicationWorkflowRouter.RejectAction or ApplicationWorkflowRouter.HandbackAction
+                || NormalizeStatusCode(h.ToStatus?.Code) is "Rejected" or "NotElected")
+            .OrderByDescending(h => h.ChangedAt)
+            .Select(h => h.Reason)
+            .FirstOrDefault(r => !string.IsNullOrWhiteSpace(r));
     }
 
     private static ApplicationDocumentDto Map(AplicationDocument entity) => new()
@@ -1126,6 +1332,7 @@ public class ApplicationService : IApplicationService
         EndorserName = entity.Endorser is null
             ? null
             : string.Join(" ", new[] { entity.Endorser.FirstName, entity.Endorser.LastName }.Where(v => !string.IsNullOrWhiteSpace(v))),
+        EndorserMembershipNo = entity.Endorser?.MembershipNo,
         EndorserRole = entity.EndorserRole,
         YearsKnownCandidate = entity.YearsKnownCandidate,
         PersonalKnowledge = entity.PersonalKnowledge,
@@ -1180,6 +1387,7 @@ public class ApplicationService : IApplicationService
         ToStatusName = entity.ToStatus?.Name,
         ChangedAt = entity.ChangedAt,
         ChangedByUserId = entity.ChangedByUserId,
+        Action = entity.Action,
         Reason = entity.Reason
     };
 
@@ -1371,7 +1579,8 @@ public class ApplicationService : IApplicationService
         string nextCode,
         long? actorUserId,
         string reason,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string action = ApplicationWorkflowRouter.ApproveAction)
     {
         var next = await FindStatusByCodeAsync(nextCode, cancellationToken)
             ?? throw new InvalidOperationException($"Application status '{nextCode}' was not found. Apply the latest Application_status seed.");
@@ -1380,6 +1589,7 @@ public class ApplicationService : IApplicationService
         entity.ApplicationStatusId = next.ApplicationStatusId;
         entity.UpdatedByUserId = actorUserId;
         entity.UpdatedAt = DateTime.UtcNow;
+        AssignHandlers(entity, actorUserId);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         await AddStatusHistoryInternalAsync(
@@ -1388,10 +1598,60 @@ public class ApplicationService : IApplicationService
             next.ApplicationStatusId,
             actorUserId,
             $"{reason} ({next.Name}).",
-            cancellationToken);
+            cancellationToken,
+            action);
+
+        if (action == ApplicationWorkflowRouter.ApproveAction)
+        {
+            if (entity.Applicant is null)
+                await _dbContext.Entry(entity).Reference(x => x.Applicant).LoadAsync(cancellationToken);
+            await NotifyDecisionAsync(
+                entity,
+                ApplicationDecisionKind.Approved,
+                isFinal: string.Equals(nextCode, "Approved", StringComparison.OrdinalIgnoreCase),
+                reason,
+                next.Name,
+                null,
+                cancellationToken);
+        }
 
         var updated = await LoadApplicationAsync(entity.ApplicationId, cancellationToken);
         return updated is null ? null : Map(updated);
+    }
+
+    private async Task NotifyDecisionAsync(
+        MApplication entity,
+        ApplicationDecisionKind kind,
+        bool isFinal,
+        string? reason,
+        string? stageName,
+        long? previousHandlerUserId,
+        CancellationToken cancellationToken)
+    {
+        if (entity.Applicant is null) return;
+        await _decisions.NotifyAsync(new ApplicationDecisionMessage
+        {
+            Kind = kind,
+            ApplicationId = entity.ApplicationId,
+            ApplicationNo = entity.ApplicationNo,
+            ApplicantName = BuildName(entity.Applicant.Title, entity.Applicant.FirstName, entity.Applicant.MiddleName, entity.Applicant.LastName),
+            ApplicantProfileId = entity.ApplicantProfileId,
+            ApplicantEmail = entity.Applicant.Email,
+            StageName = stageName ?? "",
+            IsFinal = isFinal,
+            Reason = reason,
+            ReturnedStageName = kind == ApplicationDecisionKind.Rejected ? stageName : null,
+            PreviousHandlerUserId = previousHandlerUserId
+        }, cancellationToken);
+    }
+
+    private static void AssignHandlers(MApplication entity, long? actorUserId)
+    {
+        var current = entity.CurrentHandlerUserId;
+        var previous = entity.PreviousHandlerUserId;
+        ApplicationWorkflowRouter.AssignAdvanceHandlers(ref current, ref previous, actorUserId);
+        entity.CurrentHandlerUserId = current;
+        entity.PreviousHandlerUserId = previous;
     }
 
     private static string GenerateApplicationNo()

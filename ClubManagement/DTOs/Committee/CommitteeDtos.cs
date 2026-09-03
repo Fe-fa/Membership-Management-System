@@ -23,6 +23,11 @@ public class AddCommitteeMemberRequest
     public string? AppointedDate { get; set; }
 }
 
+public class UpdateCommitteeMemberContactRequest
+{
+    public string? Phone { get; set; }
+}
+
 public class CreateCommitteeMeetingRequest
 {
     public long MeetingTypeId { get; set; }
@@ -30,6 +35,8 @@ public class CreateCommitteeMeetingRequest
     public string? MeetingTime { get; set; }
     public string? MeetingName { get; set; }
     public long? ChairProfileId { get; set; }
+    public string? MeetingLink { get; set; }
+    public List<long> ApplicationIds { get; set; } = [];
 }
 
 public class UpdateMeetingStatusRequest
@@ -54,6 +61,14 @@ public class CommitteeMemberDto
     public string? PhotoUrl { get; set; }
     /// <summary>Club email for mailto contact only — not for display on the roster.</summary>
     public string? ContactEmail { get; set; }
+    public string? Phone { get; set; }
+    public long? AccountId { get; set; }
+    public string? MembershipType { get; set; }
+    public string? MembershipStatus { get; set; }
+    public string? MembershipStatusCode { get; set; }
+    public bool? AccountIsActive { get; set; }
+    public string? JoinedDate { get; set; }
+    public string? NextRenewalDate { get; set; }
     public long CommitteeRoleId { get; set; }
     public string RoleCode { get; set; } = string.Empty;
     public string RoleName { get; set; } = string.Empty;

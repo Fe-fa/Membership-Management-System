@@ -25,11 +25,6 @@ public sealed class TenantContext : ITenantContext
         TenantCode = code;
     }
 }
-
-/// <summary>
-/// Resolves the current tenant from JWT (authenticated) or <c>X-Tenant-Code</c> (anonymous / login).
-/// Defaults to ACEA so existing single-club deployments keep working.
-/// </summary>
 public sealed class TenantResolutionMiddleware
 {
     public const string HeaderName = "X-Tenant-Code";

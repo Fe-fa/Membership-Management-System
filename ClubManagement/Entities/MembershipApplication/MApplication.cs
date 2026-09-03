@@ -68,6 +68,12 @@ namespace ClubManagement.Entities
         [Column("stage_a_authorized_by_user_id")]
         public long? StageAAuthorizedByUserId { get; set; }
 
+        [Column("current_handler_user_id")]
+        public long? CurrentHandlerUserId { get; set; }
+
+        [Column("previous_handler_user_id")]
+        public long? PreviousHandlerUserId { get; set; }
+
         [Column("interview_required_flag")]
         public bool InterviewRequiredFlag { get; set; }
 

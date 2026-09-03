@@ -3,16 +3,64 @@
   "WorkspaceRootPath": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|d:\\partition a\\desktop\\aero club management system\\test\\clubmanagement\\services\\membershipapplication\\applicantdetailsservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|solutionrelative:services\\membershipapplication\\applicantdetailsservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|d:\\partition a\\desktop\\aero club management system\\test\\clubmanagement\\dtos\\common\\pagedresult.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|solutionrelative:dtos\\common\\pagedresult.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|d:\\partition a\\desktop\\aero club management system\\test\\clubmanagement\\dtos\\common\\pagedrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|solutionrelative:dtos\\common\\pagedrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|d:\\partition a\\desktop\\aero club management system\\test\\clubmanagement\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|solutionrelative:appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|d:\\partition a\\desktop\\aero club management system\\test\\clubmanagement\\controllers\\committee\\committeescontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|solutionrelative:controllers\\committee\\committeescontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|d:\\partition a\\desktop\\aero club management system\\test\\clubmanagement\\services\\committee\\interviewconductservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|solutionrelative:services\\committee\\interviewconductservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|d:\\partition a\\desktop\\aero club management system\\test\\clubmanagement\\dtos\\committee\\committeedtos.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|solutionrelative:dtos\\committee\\committeedtos.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|d:\\partition a\\desktop\\aero club management system\\test\\clubmanagement\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|solutionrelative:program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|d:\\partition a\\desktop\\aero club management system\\test\\clubmanagement\\services\\membershipaccount\\memberdashboardservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|solutionrelative:services\\membershipaccount\\memberdashboardservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|d:\\partition a\\desktop\\aero club management system\\test\\clubmanagement\\controllers\\membershipapplication\\applicationscontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|solutionrelative:controllers\\membershipapplication\\applicationscontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|d:\\partition a\\desktop\\aero club management system\\test\\clubmanagement\\services\\membershipapplication\\applicationservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|solutionrelative:services\\membershipapplication\\applicationservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|d:\\partition a\\desktop\\aero club management system\\test\\clubmanagement\\services\\finance\\financeservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|solutionrelative:services\\finance\\financeservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|d:\\partition a\\desktop\\aero club management system\\test\\clubmanagement\\services\\membershipapplication\\applicantdetailsservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|solutionrelative:services\\membershipapplication\\applicantdetailsservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|d:\\partition a\\desktop\\aero club management system\\test\\clubmanagement\\dtos\\membershipapplication\\profiledtos.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|solutionrelative:dtos\\membershipapplication\\profiledtos.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|d:\\partition a\\desktop\\aero club management system\\test\\clubmanagement\\dtos\\membershipapplication\\applicantdetailsdtos.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|solutionrelative:dtos\\membershipapplication\\applicantdetailsdtos.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|d:\\partition a\\desktop\\aero club management system\\test\\clubmanagement\\data\\membershipapplication\\applicationmoduledbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|solutionrelative:data\\membershipapplication\\applicationmoduledbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|d:\\partition a\\desktop\\aero club management system\\test\\clubmanagement\\controllers\\membershipapplication\\lookupscontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{E3420163-22CB-0224-5FE7-D0AAC7CC3299}|ClubManagement.csproj|solutionrelative:controllers\\membershipapplication\\lookupscontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -22,45 +70,193 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 0,
+          "SelectedChildIndex": 1,
           "Children": [
             {
               "$type": "Document",
-              "DocumentIndex": 0,
-              "Title": "ApplicantDetailsService.cs",
-              "DocumentMoniker": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Services\\MembershipApplication\\ApplicantDetailsService.cs",
-              "RelativeDocumentMoniker": "Services\\MembershipApplication\\ApplicantDetailsService.cs",
-              "ToolTip": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Services\\MembershipApplication\\ApplicantDetailsService.cs*",
-              "RelativeToolTip": "Services\\MembershipApplication\\ApplicantDetailsService.cs*",
-              "ViewState": "AgIAABoBAAAAAAAAAAAmwEcBAAAJAAAAAAAAAA==",
+              "DocumentIndex": 4,
+              "Title": "InterviewConductService.cs",
+              "DocumentMoniker": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Services\\Committee\\InterviewConductService.cs",
+              "RelativeDocumentMoniker": "Services\\Committee\\InterviewConductService.cs",
+              "ToolTip": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Services\\Committee\\InterviewConductService.cs",
+              "RelativeToolTip": "Services\\Committee\\InterviewConductService.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA0AAAAjAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-08-26T08:44:09.725Z",
+              "WhenOpened": "2026-09-03T10:13:48.651Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "PagedResult.cs",
+              "DocumentMoniker": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\DTOs\\Common\\PagedResult.cs",
+              "RelativeDocumentMoniker": "DTOs\\Common\\PagedResult.cs",
+              "ToolTip": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\DTOs\\Common\\PagedResult.cs",
+              "RelativeToolTip": "DTOs\\Common\\PagedResult.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAkAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-03T10:07:09.053Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "PagedRequest.cs",
+              "DocumentMoniker": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\DTOs\\Common\\PagedRequest.cs",
+              "RelativeDocumentMoniker": "DTOs\\Common\\PagedRequest.cs",
+              "ToolTip": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\DTOs\\Common\\PagedRequest.cs",
+              "RelativeToolTip": "DTOs\\Common\\PagedRequest.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABUAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-03T10:06:45.087Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "CommitteesController.cs",
+              "DocumentMoniker": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Controllers\\Committee\\CommitteesController.cs",
+              "RelativeDocumentMoniker": "Controllers\\Committee\\CommitteesController.cs",
+              "ToolTip": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Controllers\\Committee\\CommitteesController.cs",
+              "RelativeToolTip": "Controllers\\Committee\\CommitteesController.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAIAAAAoAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-03T07:52:00.595Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
               "DocumentIndex": 2,
-              "Title": "MemberDashboardService.cs",
-              "DocumentMoniker": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Services\\MembershipAccount\\MemberDashboardService.cs",
-              "RelativeDocumentMoniker": "Services\\MembershipAccount\\MemberDashboardService.cs",
-              "ToolTip": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Services\\MembershipAccount\\MemberDashboardService.cs",
-              "RelativeToolTip": "Services\\MembershipAccount\\MemberDashboardService.cs",
-              "ViewState": "AgIAABQAAAAAAAAAAAA8wCgAAAA1AAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-08-25T11:57:02.103Z"
+              "Title": "appsettings.json",
+              "DocumentMoniker": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\appsettings.json",
+              "RelativeDocumentMoniker": "appsettings.json",
+              "ToolTip": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\appsettings.json",
+              "RelativeToolTip": "appsettings.json",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAsAAAAoAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2026-09-02T12:02:38.053Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 5,
+              "Title": "CommitteeDtos.cs",
+              "DocumentMoniker": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\DTOs\\Committee\\CommitteeDtos.cs",
+              "RelativeDocumentMoniker": "DTOs\\Committee\\CommitteeDtos.cs",
+              "ToolTip": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\DTOs\\Committee\\CommitteeDtos.cs",
+              "RelativeToolTip": "DTOs\\Committee\\CommitteeDtos.cs",
+              "ViewState": "AgIAAIMAAAAAAAAAAAAkwIYAAAAgAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-03T05:21:39.67Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "ApplicationsController.cs",
+              "DocumentMoniker": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Controllers\\MembershipApplication\\ApplicationsController.cs",
+              "RelativeDocumentMoniker": "Controllers\\MembershipApplication\\ApplicationsController.cs",
+              "ToolTip": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Controllers\\MembershipApplication\\ApplicationsController.cs",
+              "RelativeToolTip": "Controllers\\MembershipApplication\\ApplicationsController.cs",
+              "ViewState": "AgIAAA8CAAAAAAAAAAAUwLoBAAAJAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-02T07:00:06.572Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 9,
+              "Title": "FinanceService.cs",
+              "DocumentMoniker": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Services\\Finance\\FinanceService.cs",
+              "RelativeDocumentMoniker": "Services\\Finance\\FinanceService.cs",
+              "ToolTip": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Services\\Finance\\FinanceService.cs",
+              "RelativeToolTip": "Services\\Finance\\FinanceService.cs",
+              "ViewState": "AgIAAAYCAAAAAAAAAAAgwAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-02T06:23:43.493Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "ApplicationService.cs",
+              "DocumentMoniker": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Services\\MembershipApplication\\ApplicationService.cs",
+              "RelativeDocumentMoniker": "Services\\MembershipApplication\\ApplicationService.cs",
+              "ToolTip": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Services\\MembershipApplication\\ApplicationService.cs",
+              "RelativeToolTip": "Services\\MembershipApplication\\ApplicationService.cs",
+              "ViewState": "AgIAABEGAAAAAAAAAAAgwIcGAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-02T06:23:26.73Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 11,
+              "Title": "ProfileDtos.cs",
+              "DocumentMoniker": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\DTOs\\MembershipApplication\\ProfileDtos.cs",
+              "RelativeDocumentMoniker": "DTOs\\MembershipApplication\\ProfileDtos.cs",
+              "ToolTip": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\DTOs\\MembershipApplication\\ProfileDtos.cs",
+              "RelativeToolTip": "DTOs\\MembershipApplication\\ProfileDtos.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAAnAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-02T06:21:24.497Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
               "Title": "Program.cs",
               "DocumentMoniker": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Program.cs",
               "RelativeDocumentMoniker": "Program.cs",
               "ToolTip": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Program.cs",
               "RelativeToolTip": "Program.cs",
-              "ViewState": "AgIAADEAAAAAAAAAAAAAAAcAAAAmAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAHcBAAAXAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-08-22T18:27:53.411Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-09-01T13:08:14.704Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 12,
+              "Title": "ApplicantDetailsDtos.cs",
+              "DocumentMoniker": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\DTOs\\MembershipApplication\\ApplicantDetailsDtos.cs",
+              "RelativeDocumentMoniker": "DTOs\\MembershipApplication\\ApplicantDetailsDtos.cs",
+              "ToolTip": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\DTOs\\MembershipApplication\\ApplicantDetailsDtos.cs",
+              "RelativeToolTip": "DTOs\\MembershipApplication\\ApplicantDetailsDtos.cs",
+              "ViewState": "AgIAAHIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-02T06:20:34.639Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 13,
+              "Title": "ApplicationModuleDbContext.cs",
+              "DocumentMoniker": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Data\\MembershipApplication\\ApplicationModuleDbContext.cs",
+              "RelativeDocumentMoniker": "Data\\MembershipApplication\\ApplicationModuleDbContext.cs",
+              "ToolTip": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Data\\MembershipApplication\\ApplicationModuleDbContext.cs",
+              "RelativeToolTip": "Data\\MembershipApplication\\ApplicationModuleDbContext.cs",
+              "ViewState": "AgIAAEgAAAAAAAAAAAAAAFEAAAAfAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-02T06:19:31.876Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 14,
+              "Title": "LookupsController.cs",
+              "DocumentMoniker": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Controllers\\MembershipApplication\\LookupsController.cs",
+              "RelativeDocumentMoniker": "Controllers\\MembershipApplication\\LookupsController.cs",
+              "ToolTip": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Controllers\\MembershipApplication\\LookupsController.cs",
+              "RelativeToolTip": "Controllers\\MembershipApplication\\LookupsController.cs",
+              "ViewState": "AgIAABMAAAAAAAAAAAAQwAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-02T06:18:52.739Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 10,
+              "Title": "ApplicantDetailsService.cs",
+              "DocumentMoniker": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Services\\MembershipApplication\\ApplicantDetailsService.cs",
+              "RelativeDocumentMoniker": "Services\\MembershipApplication\\ApplicantDetailsService.cs",
+              "ToolTip": "D:\\Partition A\\Desktop\\AERO CLUB MANAGEMENT SYSTEM\\TEST\\ClubManagement\\Services\\MembershipApplication\\ApplicantDetailsService.cs",
+              "RelativeToolTip": "Services\\MembershipApplication\\ApplicantDetailsService.cs",
+              "ViewState": "AgIAAMYAAAAAAAAAAAAAwGIBAAAKAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-08-26T08:44:09.725Z"
             }
           ]
         }

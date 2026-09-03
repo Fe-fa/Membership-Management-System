@@ -40,6 +40,18 @@ namespace ClubManagement.Entities.Subscriptions
         [Column("cheque_no")]
         public string? ChequeNo { get; set; }
 
+        [Column("cheque_bank_name")]
+        public string? ChequeBankName { get; set; }
+
+        [Column("cheque_bank_code")]
+        public string? ChequeBankCode { get; set; }
+
+        [Column("cheque_date")]
+        public DateOnly? ChequeDate { get; set; }
+
+        [Column("cheque_document_id")]
+        public long? ChequeDocumentId { get; set; }
+
         [Column("mpesa_code")]
         public string? MpesaCode { get; set; }
 

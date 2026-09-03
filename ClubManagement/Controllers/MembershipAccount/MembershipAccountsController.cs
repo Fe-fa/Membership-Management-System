@@ -1,4 +1,5 @@
 using ClubManagement.Auth;
+using ClubManagement.DTOs.Common;
 using ClubManagement.DTOs.MembershipAccount;
 using ClubManagement.Services.MembershipAccount;
 using Microsoft.AspNetCore.Authorization;
@@ -51,12 +52,13 @@ public class MembershipAccountsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<MemberListItemDto>>> Search(
+    public async Task<ActionResult<PagedResult<MemberListItemDto>>> Search(
+        [FromQuery] PagedRequest paging,
         [FromQuery] string? search,
         [FromQuery] string? status,
         [FromQuery] string? type,
         CancellationToken cancellationToken) =>
-        Ok(await _members.SearchAsync(search, status, type, cancellationToken));
+        Ok(await _members.SearchAsync(search, status, type, paging, cancellationToken));
 
     [Authorize(Roles = "GENERAL_MANAGER,CHAIRMAN")]
     [HttpPost("register-existing")]

@@ -4,6 +4,7 @@ using ClubManagement.Entities;
 using ClubManagement.Entities.Committee;
 using ClubManagement.Entities.Lookups;
 using ClubManagement.Services.MembershipAccount;
+using ClubManagement.Services.MembershipApplication;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClubManagement.Services.Committee;
@@ -27,14 +28,21 @@ public class CommitteeBallotService : ICommitteeBallotService
     public const int MeetingQuorum = 7;
     public const int AdverseVotesToReject = 2;
     public const int CommitteeSignaturesRequired = 4;
+    /// <summary>Signatures open after more than 4 sitting members have voted on the applicant.</summary>
+    public const int VotesRequiredBeforeSignatures = 5;
 
     private readonly ApplicationModuleDbContext _db;
     private readonly IMemberLifecycleService _members;
+    private readonly IApplicationDecisionNotifier _decisions;
 
-    public CommitteeBallotService(ApplicationModuleDbContext db, IMemberLifecycleService members)
+    public CommitteeBallotService(
+        ApplicationModuleDbContext db,
+        IMemberLifecycleService members,
+        IApplicationDecisionNotifier decisions)
     {
         _db = db;
         _members = members;
+        _decisions = decisions;
     }
 
     public async Task EnsureSchemaAsync(CancellationToken cancellationToken)
@@ -341,8 +349,9 @@ END
         var mapped = await MapLoadedAsync(item, null, cancellationToken);
         if (mapped.AutoRejected)
             throw new InvalidOperationException("Two adverse votes have been reached — the application is auto-rejected.");
-        if (!mapped.QuorumMet)
-            throw new InvalidOperationException($"Meeting quorum is not met (need {MeetingQuorum} Committee members present — Article 6a).");
+        if (mapped.VotesCast < VotesRequiredBeforeSignatures)
+            throw new InvalidOperationException(
+                $"Signatures open after more than 4 Committee members have voted on this applicant (currently {mapped.VotesCast}).");
 
         var committee = await FindStatusAsync("Committee", cancellationToken)
                         ?? throw new InvalidOperationException("Committee application status is missing.");
@@ -537,9 +546,28 @@ END
             ToStatusId = rejected.ApplicationStatusId,
             ChangedAt = DateTime.UtcNow,
             ChangedByUserId = actorUserId,
+            Action = ApplicationWorkflowRouter.RejectAction,
             Reason = "2 adverse votes reached — application auto-rejected. Re-apply after one year (Article 6b)."
         });
         await _db.SaveChangesAsync(cancellationToken);
+
+        var applicant = app.Applicant;
+        if (applicant is not null)
+        {
+            await _decisions.NotifyAsync(new ApplicationDecisionMessage
+            {
+                Kind = ApplicationDecisionKind.Rejected,
+                ApplicationId = app.ApplicationId,
+                ApplicationNo = app.ApplicationNo,
+                ApplicantName = string.Join(" ", new[] { applicant.Title, applicant.FirstName, applicant.LastName }.Where(v => !string.IsNullOrWhiteSpace(v))),
+                ApplicantProfileId = app.ApplicantProfileId,
+                ApplicantEmail = applicant.Email,
+                StageName = rejected.Name,
+                IsFinal = true,
+                Reason = "2 adverse votes reached — application auto-rejected. Re-apply after one year (Article 6b).",
+                ReturnedStageName = rejected.Name
+            }, cancellationToken);
+        }
     }
 
     private async Task<CommitteeBallotItem> ReloadItemAsync(long itemId, CancellationToken cancellationToken) =>
@@ -734,7 +762,7 @@ END
             ExcludedUntil = exclusion?.ExcludedUntilDate?.ToString("yyyy-MM-dd"),
             MyVoteCast = mine is not null,
             MyVoteValue = mine?.VoteValue,
-            CanProceedToSignatures = open && !autoRejected && quorumMet,
+            CanProceedToSignatures = open && !autoRejected && cast >= VotesRequiredBeforeSignatures,
             CommitteeSignatures = committeeSigs,
             GmSignatures = gmSigs,
             ChairmanSigned = chairmanSigned,

@@ -1,4 +1,5 @@
 using ClubManagement.Auth;
+using ClubManagement.DTOs.Common;
 using ClubManagement.DTOs.Identity;
 using ClubManagement.Services.Identity;
 using Microsoft.AspNetCore.Authorization;
@@ -17,16 +18,15 @@ public class UsersController : ControllerBase
     private bool CanManage() => User.HasAnyRole("ADMIN", "GENERAL_MANAGER", "CHAIRMAN");
 
     [HttpGet]
-    public async Task<ActionResult<UserListResponse>> List(
+    public async Task<ActionResult<PagedResult<UserListItemDto>>> List(
+        [FromQuery] PagedRequest paging,
         [FromQuery] string? search,
         [FromQuery] string? status,
         [FromQuery] string? role,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10,
         CancellationToken cancellationToken = default)
     {
         if (!CanManage()) return Forbid();
-        return Ok(await _users.ListAsync(search, status, role, page, pageSize, cancellationToken));
+        return Ok(await _users.ListAsync(search, status, role, paging, cancellationToken));
     }
 
     [HttpGet("roles")]

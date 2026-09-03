@@ -1,4 +1,5 @@
 using ClubManagement.Auth;
+using ClubManagement.DTOs.Common;
 using ClubManagement.Services.Finance;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -22,8 +23,11 @@ public class FinanceController : ControllerBase
     }
 
     [HttpGet("payments")]
-    public async Task<ActionResult<IReadOnlyList<PaymentRowDto>>> Payments([FromQuery] long? accountId, CancellationToken cancellationToken) =>
-        Ok(await _finance.ListPaymentsAsync(accountId, cancellationToken));
+    public async Task<ActionResult<PagedResult<PaymentRowDto>>> Payments(
+        [FromQuery] PagedRequest paging,
+        [FromQuery] long? accountId,
+        CancellationToken cancellationToken) =>
+        Ok(await _finance.ListPaymentsAsync(accountId, paging, cancellationToken));
 
     [Authorize(Roles = "GENERAL_MANAGER,TREASURER,CHAIRMAN,APPLICANT,MEMBER")]
     [HttpPost("payments")]
@@ -33,9 +37,28 @@ public class FinanceController : ControllerBase
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpPost("payments/{transactionId:long}/approve")]
+    public async Task<ActionResult<PaymentRowDto>> Approve(long transactionId, CancellationToken cancellationToken)
+    {
+        try { return Ok(await _finance.ApprovePaymentAsync(transactionId, User.UserId(), cancellationToken)); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpPost("payments/{transactionId:long}/receipt")]
+    public async Task<ActionResult<PaymentRowDto>> IssueReceipt(long transactionId, CancellationToken cancellationToken)
+    {
+        try { return Ok(await _finance.EnsureReceiptAsync(transactionId, null, User.UserId(), cancellationToken)); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
     [HttpGet("subscriptions")]
-    public async Task<ActionResult<IReadOnlyList<SubscriptionRowDto>>> Subscriptions([FromQuery] int? year, CancellationToken cancellationToken) =>
-        Ok(await _finance.ListSubscriptionsAsync(year, cancellationToken));
+    public async Task<ActionResult<PagedResult<SubscriptionRowDto>>> Subscriptions(
+        [FromQuery] PagedRequest paging,
+        [FromQuery] int? year,
+        CancellationToken cancellationToken) =>
+        Ok(await _finance.ListSubscriptionsAsync(year, paging, cancellationToken));
 
     [Authorize(Roles = "TREASURER,GENERAL_MANAGER,CHAIRMAN")]
     [HttpPost("posting/{year:int}")]

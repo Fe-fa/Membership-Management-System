@@ -1,4 +1,4 @@
-﻿namespace ClubManagement.DTOs.MembershipApplication;
+namespace ClubManagement.DTOs.MembershipApplication;
 
 public class ApplicationListItemDto
 {
@@ -50,6 +50,12 @@ public class ApplicationListItemDto
     /// <summary>Normalized Payment_status.code (PENDING | PAID | PARTIALLY_PAID | …).</summary>
     public string? PaymentStatusCode { get; set; }
 
+    /// <summary>Latest receipt across joining + annual (manager verification triplet).</summary>
+    public string? PaymentReceiptNumber { get; set; }
+    public decimal? PaymentAmount { get; set; }
+    public string? PaymentDate { get; set; }
+    public List<ApplicationPaymentLineDto> PaymentLines { get; set; } = new();
+
     /// <summary>Pending | Partial | Complete — from Endorsement rows (proposer/seconder).</summary>
     public string SponsorStatus { get; set; } = "Pending";
 
@@ -69,6 +75,7 @@ public class ApplicationListItemDto
     public int? ClubVisitsLogged { get; set; }
     public bool? ClubVisitsMet { get; set; }
     public bool? CanAuthorizeToInterview { get; set; }
+    public bool? MemberDetailsComplete { get; set; }
 
     /// <summary>Committee meeting the application was assigned to for interview (if any).</summary>
     public long? CommitteeMeetingId { get; set; }
@@ -80,6 +87,20 @@ public class ApplicationListItemDto
     /// <summary>Applicant-safe ballot label. Never includes vote counts.</summary>
     public string? ApplicantBallotLabel { get; set; }
     public DateOnly? ExcludedUntilDate { get; set; }
+
+    /// <summary>Latest manager/staff rejection reason, when the application is rejected.</summary>
+    public string? LastRejectionReason { get; set; }
+}
+
+public class ApplicationPaymentLineDto
+{
+    public string FeeCode { get; set; } = string.Empty;
+    public string FeeLabel { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public string? ReceiptNumber { get; set; }
+    public string? PaymentDate { get; set; }
+    public string? Status { get; set; }
+    public bool Received { get; set; }
 }
 
 public class ApplicationDetailDto
@@ -105,6 +126,8 @@ public class ApplicationDetailDto
     public DateTime? UpdatedAt { get; set; }
     public long? CreatedByUserId { get; set; }
     public long? UpdatedByUserId { get; set; }
+    public long? CurrentHandlerUserId { get; set; }
+    public long? PreviousHandlerUserId { get; set; }
     // ---- Fields the React client consumes ----
     public string? StatusCode { get; set; }
     public string? StatusName { get; set; }
@@ -118,6 +141,9 @@ public class ApplicationDetailDto
     public List<ApplicationStatusHistoryDto> StatusHistory { get; set; } = new();
     public List<InterviewDto> Interviews { get; set; } = new();
     public List<ApplicationExclusionDto> Exclusions { get; set; } = new();
+
+    /// <summary>Latest manager/staff rejection reason, when the application is rejected.</summary>
+    public string? LastRejectionReason { get; set; }
 }
 
 public class CreateApplicationRequest
@@ -194,6 +220,7 @@ public class VerifyApplicationDocumentRequest
 public class CreateApplicationDocumentRequest
 {
     public long DocumentTypeId { get; set; }
+    public string? Purpose { get; set; }
     public string FileName { get; set; } = string.Empty;
     public string FileUrl { get; set; } = string.Empty;
     public DateTime? UploadedAt { get; set; }
@@ -207,6 +234,7 @@ public class EndorsementDto
     public long ApplicationId { get; set; }
     public long EndorserProfileId { get; set; }
     public string? EndorserName { get; set; }
+    public string? EndorserMembershipNo { get; set; }
     public string EndorserRole { get; set; } = string.Empty;
     public int? YearsKnownCandidate { get; set; }
     public string? PersonalKnowledge { get; set; }
@@ -296,6 +324,7 @@ public class ApplicationStatusHistoryDto
     public string? ToStatusName { get; set; }
     public DateTime ChangedAt { get; set; }
     public long? ChangedByUserId { get; set; }
+    public string? Action { get; set; }
     public string? Reason { get; set; }
 }
 
@@ -385,11 +414,18 @@ public class ManagerReadinessDto
     public bool AnnualSubscriptionOk { get; set; }
     public bool CvUploaded { get; set; }
     public bool IdPassportUploaded { get; set; }
+    public bool AnnualChequeUploaded { get; set; }
+    public bool JoiningChequeUploaded { get; set; }
+    public bool FeeChequesUploaded { get; set; }
     public bool PilotLicenseRequired { get; set; }
     public bool PilotLicenseUploaded { get; set; }
     public bool ReadyForManager { get; set; }
     /// <summary>Entrance + annual payments initiated/completed (gate for manager notification).</summary>
     public bool PaymentsReady { get; set; }
+    /// <summary>Both fees actually received or waived (authorize-to-interview gate).</summary>
+    public bool PaymentsReceived { get; set; }
+    public bool MemberDetailsComplete { get; set; }
+    public List<ApplicationPaymentLineDto> PaymentLines { get; set; } = [];
     /// <summary>Payments + required documents (CV, ID, licence if applicable).</summary>
     public bool DocumentsReady { get; set; }
     public List<string> PendingItems { get; set; } = [];
@@ -425,4 +461,11 @@ public class CreateApplicationClubVisitRequest
 public class ClubVisitsOverrideRequest
 {
     public string Reason { get; set; } = string.Empty;
+}
+
+public class ManagerItemRequest
+{
+    /// <summary>payment | documents | endorsements | details</summary>
+    public string RequestType { get; set; } = string.Empty;
+    public string? Message { get; set; }
 }

@@ -9,10 +9,6 @@ using ClubManagement.Entities.Discipline;
 using ClubManagement.Entities.Engagement;
 using ClubManagement.Entities.Guarantorship;
 using ClubManagement.Entities.Tenancy;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 
 namespace ClubManagement.Entities.MembershipAccount
 {

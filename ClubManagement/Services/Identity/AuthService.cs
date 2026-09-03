@@ -11,7 +11,16 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace ClubManagement.Services.Identity;
 
-public record RegisterRequest(string Password, string FirstName, string LastName, string Email, string? Mobile, string? Username = null);
+public record RegisterRequest(
+    string Password,
+    string FirstName,
+    string LastName,
+    string Email,
+    string? Mobile,
+    string? Username = null,
+    long? GuestId = null,
+    string? IdPassportNo = null,
+    string? VisitSlipCode = null);
 /// <summary>Sign-in identifier: email (any role) or membership number (members / staff).</summary>
 public record LoginRequest(string Password, string? Login = null, string? Username = null, string? Email = null);
 public record AuthUserDto(
@@ -24,14 +33,19 @@ public record AuthUserDto(
     bool MustChangePassword,
     long TenantId,
     string TenantCode,
-    string TenantName);
+    string TenantName,
+    string? PhotoUrl = null);
 public record AuthResponse(string AccessToken, DateTime ExpiresAt, AuthUserDto User);
+public record UpdateMeRequest(string FirstName, string LastName, string Email, string? PhotoUrl);
+public record ChangeMyPasswordRequest(string CurrentPassword, string NewPassword);
 
 public interface IAuthService
 {
     Task<AuthResponse> RegisterApplicantAsync(RegisterRequest request, CancellationToken cancellationToken);
     Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken);
     Task<AuthUserDto?> MeAsync(long userAccountId, CancellationToken cancellationToken);
+    Task<AuthUserDto?> UpdateMeAsync(long userAccountId, UpdateMeRequest request, CancellationToken cancellationToken);
+    Task ChangeMyPasswordAsync(long userAccountId, ChangeMyPasswordRequest request, CancellationToken cancellationToken);
     Task SetPasswordByTokenAsync(string token, string password, CancellationToken cancellationToken);
 }
 
@@ -61,6 +75,35 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("Email and a password of at least 8 characters are required.");
         if (!email.Contains('@'))
             throw new InvalidOperationException("Enter a valid email address.");
+        if (request.GuestId is null or <= 0)
+            throw new InvalidOperationException("We have no record of your visits. Please visit the Aero Club of East Africa and ask reception to introduce and log you as a guest of an existing member before registering an account.");
+        var idPassport = (request.IdPassportNo ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(idPassport))
+            throw new InvalidOperationException("ID / Passport number is required to create your applicant profile.");
+
+        var guest = await _db.Guests
+            .Include(g => g.GuestStatus)
+            .Include(g => g.MVisits)
+            .FirstOrDefaultAsync(g => g.GuestId == request.GuestId.Value && g.IsActive, cancellationToken);
+        if (guest is null)
+            throw new InvalidOperationException("We have no record of your visits. Please visit the Aero Club of East Africa and ask reception to introduce and log you as a guest of an existing member before registering an account.");
+        if (!string.IsNullOrWhiteSpace(guest.BarredReason) ||
+            string.Equals(guest.GuestStatus.Code, "BARRED", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("This guest is barred and may not register.");
+        if (guest.GuestProfileId is not null)
+            throw new InvalidOperationException("This guest already has an applicant account. Sign in instead.");
+        if (!string.IsNullOrWhiteSpace(request.VisitSlipCode) &&
+            !string.Equals(guest.VisitSlipCode, request.VisitSlipCode.Trim(), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The visit slip code does not match this guest record.");
+
+        const int requiredVisits = 3;
+        var visitCount = guest.MVisits.Count;
+        if (visitCount < requiredVisits)
+            throw new InvalidOperationException(
+                $"You need to visit the Club at least {requiredVisits} times before registering. Visits recorded so far: {visitCount}/{requiredVisits}. Please visit the Club again.");
+
+        if (await _db.Profiles.AnyAsync(x => x.IdPassportNo == idPassport, cancellationToken))
+            throw new InvalidOperationException("An account with that ID / Passport number already exists.");
 
         // Applicants sign in with email — store email as the account username.
         var username = string.IsNullOrWhiteSpace(request.Username) ? email.ToLowerInvariant() : request.Username.Trim();
@@ -71,18 +114,22 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("An account with that email already exists.");
 
         var now = DateTime.UtcNow;
+        var mobile = string.IsNullOrWhiteSpace(request.Mobile) ? guest.Phone : request.Mobile.Trim();
         var profile = new MProfile
         {
             FirstName = request.FirstName.Trim(),
             LastName = request.LastName.Trim(),
             Email = email,
-            Mobile = request.Mobile,
+            Mobile = mobile,
+            IdPassportNo = idPassport,
             DataConsentGiven = false,
             IsActive = true,
             CreatedAt = now
         };
         _db.Profiles.Add(profile);
         await _db.SaveChangesAsync(cancellationToken);
+        guest.GuestProfileId = profile.ProfileId;
+        guest.UpdatedByUserId = null;
 
         var applicantRole = await _db.SystemRoles.FirstOrDefaultAsync(x => x.Code == "APPLICANT", cancellationToken)
             ?? throw new InvalidOperationException("APPLICANT system role is missing. Run the seed script.");
@@ -176,6 +223,56 @@ public class AuthService : IAuthService
         return user is null ? null : Map(user);
     }
 
+    public async Task<AuthUserDto?> UpdateMeAsync(long userAccountId, UpdateMeRequest request, CancellationToken cancellationToken)
+    {
+        var first = (request.FirstName ?? "").Trim();
+        var last = (request.LastName ?? "").Trim();
+        var email = (request.Email ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(first) || string.IsNullOrWhiteSpace(last) || string.IsNullOrWhiteSpace(email))
+            throw new InvalidOperationException("First name, last name and email are required.");
+        if (!email.Contains('@'))
+            throw new InvalidOperationException("Enter a valid email address.");
+
+        var user = await _db.UserAccounts
+            .Include(x => x.Profile)
+            .Include(x => x.UserRoles).ThenInclude(x => x.Role)
+            .FirstOrDefaultAsync(x => x.UserAccountId == userAccountId, cancellationToken);
+        if (user is null) return null;
+
+        var taken = await _db.Profiles.AnyAsync(
+            p => p.Email == email && p.ProfileId != user.ProfileId,
+            cancellationToken);
+        if (taken)
+            throw new InvalidOperationException("That email is already in use.");
+
+        user.Profile.FirstName = first;
+        user.Profile.LastName = last;
+        user.Profile.Email = email;
+        user.Profile.PhotoUrl = string.IsNullOrWhiteSpace(request.PhotoUrl) ? null : request.PhotoUrl.Trim();
+        user.Profile.UpdatedByUserId = userAccountId;
+        user.UpdatedByUserId = userAccountId;
+        await _db.SaveChangesAsync(cancellationToken);
+        return Map(user);
+    }
+
+    public async Task ChangeMyPasswordAsync(long userAccountId, ChangeMyPasswordRequest request, CancellationToken cancellationToken)
+    {
+        var current = request.CurrentPassword ?? "";
+        var next = request.NewPassword ?? "";
+        if (next.Length < 8)
+            throw new InvalidOperationException("New password must be at least 8 characters.");
+
+        var user = await _db.UserAccounts.FirstOrDefaultAsync(x => x.UserAccountId == userAccountId, cancellationToken)
+            ?? throw new InvalidOperationException("Account was not found.");
+        if (!BCrypt.Net.BCrypt.Verify(current, user.PasswordHash))
+            throw new InvalidOperationException("Current password is incorrect.");
+
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(next);
+        user.MustChangePassword = false;
+        user.UpdatedByUserId = userAccountId;
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
     public Task SetPasswordByTokenAsync(string token, string password, CancellationToken cancellationToken) =>
         _users.SetPasswordByTokenAsync(token, password, cancellationToken);
 
@@ -233,6 +330,7 @@ public class AuthService : IAuthService
             user.MustChangePassword,
             user.TenantId,
             tenant?.Code ?? _tenant.TenantCode ?? TenantResolutionMiddleware.DefaultTenantCode,
-            tenant?.Name ?? "Club");
+            tenant?.Name ?? "Club",
+            user.Profile.PhotoUrl);
     }
 }

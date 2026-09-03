@@ -30,6 +30,9 @@ namespace ClubManagement.Entities.Guests
         [Column("guest_book_entry_no")]
         public string? GuestBookEntryNo { get; set; }
 
+        [Column("notes")]
+        public string? Notes { get; set; }
+
         [Column("is_current_flag")]
         public bool IsCurrentFlag { get; set; }
 

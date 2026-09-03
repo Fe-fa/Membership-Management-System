@@ -17,6 +17,7 @@ using Scalar.AspNetCore;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
+MailEnvironmentBinder.Apply(builder.Configuration);
 
 builder.Services.Configure<ApplicationWorkflowOptions>(builder.Configuration.GetSection("ApplicationWorkflow"));
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
@@ -42,7 +43,10 @@ builder.Services.AddScoped<IApplicationService, ApplicationService>();
 builder.Services.AddScoped<IApplicantDetailsService, ApplicantDetailsService>();
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.SectionName));
 builder.Services.Configure<AppPublicOptions>(builder.Configuration.GetSection(AppPublicOptions.SectionName));
+builder.Services.AddSingleton<IEmailDispatchQueue, EmailDispatchQueue>();
+builder.Services.AddHostedService<EmailDispatchWorker>();
 builder.Services.AddScoped<IEmailSender, EmailSender>();
+builder.Services.AddScoped<IApplicationDecisionNotifier, ApplicationDecisionNotifier>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<IClubPolicyService, ClubPolicyService>();
@@ -112,8 +116,7 @@ builder.Services.AddCors(options =>
 
         policy.WithOrigins(
                 "http://localhost:8080", "https://localhost:8080",
-                "http://localhost:8081", "https://localhost:8081",
-                "http://localhost:5173", "https://localhost:5173")
+                "http://localhost:8081", "https://localhost:8081")
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -129,6 +132,8 @@ using (var scope = app.Services.CreateScope())
     try
     {
         await userManagement.EnsureSchemaAsync(CancellationToken.None);
+        var guestService = scope.ServiceProvider.GetRequiredService<IGuestService>();
+        await guestService.EnsureSchemaAsync(CancellationToken.None);
         await EnsureTenantSchemaAsync(db);
         var committeeService = scope.ServiceProvider.GetRequiredService<ICommitteeService>();
         await committeeService.EnsureLookupsAsync(CancellationToken.None);
@@ -249,6 +254,8 @@ if (app.Environment.IsDevelopment())
     try
     {
         await users.EnsureSchemaAsync(CancellationToken.None);
+        var guestService = scope.ServiceProvider.GetRequiredService<IGuestService>();
+        await guestService.EnsureSchemaAsync(CancellationToken.None);
         var managerStage = scope.ServiceProvider.GetRequiredService<IManagerStageService>();
         await managerStage.EnsureSchemaAsync(CancellationToken.None);
         var committeeService = scope.ServiceProvider.GetRequiredService<ICommitteeService>();
@@ -317,21 +324,81 @@ INSERT INTO dbo.Tenant (code, name, short_name, contact_email, contact_phone, ad
 VALUES (N'ACEA', N'Aero Club of East Africa', N'ACEA', N'info@aeroclubea.com', N'+254 111 053 220',
         N'P.O. Box 40813, 00100 Wilson Airport, Nairobi, Kenya', 1, SYSUTCDATETIME());");
 
-    foreach (var table in new[]
-             {
-                 "User_account", "MProfile", "MAccount", "MApplication", "Membership_type", "Club_setting",
-                 "Committee"
-             })
-    {
-        await db.Database.ExecuteSqlRawAsync($@"
-IF COL_LENGTH(N'dbo.{table}', N'tenant_id') IS NULL
-    ALTER TABLE dbo.[{table}] ADD tenant_id BIGINT NULL;");
-        await db.Database.ExecuteSqlRawAsync($@"
-UPDATE dbo.[{table}] SET tenant_id = (SELECT TOP 1 tenant_id FROM dbo.Tenant WHERE code = N'ACEA')
-WHERE tenant_id IS NULL;");
-        await db.Database.ExecuteSqlRawAsync($@"
-IF COL_LENGTH(N'dbo.{table}', N'tenant_id') IS NOT NULL
-   AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.{table}') AND name = N'tenant_id' AND is_nullable = 1)
-    ALTER TABLE dbo.[{table}] ALTER COLUMN tenant_id BIGINT NOT NULL;");
-    }
+    await EnsureTenantColumnUserAccountAsync(db);
+    await EnsureTenantColumnMProfileAsync(db);
+    await EnsureTenantColumnMAccountAsync(db);
+    await EnsureTenantColumnMApplicationAsync(db);
+    await EnsureTenantColumnMembershipTypeAsync(db);
+    await EnsureTenantColumnClubSettingAsync(db);
+    await EnsureTenantColumnCommitteeAsync(db);
+}
+
+static async Task EnsureTenantColumnUserAccountAsync(ApplicationModuleDbContext db)
+{
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.User_account', N'tenant_id') IS NULL ALTER TABLE dbo.[User_account] ADD tenant_id BIGINT NULL;");
+    await db.Database.ExecuteSqlRawAsync(
+        "UPDATE dbo.[User_account] SET tenant_id = (SELECT TOP 1 tenant_id FROM dbo.Tenant WHERE code = N'ACEA') WHERE tenant_id IS NULL;");
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.User_account', N'tenant_id') IS NOT NULL AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.User_account') AND name = N'tenant_id' AND is_nullable = 1) ALTER TABLE dbo.[User_account] ALTER COLUMN tenant_id BIGINT NOT NULL;");
+}
+
+static async Task EnsureTenantColumnMProfileAsync(ApplicationModuleDbContext db)
+{
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.MProfile', N'tenant_id') IS NULL ALTER TABLE dbo.[MProfile] ADD tenant_id BIGINT NULL;");
+    await db.Database.ExecuteSqlRawAsync(
+        "UPDATE dbo.[MProfile] SET tenant_id = (SELECT TOP 1 tenant_id FROM dbo.Tenant WHERE code = N'ACEA') WHERE tenant_id IS NULL;");
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.MProfile', N'tenant_id') IS NOT NULL AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.MProfile') AND name = N'tenant_id' AND is_nullable = 1) ALTER TABLE dbo.[MProfile] ALTER COLUMN tenant_id BIGINT NOT NULL;");
+}
+
+static async Task EnsureTenantColumnMAccountAsync(ApplicationModuleDbContext db)
+{
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.MAccount', N'tenant_id') IS NULL ALTER TABLE dbo.[MAccount] ADD tenant_id BIGINT NULL;");
+    await db.Database.ExecuteSqlRawAsync(
+        "UPDATE dbo.[MAccount] SET tenant_id = (SELECT TOP 1 tenant_id FROM dbo.Tenant WHERE code = N'ACEA') WHERE tenant_id IS NULL;");
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.MAccount', N'tenant_id') IS NOT NULL AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.MAccount') AND name = N'tenant_id' AND is_nullable = 1) ALTER TABLE dbo.[MAccount] ALTER COLUMN tenant_id BIGINT NOT NULL;");
+}
+
+static async Task EnsureTenantColumnMApplicationAsync(ApplicationModuleDbContext db)
+{
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.MApplication', N'tenant_id') IS NULL ALTER TABLE dbo.[MApplication] ADD tenant_id BIGINT NULL;");
+    await db.Database.ExecuteSqlRawAsync(
+        "UPDATE dbo.[MApplication] SET tenant_id = (SELECT TOP 1 tenant_id FROM dbo.Tenant WHERE code = N'ACEA') WHERE tenant_id IS NULL;");
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.MApplication', N'tenant_id') IS NOT NULL AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.MApplication') AND name = N'tenant_id' AND is_nullable = 1) ALTER TABLE dbo.[MApplication] ALTER COLUMN tenant_id BIGINT NOT NULL;");
+}
+
+static async Task EnsureTenantColumnMembershipTypeAsync(ApplicationModuleDbContext db)
+{
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.Membership_type', N'tenant_id') IS NULL ALTER TABLE dbo.[Membership_type] ADD tenant_id BIGINT NULL;");
+    await db.Database.ExecuteSqlRawAsync(
+        "UPDATE dbo.[Membership_type] SET tenant_id = (SELECT TOP 1 tenant_id FROM dbo.Tenant WHERE code = N'ACEA') WHERE tenant_id IS NULL;");
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.Membership_type', N'tenant_id') IS NOT NULL AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.Membership_type') AND name = N'tenant_id' AND is_nullable = 1) ALTER TABLE dbo.[Membership_type] ALTER COLUMN tenant_id BIGINT NOT NULL;");
+}
+
+static async Task EnsureTenantColumnClubSettingAsync(ApplicationModuleDbContext db)
+{
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.Club_setting', N'tenant_id') IS NULL ALTER TABLE dbo.[Club_setting] ADD tenant_id BIGINT NULL;");
+    await db.Database.ExecuteSqlRawAsync(
+        "UPDATE dbo.[Club_setting] SET tenant_id = (SELECT TOP 1 tenant_id FROM dbo.Tenant WHERE code = N'ACEA') WHERE tenant_id IS NULL;");
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.Club_setting', N'tenant_id') IS NOT NULL AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.Club_setting') AND name = N'tenant_id' AND is_nullable = 1) ALTER TABLE dbo.[Club_setting] ALTER COLUMN tenant_id BIGINT NOT NULL;");
+}
+
+static async Task EnsureTenantColumnCommitteeAsync(ApplicationModuleDbContext db)
+{
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.Committee', N'tenant_id') IS NULL ALTER TABLE dbo.[Committee] ADD tenant_id BIGINT NULL;");
+    await db.Database.ExecuteSqlRawAsync(
+        "UPDATE dbo.[Committee] SET tenant_id = (SELECT TOP 1 tenant_id FROM dbo.Tenant WHERE code = N'ACEA') WHERE tenant_id IS NULL;");
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.Committee', N'tenant_id') IS NOT NULL AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.Committee') AND name = N'tenant_id' AND is_nullable = 1) ALTER TABLE dbo.[Committee] ALTER COLUMN tenant_id BIGINT NOT NULL;");
 }

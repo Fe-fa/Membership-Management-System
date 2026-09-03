@@ -4,6 +4,7 @@ using ClubManagement.Services.Committee;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+
 namespace ClubManagement.Controllers.Committee;
 
 [ApiController]
@@ -138,6 +139,25 @@ public class CommitteesController : ControllerBase
         }
     }
 
+    [HttpPatch("{committeeId:long}/members/{committeeMemberId:long}")]
+    public async Task<ActionResult<CommitteeMemberDto>> UpdateMemberContact(
+        long committeeId,
+        long committeeMemberId,
+        [FromBody] UpdateCommitteeMemberContactRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!await CanManageAsync(cancellationToken)) return ManageForbidden();
+        try
+        {
+            return Ok(await _committees.UpdateMemberContactAsync(
+                committeeId, committeeMemberId, request, User.UserId(), cancellationToken));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpDelete("{committeeId:long}/members/{committeeMemberId:long}")]
     public async Task<IActionResult> RemoveMember(
         long committeeId,
@@ -235,6 +255,22 @@ public class CommitteesController : ControllerBase
         }
     }
 
+    [HttpGet("interview-queue")]
+    public async Task<ActionResult<IReadOnlyList<InterviewCandidateDto>>> InterviewQueue(
+        CancellationToken cancellationToken)
+    {
+        // Same visibility as the meetings page (GET current): any signed-in staff on this desk
+        // must see manager-authorized applicants. Mutating still requires CanManage.
+        return Ok(await _interviews.ListInterviewQueueAsync(cancellationToken));
+    }
+
+    [HttpGet("interview-history")]
+    public async Task<ActionResult<IReadOnlyList<MeetingInterviewDto>>> InterviewHistory(
+        CancellationToken cancellationToken)
+    {
+        return Ok(await _interviews.ListInterviewHistoryAsync(cancellationToken));
+    }
+
     [HttpGet("meetings/{meetingId:long}/interview-candidates")]
     public async Task<ActionResult<IReadOnlyList<InterviewCandidateDto>>> SearchInterviewCandidates(
         long meetingId,
@@ -243,6 +279,23 @@ public class CommitteesController : ControllerBase
     {
         if (!await CanManageAsync(cancellationToken)) return ManageForbidden();
         return Ok(await _interviews.SearchCandidatesAsync(meetingId, search, cancellationToken));
+    }
+
+    [HttpPatch("interviews/{interviewId:long}/notes")]
+    public async Task<ActionResult<MeetingInterviewDto>> SaveInterviewNotes(
+        long interviewId,
+        [FromBody] SaveInterviewOutcomeRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!await CanManageAsync(cancellationToken)) return ManageForbidden();
+        try
+        {
+            return Ok(await _interviews.SaveNotesAsync(interviewId, request, User.UserId(), cancellationToken));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPatch("interviews/{interviewId:long}/outcome")]
@@ -356,6 +409,42 @@ public class CommitteesController : ControllerBase
         try
         {
             return Ok(await _ballots.ProceedToSignaturesAsync(itemId, User.UserId(), cancellationToken));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpGet("meetings/{meetingId:long}/sitting-attendance")]
+    public async Task<ActionResult<SittingAttendanceDto>> GetSittingAttendance(
+        long meetingId,
+        CancellationToken cancellationToken)
+    {
+        if (!await CanManageAsync(cancellationToken) && !await CanAccessBallotAsync(cancellationToken))
+            return ManageForbidden();
+        try
+        {
+            return Ok(await _interviews.GetSittingAttendanceAsync(meetingId, cancellationToken));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("meetings/{meetingId:long}/sitting-attendance")]
+    public async Task<ActionResult<SittingAttendanceDto>> SetSittingAttendance(
+        long meetingId,
+        [FromBody] SetSittingAttendanceRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!await CanManageAsync(cancellationToken) && !await CanAccessBallotAsync(cancellationToken))
+            return ManageForbidden();
+        try
+        {
+            return Ok(await _interviews.SetSittingAttendanceAsync(
+                meetingId, request, User.UserId(), cancellationToken));
         }
         catch (InvalidOperationException ex)
         {

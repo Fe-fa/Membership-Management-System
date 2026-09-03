@@ -346,3 +346,22 @@ D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\ClubManagement\obj\Debug
 D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\ClubManagement\obj\Debug\net10.0\ClubManagement.genruntimeconfig.cache
 D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\ClubManagement\obj\Debug\net10.0\ref\ClubManagement.dll
 D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\ClubManagement\bin\Debug\net10.0\BCrypt.Net-Next.dll
+D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\ClubManagement\obj\Debug\net10.0\ClubManagement.sourcelink.json
+C:\Users\fe-fa\AppData\Local\Temp\cm-build-check\appsettings.Development.json
+C:\Users\fe-fa\AppData\Local\Temp\cm-build-check\appsettings.json
+C:\Users\fe-fa\AppData\Local\Temp\cm-build-check\ClubManagement.staticwebassets.runtime.json
+C:\Users\fe-fa\AppData\Local\Temp\cm-build-check\ClubManagement.staticwebassets.endpoints.json
+C:\Users\fe-fa\AppData\Local\Temp\cm-build-check\ClubManagement.exe
+C:\Users\fe-fa\AppData\Local\Temp\cm-build-check\ClubManagement.deps.json
+C:\Users\fe-fa\AppData\Local\Temp\cm-build-check\ClubManagement.runtimeconfig.json
+C:\Users\fe-fa\AppData\Local\Temp\cm-build-check\ClubManagement.dll
+C:\Users\fe-fa\AppData\Local\Temp\cm-build-check\ClubManagement.pdb
+D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\_build_check\appsettings.Development.json
+D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\_build_check\appsettings.json
+D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\_build_check\ClubManagement.staticwebassets.runtime.json
+D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\_build_check\ClubManagement.staticwebassets.endpoints.json
+D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\_build_check\ClubManagement.exe
+D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\_build_check\ClubManagement.deps.json
+D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\_build_check\ClubManagement.runtimeconfig.json
+D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\_build_check\ClubManagement.dll
+D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\_build_check\ClubManagement.pdb

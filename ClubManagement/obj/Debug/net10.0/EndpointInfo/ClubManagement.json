@@ -6,9 +6,6 @@
   },
   "servers": [
     {
-      "url": "https://localhost:7068"
-    },
-    {
       "url": "http://localhost:5275"
     }
   ],
@@ -48,6 +45,447 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/tenants/current": {
+      "get": {
+        "tags": [
+          "Tenants"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantPublicDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantPublicDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantPublicDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/applications/manager-queue": {
+      "get": {
+        "tags": [
+          "Applications"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApplicationListItemDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApplicationListItemDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApplicationListItemDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/applications/manager-history": {
+      "get": {
+        "tags": [
+          "Applications"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApplicationListItemDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApplicationListItemDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApplicationListItemDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/applications/{applicationId}/assign-meeting": {
+      "post": {
+        "tags": [
+          "Applications"
+        ],
+        "parameters": [
+          {
+            "name": "applicationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignMeetingRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignMeetingRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignMeetingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterviewDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterviewDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterviewDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/applications/{applicationId}/manager-readiness": {
+      "get": {
+        "tags": [
+          "Applications"
+        ],
+        "parameters": [
+          {
+            "name": "applicationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerReadinessDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerReadinessDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerReadinessDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/applications/{applicationId}/club-visits": {
+      "get": {
+        "tags": [
+          "Applications"
+        ],
+        "parameters": [
+          {
+            "name": "applicationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApplicationClubVisitDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApplicationClubVisitDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApplicationClubVisitDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Applications"
+        ],
+        "parameters": [
+          {
+            "name": "applicationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApplicationClubVisitRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApplicationClubVisitRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApplicationClubVisitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationClubVisitDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationClubVisitDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationClubVisitDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/applications/{applicationId}/club-visits/override": {
+      "post": {
+        "tags": [
+          "Applications"
+        ],
+        "parameters": [
+          {
+            "name": "applicationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubVisitsOverrideRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubVisitsOverrideRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubVisitsOverrideRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerReadinessDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerReadinessDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerReadinessDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/applications/{applicationId}/manager-requests": {
+      "post": {
+        "tags": [
+          "Applications"
+        ],
+        "parameters": [
+          {
+            "name": "applicationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ManagerItemRequest"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ManagerItemRequest"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ManagerItemRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -861,6 +1299,207 @@
         }
       }
     },
+    "/api/applications/{applicationId}/dues": {
+      "get": {
+        "tags": [
+          "Applications"
+        ],
+        "parameters": [
+          {
+            "name": "applicationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationDuesDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationDuesDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationDuesDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/applications/{applicationId}/payments": {
+      "get": {
+        "tags": [
+          "Applications"
+        ],
+        "parameters": [
+          {
+            "name": "applicationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PaymentRowDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PaymentRowDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PaymentRowDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Applications"
+        ],
+        "parameters": [
+          {
+            "name": "applicationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplicationPayRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplicationPayRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplicationPayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/applications/{applicationId}/payments/{transactionId}/receipt": {
+      "post": {
+        "tags": [
+          "Applications"
+        ],
+        "parameters": [
+          {
+            "name": "applicationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "transactionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/applications/{applicationId}/endorsements": {
       "post": {
         "tags": [
@@ -1391,6 +2030,170 @@
                 }
               }
             }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "MembershipTypes"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMembershipTypeRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMembershipTypeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipTypeOptionDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipTypeOptionDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipTypeOptionDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/membership-types/create": {
+      "post": {
+        "tags": [
+          "MembershipTypes"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMembershipTypeRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMembershipTypeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipTypeOptionDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipTypeOptionDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipTypeOptionDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/membership-types/{membershipTypeId}": {
+      "put": {
+        "tags": [
+          "MembershipTypes"
+        ],
+        "parameters": [
+          {
+            "name": "membershipTypeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMembershipTypeRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMembershipTypeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipTypeOptionDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipTypeOptionDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipTypeOptionDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "MembershipTypes"
+        ],
+        "parameters": [
+          {
+            "name": "membershipTypeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -3185,6 +3988,67 @@
         }
       }
     },
+    "/api/users/{userAccountId}/roles": {
+      "put": {
+        "tags": [
+          "Users"
+        ],
+        "parameters": [
+          {
+            "name": "userAccountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignRolesRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignRolesRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignRolesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/users/{userAccountId}/status": {
       "put": {
         "tags": [
@@ -3509,6 +4373,899 @@
         }
       }
     },
+    "/api/reception/members": {
+      "get": {
+        "tags": [
+          "Reception"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceptionMemberDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceptionMemberDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceptionMemberDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reception/guests": {
+      "get": {
+        "tags": [
+          "Reception"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "phone",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "visitSlipCode",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GuestLookupDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GuestLookupDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GuestLookupDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Reception"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertGuestRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertGuestRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertGuestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestLookupDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestLookupDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestLookupDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reception/visits": {
+      "get": {
+        "tags": [
+          "Reception"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceptionVisitDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceptionVisitDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceptionVisitDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Reception"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceptionVisitRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceptionVisitRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceptionVisitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceptionVisitDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceptionVisitDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceptionVisitDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reception/visits/{visitId}/sign-out": {
+      "post": {
+        "tags": [
+          "Reception"
+        ],
+        "parameters": [
+          {
+            "name": "visitId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceptionVisitDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceptionVisitDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceptionVisitDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/guests/eligibility": {
+      "post": {
+        "tags": [
+          "GuestRegistration"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuestEligibilityRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuestEligibilityRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuestEligibilityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestEligibilityDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestEligibilityDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestEligibilityDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/elections/notices": {
+      "get": {
+        "tags": [
+          "Elections"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MeetingNoticeDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MeetingNoticeDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MeetingNoticeDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/elections/mine": {
+      "get": {
+        "tags": [
+          "Elections"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberElectionDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberElectionDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberElectionDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/elections/meetings/{meetingId}/votes": {
+      "post": {
+        "tags": [
+          "Elections"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CastMemberBallotRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CastMemberBallotRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CastMemberBallotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/elections/meetings/{meetingId}/proxy": {
+      "post": {
+        "tags": [
+          "Elections"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppointProxyRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppointProxyRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppointProxyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/elections/meetings/{meetingId}/nominations": {
+      "post": {
+        "tags": [
+          "Elections"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNominationRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNominationRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNominationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NominationDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NominationDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NominationDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/elections": {
+      "get": {
+        "tags": [
+          "Elections"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ElectionDeskDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ElectionDeskDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ElectionDeskDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Elections"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishMeetingNoticeRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishMeetingNoticeRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishMeetingNoticeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/elections/members": {
+      "get": {
+        "tags": [
+          "Elections"
+        ],
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MemberSearchHitDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MemberSearchHitDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MemberSearchHitDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/elections/meetings/{meetingId}/agenda": {
+      "post": {
+        "tags": [
+          "Elections"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddAgendaItemRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddAgendaItemRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddAgendaItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/elections/meetings/{meetingId}/window": {
+      "post": {
+        "tags": [
+          "Elections"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetBallotWindowRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetBallotWindowRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetBallotWindowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/elections/meetings/{meetingId}/officers": {
+      "post": {
+        "tags": [
+          "Elections"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppointElectionOfficersRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppointElectionOfficersRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppointElectionOfficersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/elections/meetings/{meetingId}/declare": {
+      "post": {
+        "tags": [
+          "Elections"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/finance/quote": {
       "get": {
         "tags": [
@@ -3667,6 +5424,88 @@
         }
       }
     },
+    "/api/finance/payments/{transactionId}/approve": {
+      "post": {
+        "tags": [
+          "Finance"
+        ],
+        "parameters": [
+          {
+            "name": "transactionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/finance/payments/{transactionId}/receipt": {
+      "post": {
+        "tags": [
+          "Finance"
+        ],
+        "parameters": [
+          {
+            "name": "transactionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/finance/subscriptions": {
       "get": {
         "tags": [
@@ -3771,6 +5610,1575 @@
           }
         }
       }
+    },
+    "/api/committees/current": {
+      "get": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/active": {
+      "get": {
+        "tags": [
+          "Committees"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ActiveCommitteeOptionDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ActiveCommitteeOptionDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ActiveCommitteeOptionDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/meta/roles": {
+      "get": {
+        "tags": [
+          "Committees"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CommitteeRoleOptionDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CommitteeRoleOptionDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CommitteeRoleOptionDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/meta/meeting-types": {
+      "get": {
+        "tags": [
+          "Committees"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MeetingTypeOptionDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MeetingTypeOptionDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MeetingTypeOptionDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/meta/profiles": {
+      "get": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProfileSearchHitDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProfileSearchHitDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProfileSearchHitDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/{committeeId}": {
+      "get": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "committeeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeDetailDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "committeeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCommitteeRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCommitteeRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCommitteeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees": {
+      "post": {
+        "tags": [
+          "Committees"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCommitteeRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCommitteeRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCommitteeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/{committeeId}/members": {
+      "post": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "committeeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddCommitteeMemberRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddCommitteeMemberRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddCommitteeMemberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeMemberDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeMemberDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeMemberDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/{committeeId}/members/{committeeMemberId}": {
+      "patch": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "committeeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "committeeMemberId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCommitteeMemberContactRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCommitteeMemberContactRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCommitteeMemberContactRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeMemberDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeMemberDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeMemberDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "committeeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "committeeMemberId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/committees/{committeeId}/meetings": {
+      "post": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "committeeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCommitteeMeetingRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCommitteeMeetingRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCommitteeMeetingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeMeetingDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeMeetingDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeMeetingDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/meetings/{meetingId}/status": {
+      "patch": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMeetingStatusRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMeetingStatusRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMeetingStatusRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeMeetingDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeMeetingDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeMeetingDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/meetings/{meetingId}/minutes": {
+      "patch": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMeetingMinutesRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMeetingMinutesRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMeetingMinutesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeMeetingDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeMeetingDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeMeetingDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/meetings/{meetingId}/interviews": {
+      "get": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MeetingInterviewDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MeetingInterviewDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MeetingInterviewDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachInterviewRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachInterviewRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachInterviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingInterviewDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingInterviewDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingInterviewDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/interview-queue": {
+      "get": {
+        "tags": [
+          "Committees"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InterviewCandidateDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InterviewCandidateDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InterviewCandidateDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/interview-history": {
+      "get": {
+        "tags": [
+          "Committees"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MeetingInterviewDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MeetingInterviewDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MeetingInterviewDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/meetings/{meetingId}/interview-candidates": {
+      "get": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InterviewCandidateDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InterviewCandidateDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InterviewCandidateDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/interviews/{interviewId}/notes": {
+      "patch": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "interviewId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveInterviewOutcomeRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveInterviewOutcomeRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveInterviewOutcomeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingInterviewDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingInterviewDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingInterviewDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/interviews/{interviewId}/outcome": {
+      "patch": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "interviewId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveInterviewOutcomeRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveInterviewOutcomeRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveInterviewOutcomeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingInterviewDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingInterviewDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingInterviewDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/admission-ballot": {
+      "get": {
+        "tags": [
+          "Committees"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotMeetingDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotMeetingDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotMeetingDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/meetings/{meetingId}/ballot": {
+      "get": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotMeetingDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotMeetingDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotMeetingDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachBallotRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachBallotRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachBallotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotItemDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotItemDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotItemDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/meetings/{meetingId}/ballot-candidates": {
+      "get": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BallotCandidateDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BallotCandidateDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BallotCandidateDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/ballot/{itemId}/vote": {
+      "post": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CastCommitteeBallotRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CastCommitteeBallotRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CastCommitteeBallotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotItemDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotItemDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotItemDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/ballot/{itemId}/signatures": {
+      "post": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotItemDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotItemDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotItemDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/meetings/{meetingId}/sitting-attendance": {
+      "get": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SittingAttendanceDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SittingAttendanceDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SittingAttendanceDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSittingAttendanceRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSittingAttendanceRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSittingAttendanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SittingAttendanceDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SittingAttendanceDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SittingAttendanceDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/meetings/{meetingId}/attendance": {
+      "post": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAttendanceRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAttendanceRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAttendanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotMeetingDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotMeetingDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotMeetingDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/ballot/{itemId}/sign": {
+      "post": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdmissionSignRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdmissionSignRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdmissionSignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotItemDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotItemDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotItemDto"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3814,6 +7222,81 @@
           }
         }
       },
+      "ActiveCommitteeOptionDto": {
+        "type": "object",
+        "properties": {
+          "committeeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "committeeName": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "termStart": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "termEnd": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "scheduledMeetings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommitteeMeetingDto"
+            }
+          }
+        }
+      },
+      "AddAgendaItemRequest": {
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string"
+          },
+          "isSpecialBusiness": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AddCommitteeMemberRequest": {
+        "type": "object",
+        "properties": {
+          "profileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "committeeRoleId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "appointedDate": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "AdminOverviewDto": {
         "required": [
           "applications",
@@ -3834,6 +7317,89 @@
           },
           "facilities": {
             "$ref": "#/components/schemas/FacilityRollup"
+          }
+        }
+      },
+      "AdmissionSignRequest": {
+        "type": "object",
+        "properties": {
+          "signatoryKind": {
+            "type": "string"
+          },
+          "signatureName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dateElected": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "membershipNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "electedMembershipType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AgendaItemTallyDto": {
+        "type": "object",
+        "properties": {
+          "agendaItemId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "isSpecialBusiness": {
+            "type": "boolean"
+          },
+          "forCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "againstCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "abstainCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "votesCast": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -4062,6 +7628,53 @@
           }
         }
       },
+      "ApplicationClubVisitDto": {
+        "type": "object",
+        "properties": {
+          "applicationClubVisitId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "applicationId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "visitDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "metWith": {
+            "type": "string"
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdByUserId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
       "ApplicationDetailDto": {
         "type": "object",
         "properties": {
@@ -4214,6 +7827,24 @@
             ],
             "format": "int64"
           },
+          "currentHandlerUserId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "previousHandlerUserId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
           "statusCode": {
             "type": [
               "null",
@@ -4282,6 +7913,12 @@
             "items": {
               "$ref": "#/components/schemas/ApplicationExclusionDto"
             }
+          },
+          "lastRejectionReason": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -4398,6 +8035,133 @@
               "string"
             ],
             "format": "int64"
+          }
+        }
+      },
+      "ApplicationDuesDto": {
+        "required": [
+          "membershipTypeId",
+          "membershipTypeName",
+          "joiningFeeTypeId",
+          "annualFeeTypeId",
+          "joiningFee",
+          "annualSubscription",
+          "joiningPaid",
+          "annualPaid",
+          "joiningBalance",
+          "annualBalance",
+          "totalDue",
+          "totalPaid",
+          "balance",
+          "halfYearAnnual"
+        ],
+        "type": "object",
+        "properties": {
+          "membershipTypeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "membershipTypeName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "joiningFeeTypeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "annualFeeTypeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "joiningFee": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "annualSubscription": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "joiningPaid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "annualPaid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "joiningBalance": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "annualBalance": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "totalDue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "totalPaid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "balance": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "halfYearAnnual": {
+            "type": "boolean"
           }
         }
       },
@@ -4624,8 +8388,47 @@
           "paymentStatus": {
             "type": "string"
           },
+          "paymentStatusCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paymentReceiptNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paymentAmount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "paymentDate": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paymentLines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApplicationPaymentLineDto"
+            }
+          },
           "sponsorStatus": {
             "type": "string"
+          },
+          "sponsorStatusCode": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "sponsorCompletedAt": {
             "type": [
@@ -4649,6 +8452,238 @@
               "string"
             ],
             "format": "int32"
+          },
+          "stageAReadyForManager": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "stageAPaymentsReady": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "stageADocumentsReady": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "clubVisitsLogged": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "clubVisitsMet": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "canAuthorizeToInterview": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "memberDetailsComplete": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "committeeMeetingId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "committeeMeetingDate": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "committeeMeetingName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "committeeMeetingTime": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "assignedToMeeting": {
+            "type": "boolean"
+          },
+          "applicantBallotLabel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "excludedUntilDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "lastRejectionReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApplicationPaymentLineDto": {
+        "type": "object",
+        "properties": {
+          "feeCode": {
+            "type": "string"
+          },
+          "feeLabel": {
+            "type": "string"
+          },
+          "amount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "receiptNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paymentDate": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "received": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ApplicationPayRequest": {
+        "type": "object",
+        "properties": {
+          "paymentMethodId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "feeTypeCode": {
+            "type": "string"
+          },
+          "amount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "paymentDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "mpesaCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "mpesaPhone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeBankName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeBankCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "chequeFileName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeFileUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "referenceNote": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paymentStatusCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "transactionId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
           }
         }
       },
@@ -4790,6 +8825,18 @@
             ],
             "format": "int64"
           },
+          "fromStatusCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fromStatusName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "toStatusId": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
@@ -4797,6 +8844,18 @@
               "string"
             ],
             "format": "int64"
+          },
+          "toStatusCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "toStatusName": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "changedAt": {
             "type": "string",
@@ -4811,7 +8870,132 @@
             ],
             "format": "int64"
           },
+          "action": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AppointElectionOfficersRequest": {
+        "type": "object",
+        "properties": {
+          "scrutineer1ProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "scrutineer2ProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "returningOfficerProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "AppointProxyRequest": {
+        "type": "object",
+        "properties": {
+          "proxyTitle": {
+            "type": "string"
+          },
+          "proxyName": {
+            "type": "string"
+          },
+          "alternateTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "alternateName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "voteInstruction": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "leaveToDiscretion": {
+            "type": "boolean"
+          },
+          "appointingName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "appointingPoBox": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isPoll": {
+            "type": "boolean"
+          },
+          "instructions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProxyInstructionDto"
+            }
+          }
+        }
+      },
+      "AssignMeetingRequest": {
+        "type": "object",
+        "properties": {
+          "committeeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "committeeMeetingId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "meetingDate": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "meetingTime": {
             "type": [
               "null",
               "string"
@@ -4823,7 +9007,42 @@
         "type": "object",
         "properties": {
           "roleCode": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "roleCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AttachBallotRequest": {
+        "type": "object",
+        "properties": {
+          "applicationId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "AttachInterviewRequest": {
+        "type": "object",
+        "properties": {
+          "applicationId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
           }
         }
       },
@@ -4855,7 +9074,10 @@
           "fullName",
           "email",
           "roles",
-          "mustChangePassword"
+          "mustChangePassword",
+          "tenantId",
+          "tenantCode",
+          "tenantName"
         ],
         "type": "object",
         "properties": {
@@ -4895,6 +9117,20 @@
           },
           "mustChangePassword": {
             "type": "boolean"
+          },
+          "tenantId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "tenantCode": {
+            "type": "string"
+          },
+          "tenantName": {
+            "type": "string"
           }
         }
       },
@@ -4979,6 +9215,150 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "BallotCandidateDto": {
+        "type": "object",
+        "properties": {
+          "applicationId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "applicationNo": {
+            "type": "string"
+          },
+          "applicantName": {
+            "type": "string"
+          },
+          "statusCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "statusName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "alreadyLinked": {
+            "type": "boolean"
+          }
+        }
+      },
+      "BallotSeatDto": {
+        "type": "object",
+        "properties": {
+          "committeeMemberId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "profileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "roleName": {
+            "type": "string"
+          },
+          "present": {
+            "type": "boolean"
+          }
+        }
+      },
+      "BallotSignatureDto": {
+        "type": "object",
+        "properties": {
+          "profileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "roleName": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "dateElected": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "BallotVoterDto": {
+        "type": "object",
+        "properties": {
+          "profileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "roleName": {
+            "type": "string"
+          },
+          "voteValue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "present": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CastCommitteeBallotRequest": {
+        "type": "object",
+        "properties": {
+          "voteValue": {
+            "type": "string"
+          }
+        }
+      },
+      "CastMemberBallotRequest": {
+        "type": "object",
+        "properties": {
+          "agendaItemId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "voteValue": {
+            "type": "string"
           }
         }
       },
@@ -5140,6 +9520,579 @@
           }
         }
       },
+      "ClubVisitsOverrideRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "CommitteeBallotItemDto": {
+        "type": "object",
+        "properties": {
+          "committeeBallotItemId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "applicationId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "applicationNo": {
+            "type": "string"
+          },
+          "applicantName": {
+            "type": "string"
+          },
+          "applicationStatusCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "itemStatus": {
+            "type": "string"
+          },
+          "forCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "againstCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "votesCast": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "committeeSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "quorumRequired": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "quorumMet": {
+            "type": "boolean"
+          },
+          "autoRejected": {
+            "type": "boolean"
+          },
+          "excludedUntil": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "myVoteCast": {
+            "type": "boolean"
+          },
+          "myVoteValue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "canProceedToSignatures": {
+            "type": "boolean"
+          },
+          "committeeSignatures": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "gmSignatures": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "chairmanSigned": {
+            "type": "boolean"
+          },
+          "readyForChairman": {
+            "type": "boolean"
+          },
+          "appliedMembershipType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "voted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BallotVoterDto"
+            }
+          },
+          "notVoted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BallotVoterDto"
+            }
+          },
+          "signatures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BallotSignatureDto"
+            }
+          },
+          "awaitingSignatures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BallotSignatureDto"
+            }
+          }
+        }
+      },
+      "CommitteeBallotMeetingDto": {
+        "type": "object",
+        "properties": {
+          "committeeMeetingId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "meetingName": {
+            "type": "string"
+          },
+          "meetingDate": {
+            "type": "string"
+          },
+          "meetingTime": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "committeeSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "quorumRequired": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "presentCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "meetingQuorumMet": {
+            "type": "boolean"
+          },
+          "deskMessage": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "seats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BallotSeatDto"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommitteeBallotItemDto"
+            }
+          },
+          "pendingApplicants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BallotCandidateDto"
+            }
+          }
+        }
+      },
+      "CommitteeDetailDto": {
+        "type": "object",
+        "properties": {
+          "committeeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "committeeName": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "termStart": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "termEnd": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommitteeMemberDto"
+            }
+          },
+          "meetings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommitteeMeetingDto"
+            }
+          },
+          "nextMeeting": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CommitteeMeetingDto"
+              }
+            ]
+          },
+          "nonOfficerCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "aviationActiveNonOfficers": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "aviationRuleMet": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CommitteeMeetingDto": {
+        "type": "object",
+        "properties": {
+          "committeeMeetingId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "committeeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "meetingTypeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "meetingTypeCode": {
+            "type": "string"
+          },
+          "meetingTypeName": {
+            "type": "string"
+          },
+          "meetingDate": {
+            "type": "string"
+          },
+          "meetingTime": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "meetingName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chairProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "chairName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "minutesUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "linkedInterviewCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pendingOutcomeCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "CommitteeMemberDto": {
+        "type": "object",
+        "properties": {
+          "committeeMemberId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "profileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "profileName": {
+            "type": "string"
+          },
+          "membershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "photoUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "contactEmail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "phone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "accountId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "membershipType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "membershipStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "membershipStatusCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "accountIsActive": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "joinedDate": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nextRenewalDate": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "committeeRoleId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "roleCode": {
+            "type": "string"
+          },
+          "roleName": {
+            "type": "string"
+          },
+          "roleSortOrder": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "canApproveCredit": {
+            "type": "boolean"
+          },
+          "isAviationAffiliated": {
+            "type": "boolean"
+          },
+          "appointedDate": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "endDate": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CommitteeRoleOptionDto": {
+        "type": "object",
+        "properties": {
+          "committeeRoleId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "canApproveCredit": {
+            "type": "boolean"
+          },
+          "isOfficer": {
+            "type": "boolean"
+          }
+        }
+      },
       "CommitteeRow": {
         "required": [
           "name",
@@ -5267,6 +10220,24 @@
           }
         }
       },
+      "CreateApplicationClubVisitRequest": {
+        "type": "object",
+        "properties": {
+          "visitDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "metWith": {
+            "type": "string"
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "CreateApplicationDocumentRequest": {
         "type": "object",
         "properties": {
@@ -5277,6 +10248,12 @@
               "string"
             ],
             "format": "int64"
+          },
+          "purpose": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "fileName": {
             "type": "string"
@@ -5525,6 +10502,86 @@
           }
         }
       },
+      "CreateCommitteeMeetingRequest": {
+        "type": "object",
+        "properties": {
+          "meetingTypeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "meetingDate": {
+            "type": "string"
+          },
+          "meetingTime": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "meetingName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chairProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "meetingLink": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "applicationIds": {
+            "type": "array",
+            "items": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          }
+        }
+      },
+      "CreateCommitteeRequest": {
+        "type": "object",
+        "properties": {
+          "committeeName": {
+            "type": "string"
+          },
+          "termStart": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "termEnd": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "CreateEndorsementRequest": {
         "type": "object",
         "properties": {
@@ -5656,6 +10713,55 @@
               "string"
             ],
             "format": "int64"
+          }
+        }
+      },
+      "CreateMembershipTypeRequest": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "CreateNominationRequest": {
+        "type": "object",
+        "properties": {
+          "nomineeProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "proposerProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "seconderProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "roleStandingFor": {
+            "type": "string"
           }
         }
       },
@@ -5931,7 +11037,16 @@
             ]
           },
           "roleCode": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "roleCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "membershipNo": {
             "type": [
@@ -6022,15 +11137,139 @@
           }
         }
       },
+      "ElectionDeskDto": {
+        "type": "object",
+        "properties": {
+          "meeting": {
+            "$ref": "#/components/schemas/MeetingNoticeDto"
+          },
+          "ballotWindowOpen": {
+            "type": "boolean"
+          },
+          "ballotClosesAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "conductorProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "conductorName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "scrutineer1ProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "scrutineer1Name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "scrutineer2ProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "scrutineer2Name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "resultDeclaredAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "resultSummary": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nominationDeadline": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nominationsOpen": {
+            "type": "boolean"
+          },
+          "uniqueVoters": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "quorumRequired": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "quorumMet": {
+            "type": "boolean"
+          },
+          "agenda": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgendaItemTallyDto"
+            }
+          },
+          "nominations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NominationDto"
+            }
+          }
+        }
+      },
       "ElectRequest": {
         "required": [
-          "dateElected"
+          "dateElected",
+          "membershipNumber",
+          "electedMembershipType"
         ],
         "type": "object",
         "properties": {
           "dateElected": {
             "type": "string",
             "format": "date"
+          },
+          "membershipNumber": {
+            "type": "string"
+          },
+          "electedMembershipType": {
+            "type": "string"
           }
         }
       },
@@ -6148,6 +11387,18 @@
               "string"
             ],
             "format": "int64"
+          },
+          "endorserName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "endorserMembershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "endorserRole": {
             "type": "string"
@@ -6490,6 +11741,195 @@
           }
         }
       },
+      "GuestEligibilityDto": {
+        "required": [
+          "found",
+          "ambiguous",
+          "canRegister",
+          "visitCount",
+          "requiredVisits",
+          "guestId",
+          "visitSlipCode",
+          "message",
+          "matches"
+        ],
+        "type": "object",
+        "properties": {
+          "found": {
+            "type": "boolean"
+          },
+          "ambiguous": {
+            "type": "boolean"
+          },
+          "canRegister": {
+            "type": "boolean"
+          },
+          "visitCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "requiredVisits": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "guestId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "visitSlipCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "matches": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/GuestLookupDto"
+            }
+          }
+        }
+      },
+      "GuestEligibilityRequest": {
+        "required": [
+          "guestName",
+          "phone",
+          "visitSlipCode"
+        ],
+        "type": "object",
+        "properties": {
+          "guestName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "phone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "visitSlipCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "GuestLookupDto": {
+        "required": [
+          "guestId",
+          "guestName",
+          "phone",
+          "visitSlipCode",
+          "introducedByProfileId",
+          "introducedByName",
+          "visitCount",
+          "visitsThisMonth",
+          "visitsThisYear",
+          "isBarred",
+          "barredReason",
+          "hasApplicantProfile"
+        ],
+        "type": "object",
+        "properties": {
+          "guestId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "guestName": {
+            "type": "string"
+          },
+          "phone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "visitSlipCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "introducedByProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "introducedByName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "visitCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "visitsThisMonth": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "visitsThisYear": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "isBarred": {
+            "type": "boolean"
+          },
+          "barredReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hasApplicantProfile": {
+            "type": "boolean"
+          }
+        }
+      },
       "GuestVisitRequest": {
         "required": [
           "guestName",
@@ -6514,6 +11954,108 @@
             "format": "time"
           },
           "guestBookEntryNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "InterviewCandidateDto": {
+        "type": "object",
+        "properties": {
+          "applicationId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "applicationNo": {
+            "type": "string"
+          },
+          "applicantName": {
+            "type": "string"
+          },
+          "photoUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "statusCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "statusName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "alreadyLinked": {
+            "type": "boolean"
+          },
+          "linkedMeetingId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "linkedMeetingLabel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "interviewId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "outcome": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hasClubMembership": {
+            "type": "boolean"
+          },
+          "form": {
+            "$ref": "#/components/schemas/InterviewFormPayload"
+          }
+        }
+      },
+      "InterviewDocumentDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "onFile": {
+            "type": "boolean"
+          },
+          "fileName": {
             "type": [
               "null",
               "string"
@@ -6548,6 +12090,33 @@
               "string"
             ],
             "format": "int64"
+          },
+          "committeeMeetingDate": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "committeeMeetingName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "committeeMeetingTime": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "committeeMeetingStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "meetingCreated": {
+            "type": "boolean"
           },
           "scheduledAt": {
             "type": [
@@ -6611,6 +12180,181 @@
           }
         }
       },
+      "InterviewFormPayload": {
+        "type": "object",
+        "properties": {
+          "aviationScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "clubFamiliarityScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "proposerEndorsementScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "financialReadinessScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "behaviourScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "formOutcome": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "recommendation": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "suitability": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "verbalAlignment": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "returnReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "candidateMinutesUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dateElected": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "membershipNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chairmanSignature": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "approvalSignature": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "signatureProfileIds": {
+            "type": "array",
+            "items": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          }
+        }
+      },
+      "InterviewPaymentLineDto": {
+        "type": "object",
+        "properties": {
+          "feeLabel": {
+            "type": "string"
+          },
+          "amount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "receiptNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paymentDate": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "received": {
+            "type": "boolean"
+          }
+        }
+      },
+      "InterviewVisitDto": {
+        "type": "object",
+        "properties": {
+          "visitDate": {
+            "type": "string"
+          },
+          "metWith": {
+            "type": "string"
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "InviteResult": {
         "type": "object",
         "properties": {
@@ -6624,16 +12368,30 @@
       },
       "LoginRequest": {
         "required": [
-          "username",
           "password"
         ],
         "type": "object",
         "properties": {
-          "username": {
-            "type": "string"
-          },
           "password": {
             "type": "string"
+          },
+          "login": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "username": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -6670,6 +12428,411 @@
           }
         }
       },
+      "ManagerItemRequest": {
+        "type": "object",
+        "properties": {
+          "requestType": {
+            "type": "string"
+          },
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ManagerReadinessDto": {
+        "type": "object",
+        "properties": {
+          "applicationId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "statusCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "statusName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "endorsementsComplete": {
+            "type": "boolean"
+          },
+          "entranceFeeOk": {
+            "type": "boolean"
+          },
+          "annualSubscriptionOk": {
+            "type": "boolean"
+          },
+          "cvUploaded": {
+            "type": "boolean"
+          },
+          "idPassportUploaded": {
+            "type": "boolean"
+          },
+          "annualChequeUploaded": {
+            "type": "boolean"
+          },
+          "joiningChequeUploaded": {
+            "type": "boolean"
+          },
+          "feeChequesUploaded": {
+            "type": "boolean"
+          },
+          "pilotLicenseRequired": {
+            "type": "boolean"
+          },
+          "pilotLicenseUploaded": {
+            "type": "boolean"
+          },
+          "readyForManager": {
+            "type": "boolean"
+          },
+          "paymentsReady": {
+            "type": "boolean"
+          },
+          "paymentsReceived": {
+            "type": "boolean"
+          },
+          "memberDetailsComplete": {
+            "type": "boolean"
+          },
+          "paymentLines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApplicationPaymentLineDto"
+            }
+          },
+          "documentsReady": {
+            "type": "boolean"
+          },
+          "pendingItems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pendingPaymentItems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "clubVisitsLogged": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "clubVisitsRequired": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "clubVisitsMet": {
+            "type": "boolean"
+          },
+          "clubVisitsOverride": {
+            "type": "boolean"
+          },
+          "clubVisitsOverrideReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "canProceedToInterview": {
+            "type": "boolean"
+          },
+          "visibleToManager": {
+            "type": "boolean"
+          }
+        }
+      },
+      "MeetingInterviewDto": {
+        "type": "object",
+        "properties": {
+          "interviewId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "applicationId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "applicationNo": {
+            "type": "string"
+          },
+          "applicantName": {
+            "type": "string"
+          },
+          "statusCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "statusName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "committeeMeetingId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "scheduledAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "conductedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "interviewerProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "attendedFlag": {
+            "type": "boolean"
+          },
+          "outcome": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "formOutcome": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "outcomeRecorded": {
+            "type": "boolean"
+          },
+          "canRetrieve": {
+            "type": "boolean"
+          },
+          "canAmendHistory": {
+            "type": "boolean"
+          },
+          "hasClubMembership": {
+            "type": "boolean"
+          },
+          "linkedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "sittingLabel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isAviationAffiliated": {
+            "type": "boolean"
+          },
+          "holdsPilotLicence": {
+            "type": "boolean"
+          },
+          "ownsAircraft": {
+            "type": "boolean"
+          },
+          "aviationRole": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "proposerName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "seconderName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "proposerStandingMet": {
+            "type": "boolean"
+          },
+          "priorApplicationCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "clubVisitsLogged": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "clubVisitsRequired": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "clubVisitsMet": {
+            "type": "boolean"
+          },
+          "clubVisits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InterviewVisitDto"
+            }
+          },
+          "documents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InterviewDocumentDto"
+            }
+          },
+          "entranceFeeReceived": {
+            "type": "boolean"
+          },
+          "annualSubscriptionReceived": {
+            "type": "boolean"
+          },
+          "paymentLines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InterviewPaymentLineDto"
+            }
+          },
+          "form": {
+            "$ref": "#/components/schemas/InterviewFormPayload"
+          }
+        }
+      },
+      "MeetingNoticeDto": {
+        "type": "object",
+        "properties": {
+          "generalMeetingId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "meetingType": {
+            "type": "string"
+          },
+          "meetingDate": {
+            "type": "string"
+          },
+          "noticeSentDate": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "agenda": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "papersUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "venue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "requiredClearDays": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "actualClearDays": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "noticePeriodMet": {
+            "type": "boolean"
+          },
+          "noticePeriodDetail": {
+            "type": "string"
+          }
+        }
+      },
       "MeetingRow": {
         "required": [
           "title",
@@ -6690,6 +12853,33 @@
           },
           "status": {
             "type": "string"
+          }
+        }
+      },
+      "MeetingTypeOptionDto": {
+        "type": "object",
+        "properties": {
+          "meetingTypeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -6815,6 +13005,44 @@
           }
         }
       },
+      "MemberBallotItemDto": {
+        "type": "object",
+        "properties": {
+          "agendaItemId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "isSpecialBusiness": {
+            "type": "boolean"
+          },
+          "myVoteValue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "receiptNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "castAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "MemberCardFlagsDto": {
         "type": "object",
         "properties": {
@@ -6833,6 +13061,9 @@
           "committeeMode": {
             "type": "string"
           },
+          "election": {
+            "type": "boolean"
+          },
           "accommodation": {
             "type": "boolean"
           },
@@ -6840,6 +13071,9 @@
             "type": "boolean"
           },
           "documents": {
+            "type": "boolean"
+          },
+          "committeeBallot": {
             "type": "boolean"
           }
         }
@@ -7144,6 +13378,127 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/PaymentRowLite"
+            }
+          }
+        }
+      },
+      "MemberElectionDto": {
+        "type": "object",
+        "properties": {
+          "canVote": {
+            "type": "boolean"
+          },
+          "subscriptionsPaidUp": {
+            "type": "boolean"
+          },
+          "eligibleToVote": {
+            "type": "boolean"
+          },
+          "canRunForOffice": {
+            "type": "boolean"
+          },
+          "continuousMembershipYears": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "classCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "className": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "memberName": {
+            "type": "string"
+          },
+          "membershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "postalAddress": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "noVoteReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notice": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MeetingNoticeDto"
+              }
+            ]
+          },
+          "ballotWindowOpen": {
+            "type": "boolean"
+          },
+          "ballotOpensAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "ballotClosesAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "proxyDeadlineAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "pollProxyDeadlineAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "ballotItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemberBallotItemDto"
+            }
+          },
+          "proxy": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MemberProxyDto"
+              }
+            ]
+          },
+          "nominations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NominationDto"
             }
           }
         }
@@ -7591,7 +13946,13 @@
             ],
             "format": "int64"
           },
+          "typeCode": {
+            "type": "string"
+          },
           "title": {
+            "type": "string"
+          },
+          "body": {
             "type": "string"
           },
           "channel": {
@@ -7606,6 +13967,13 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "createdAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "isRead": {
+            "type": "boolean"
           },
           "relatedEntityType": {
             "type": [
@@ -7664,6 +14032,12 @@
               "null",
               "string"
             ]
+          },
+          "paymentStatusCode": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -7677,6 +14051,9 @@
             "type": "boolean"
           },
           "canIntroduceGuests": {
+            "type": "boolean"
+          },
+          "reciprocationAllowed": {
             "type": "boolean"
           },
           "paysSubscription": {
@@ -7795,6 +14172,103 @@
           }
         }
       },
+      "MemberProxyDto": {
+        "type": "object",
+        "properties": {
+          "proxyId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "proxyTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "proxyName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "alternateTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "alternateName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "voteInstruction": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "leaveToDiscretion": {
+            "type": "boolean"
+          },
+          "appointingName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "appointingPoBox": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "depositedOnTime": {
+            "type": "boolean"
+          }
+        }
+      },
+      "MemberSearchHitDto": {
+        "type": "object",
+        "properties": {
+          "profileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "membershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "classCode": {
+            "type": "string"
+          },
+          "continuousYears": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "eligibleToNominate": {
+            "type": "boolean"
+          }
+        }
+      },
       "MembershipTypeOptionDto": {
         "type": "object",
         "properties": {
@@ -7830,6 +14304,21 @@
           "canIntroduceGuests": {
             "type": "boolean"
           },
+          "canAccessSubscriptions": {
+            "type": "boolean"
+          },
+          "canAccessCommittee": {
+            "type": "boolean"
+          },
+          "canAccessAccommodation": {
+            "type": "boolean"
+          },
+          "canAccessEndorsements": {
+            "type": "boolean"
+          },
+          "canAccessDocuments": {
+            "type": "boolean"
+          },
           "isPermanent": {
             "type": "boolean"
           },
@@ -7850,6 +14339,11 @@
           "canRunForOffice",
           "reciprocationAllowed",
           "canIntroduceGuests",
+          "canAccessSubscriptions",
+          "canAccessCommittee",
+          "canAccessAccommodation",
+          "canAccessEndorsements",
+          "canAccessDocuments",
           "isPermanent",
           "maxDurationDays"
         ],
@@ -7865,6 +14359,21 @@
             "type": "boolean"
           },
           "canIntroduceGuests": {
+            "type": "boolean"
+          },
+          "canAccessSubscriptions": {
+            "type": "boolean"
+          },
+          "canAccessCommittee": {
+            "type": "boolean"
+          },
+          "canAccessAccommodation": {
+            "type": "boolean"
+          },
+          "canAccessEndorsements": {
+            "type": "boolean"
+          },
+          "canAccessDocuments": {
             "type": "boolean"
           },
           "isPermanent": {
@@ -7944,6 +14453,41 @@
               "string"
             ],
             "format": "int32"
+          }
+        }
+      },
+      "NominationDto": {
+        "type": "object",
+        "properties": {
+          "electionNominationId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "nomineeName": {
+            "type": "string"
+          },
+          "nomineeMembershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "proposerName": {
+            "type": "string"
+          },
+          "seconderName": {
+            "type": "string"
+          },
+          "roleStandingFor": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -8043,6 +14587,55 @@
             ]
           },
           "chequeNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "feeType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "referenceNote": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeBankName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeBankCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "chequeFileName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeFileUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "methodCode": {
             "type": [
               "null",
               "string"
@@ -8396,6 +14989,260 @@
           }
         }
       },
+      "ProfileSearchHitDto": {
+        "type": "object",
+        "properties": {
+          "profileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "membershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isAviationAffiliated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ProxyInstructionDto": {
+        "type": "object",
+        "properties": {
+          "agendaItemId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "voteValue": {
+            "type": "string"
+          }
+        }
+      },
+      "PublishMeetingNoticeRequest": {
+        "type": "object",
+        "properties": {
+          "meetingType": {
+            "type": "string"
+          },
+          "meetingDate": {
+            "type": "string"
+          },
+          "agenda": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "papersUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "venue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "noticeSentDate": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ReceptionMemberDto": {
+        "required": [
+          "profileId",
+          "membershipNo",
+          "fullName"
+        ],
+        "type": "object",
+        "properties": {
+          "profileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "membershipNo": {
+            "type": "string"
+          },
+          "fullName": {
+            "type": "string"
+          }
+        }
+      },
+      "ReceptionVisitDto": {
+        "required": [
+          "visitId",
+          "guestId",
+          "guestName",
+          "phone",
+          "visitSlipCode",
+          "visitCount",
+          "visitDate",
+          "timeIn",
+          "timeOut",
+          "isCurrent",
+          "guestBookEntryNo",
+          "accompanyingProfileId",
+          "accompanyingMemberName",
+          "introducedByName",
+          "staffName",
+          "notes"
+        ],
+        "type": "object",
+        "properties": {
+          "visitId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "guestId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "guestName": {
+            "type": "string"
+          },
+          "phone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "visitSlipCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "visitCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "visitDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "timeIn": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "time"
+          },
+          "timeOut": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "time"
+          },
+          "isCurrent": {
+            "type": "boolean"
+          },
+          "guestBookEntryNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "accompanyingProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "accompanyingMemberName": {
+            "type": "string"
+          },
+          "introducedByName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "staffName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ReceptionVisitRequest": {
+        "required": [
+          "guestId",
+          "accompanyingProfileId",
+          "guestBookEntryNo",
+          "notes"
+        ],
+        "type": "object",
+        "properties": {
+          "guestId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "accompanyingProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "guestBookEntryNo": {
+            "type": "string"
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ReciprocalSummaryDto": {
         "type": "object",
         "properties": {
@@ -8579,6 +15426,43 @@
               "null",
               "string"
             ]
+          },
+          "paymentStatusCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeBankName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeBankCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "chequeFileName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeFileUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -8688,7 +15572,6 @@
       },
       "RegisterRequest": {
         "required": [
-          "username",
           "password",
           "firstName",
           "lastName",
@@ -8697,9 +15580,6 @@
         ],
         "type": "object",
         "properties": {
-          "username": {
-            "type": "string"
-          },
           "password": {
             "type": "string"
           },
@@ -8717,17 +15597,66 @@
               "null",
               "string"
             ]
+          },
+          "username": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "guestId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "idPassportNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "visitSlipCode": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
       "RoleOptionDto": {
         "type": "object",
         "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
           "code": {
             "type": "string"
           },
           "name": {
             "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sortOrder": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -8803,6 +15732,185 @@
           }
         }
       },
+      "SaveInterviewOutcomeRequest": {
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "type": "string"
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "attended": {
+            "type": "boolean"
+          },
+          "interviewerProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "aviationScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "clubFamiliarityScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "proposerEndorsementScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "financialReadinessScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "behaviourScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "recommendation": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "suitability": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "verbalAlignment": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "returnReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "candidateMinutesUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dateElected": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "membershipNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chairmanSignature": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "approvalSignature": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "signatureProfileIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          }
+        }
+      },
+      "SetAttendanceRequest": {
+        "type": "object",
+        "properties": {
+          "committeeMemberIds": {
+            "type": "array",
+            "items": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          }
+        }
+      },
+      "SetBallotWindowRequest": {
+        "type": "object",
+        "properties": {
+          "open": {
+            "type": "boolean"
+          },
+          "conductorProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "closesAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "SetPasswordByTokenRequest": {
         "type": "object",
         "properties": {
@@ -8811,6 +15919,22 @@
           },
           "password": {
             "type": "string"
+          }
+        }
+      },
+      "SetSittingAttendanceRequest": {
+        "type": "object",
+        "properties": {
+          "committeeMemberId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "present": {
+            "type": "boolean"
           }
         }
       },
@@ -8870,6 +15994,78 @@
           "timeOut": {
             "type": "string",
             "format": "time"
+          }
+        }
+      },
+      "SittingAttendanceDto": {
+        "type": "object",
+        "properties": {
+          "meetingId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SittingAttendanceRowDto"
+            }
+          },
+          "committeePresentCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "gmPresent": {
+            "type": "boolean"
+          },
+          "gateMet": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SittingAttendanceRowDto": {
+        "type": "object",
+        "properties": {
+          "committeeMemberId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "profileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "roleCode": {
+            "type": "string"
+          },
+          "roleName": {
+            "type": "string"
+          },
+          "present": {
+            "type": "boolean"
+          },
+          "isGeneralManager": {
+            "type": "boolean"
+          },
+          "countsAsCommitteeSignature": {
+            "type": "boolean"
           }
         }
       },
@@ -9043,6 +16239,58 @@
           }
         }
       },
+      "TenantPublicDto": {
+        "required": [
+          "tenantId",
+          "code",
+          "name",
+          "shortName",
+          "contactEmail",
+          "contactPhone",
+          "addressLine"
+        ],
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "shortName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "contactEmail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "contactPhone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "addressLine": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "UpdateApplicationRequest": {
         "type": "object",
         "properties": {
@@ -9181,6 +16429,56 @@
               "string"
             ],
             "format": "int64"
+          }
+        }
+      },
+      "UpdateCommitteeMemberContactRequest": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "UpdateCommitteeRequest": {
+        "type": "object",
+        "properties": {
+          "committeeName": {
+            "type": "string"
+          },
+          "termStart": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "termEnd": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "UpdateMeetingMinutesRequest": {
+        "type": "object",
+        "properties": {
+          "minutesUrl": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateMeetingStatusRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "force": {
+            "type": "boolean"
           }
         }
       },
@@ -9548,6 +16846,33 @@
           }
         }
       },
+      "UpsertGuestRequest": {
+        "required": [
+          "guestName",
+          "introducedByProfileId",
+          "phone"
+        ],
+        "type": "object",
+        "properties": {
+          "guestName": {
+            "type": "string"
+          },
+          "introducedByProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "phone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "UserDetailDto": {
         "type": "object",
         "properties": {
@@ -9875,6 +17200,9 @@
       "name": "WeatherForecast"
     },
     {
+      "name": "Tenants"
+    },
+    {
       "name": "Applications"
     },
     {
@@ -9908,10 +17236,22 @@
       "name": "Guests"
     },
     {
+      "name": "Reception"
+    },
+    {
+      "name": "GuestRegistration"
+    },
+    {
+      "name": "Elections"
+    },
+    {
       "name": "Finance"
     },
     {
       "name": "Admin"
+    },
+    {
+      "name": "Committees"
     }
   ]
 }

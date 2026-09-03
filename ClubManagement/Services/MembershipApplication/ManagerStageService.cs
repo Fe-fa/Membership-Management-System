@@ -1,5 +1,6 @@
 using System.Text.Json;
 using ClubManagement.Data.MembershipApplication;
+using ClubManagement.DTOs.Common;
 using ClubManagement.DTOs.MembershipApplication;
 using ClubManagement.Entities;
 using ClubManagement.Entities.Committee;
@@ -24,14 +25,20 @@ public interface IManagerStageService
     Task<IReadOnlyList<ApplicationClubVisitDto>> ListClubVisitsAsync(long applicationId, CancellationToken cancellationToken);
     Task<ApplicationClubVisitDto?> AddClubVisitAsync(long applicationId, CreateApplicationClubVisitRequest request, long? actorUserId, CancellationToken cancellationToken);
     Task<ManagerReadinessDto?> OverrideClubVisitsAsync(long applicationId, ClubVisitsOverrideRequest request, long? actorUserId, CancellationToken cancellationToken);
-    Task<IReadOnlyList<ApplicationListItemDto>> ListManagerQueueAsync(CancellationToken cancellationToken);
-    Task<IReadOnlyList<ApplicationListItemDto>> ListStageAHistoryAsync(CancellationToken cancellationToken);
+    Task<PagedResult<ApplicationListItemDto>> ListManagerQueueAsync(PagedRequest paging, CancellationToken cancellationToken);
+    Task<PagedResult<ApplicationListItemDto>> ListStageAHistoryAsync(PagedRequest paging, CancellationToken cancellationToken);
     Task MarkStageAAuthorizedAsync(long applicationId, long? actorUserId, CancellationToken cancellationToken);
     Task<InterviewDto?> AssignToCommitteeMeetingAsync(
         long applicationId,
         AssignMeetingRequest request,
         long? actorUserId,
         CancellationToken cancellationToken);
+    Task SendManagerRequestAsync(
+        long applicationId,
+        ManagerItemRequest request,
+        long? actorUserId,
+        CancellationToken cancellationToken);
+    Task NotifyApplicantRejectedAsync(long applicationId, string reason, CancellationToken cancellationToken);
 }
 
 public class ManagerStageService : IManagerStageService
@@ -41,23 +48,32 @@ public class ManagerStageService : IManagerStageService
     private static readonly string[] IdPassportCodes = ["ID_PASSPORT", "ID", "PASSPORT", "NATIONAL_ID", "ID_COPY"];
     private static readonly string[] CvCodes = ["CV", "CURRICULUM_VITAE"];
     private static readonly string[] LicenseCodes = ["LICENSE", "LICENCE", "PILOT_LICENSE", "PILOT_LICENCE"];
+    private static readonly string[] AnnualChequeCodes = ["CHEQUE_ANNUAL"];
+    private static readonly string[] JoiningChequeCodes = ["CHEQUE_JOINING"];
     private static readonly HashSet<string> PaymentOkStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
         "PENDING", "PAID", "PARTIALLY_PAID", "WAIVED", "PARTIAL", "INITIATED"
+    };
+    private static readonly HashSet<string> PaymentReceivedStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "PAID", "WAIVED", "COMPLETE", "COMPLETED", "RECEIVED", "SUCCESS", "CLEARED"
     };
 
     private readonly ApplicationModuleDbContext _db;
     private readonly IEmailSender _email;
     private readonly AppPublicOptions _app;
+    private readonly IApplicationDecisionNotifier _decisions;
 
     public ManagerStageService(
         ApplicationModuleDbContext db,
         IEmailSender email,
-        IOptions<AppPublicOptions> app)
+        IOptions<AppPublicOptions> app,
+        IApplicationDecisionNotifier decisions)
     {
         _db = db;
         _email = email;
         _app = app.Value;
+        _decisions = decisions;
     }
 
     public async Task EnsureSchemaAsync(CancellationToken cancellationToken)
@@ -92,6 +108,12 @@ IF COL_LENGTH(N'dbo.MApplication', N'stage_a_authorized_at') IS NULL
     ALTER TABLE dbo.MApplication ADD stage_a_authorized_at DATETIME2 NULL;
 IF COL_LENGTH(N'dbo.MApplication', N'stage_a_authorized_by_user_id') IS NULL
     ALTER TABLE dbo.MApplication ADD stage_a_authorized_by_user_id BIGINT NULL;
+IF COL_LENGTH(N'dbo.MApplication', N'current_handler_user_id') IS NULL
+    ALTER TABLE dbo.MApplication ADD current_handler_user_id BIGINT NULL;
+IF COL_LENGTH(N'dbo.MApplication', N'previous_handler_user_id') IS NULL
+    ALTER TABLE dbo.MApplication ADD previous_handler_user_id BIGINT NULL;
+IF COL_LENGTH(N'dbo.Application_status_history', N'action') IS NULL
+    ALTER TABLE dbo.Application_status_history ADD action NVARCHAR(40) NULL;
 IF COL_LENGTH(N'dbo.Committee_meeting', N'meeting_name') IS NULL
     ALTER TABLE dbo.Committee_meeting ADD meeting_name NVARCHAR(200) NULL;
 IF COL_LENGTH(N'dbo.Committee_meeting', N'meeting_time') IS NULL
@@ -113,6 +135,9 @@ END
                      ("CV", "Curriculum vitae", 2),
                      ("LICENSE", "Pilot licence", 3),
                      ("PHOTO", "Passport photo", 1),
+                     ("CHEQUE", "Cheque copy", 10),
+                     ("CHEQUE_ANNUAL", "Annual subscription cheque", 11),
+                     ("CHEQUE_JOINING", "Joining / entrance fee cheque", 12),
                  })
         {
             var exists = await _db.DocumentTypes.AnyAsync(x => x.Code == code, cancellationToken);
@@ -133,6 +158,7 @@ END
     {
         var app = await _db.Applications.AsNoTracking()
             .Include(a => a.Status)
+            .Include(a => a.Applicant)
             .Include(a => a.Endorsements)
             .Include(a => a.AplicationDocuments).ThenInclude(d => d.DocumentType)
             .Include(a => a.ClubVisits)
@@ -179,9 +205,23 @@ END
         await EnsureClubVisitsForInterviewAsync(applicationId, cancellationToken);
         var readiness = await GetReadinessAsync(applicationId, cancellationToken)
             ?? throw new InvalidOperationException("Application was not found.");
-        if (!readiness.CanProceedToInterview)
+        if (!readiness.PaymentsReceived)
             throw new InvalidOperationException(
-                "Manager verification incomplete. Confirm documents, payments, sponsor recommendations and club visits before authorizing to interview.");
+                "Entrance fee and annual subscription must both be received (or waived), or both fee cheques must be uploaded, before authorizing to interview.");
+        if (!readiness.MemberDetailsComplete)
+            throw new InvalidOperationException(
+                "Member details on the application form must be complete before authorizing to interview.");
+        if (!readiness.FeeChequesUploaded)
+            throw new InvalidOperationException(
+                "Annual subscription cheque and joining / entrance fee cheque must both be uploaded on the application before authorizing to interview.");
+        if (!readiness.CanProceedToInterview)
+        {
+            if (readiness.PilotLicenseRequired && !readiness.PilotLicenseUploaded)
+                throw new InvalidOperationException(
+                    "Pilot licence copy is still missing. Send a document request to the applicant before authorizing to interview.");
+            throw new InvalidOperationException(
+                "Manager verification incomplete. Confirm sponsors, fees received, member details, documents, fee cheques and club visits before authorizing to interview.");
+        }
     }
 
     public async Task OnEndorsementsPossiblyCompleteAsync(long applicationId, CancellationToken cancellationToken)
@@ -226,21 +266,12 @@ END
 
     public async Task<IReadOnlyList<ApplicationClubVisitDto>> ListClubVisitsAsync(long applicationId, CancellationToken cancellationToken)
     {
-        return await _db.ApplicationClubVisits.AsNoTracking()
-            .Where(v => v.ApplicationId == applicationId)
-            .OrderByDescending(v => v.VisitDate)
-            .ThenByDescending(v => v.ApplicationClubVisitId)
-            .Select(v => new ApplicationClubVisitDto
-            {
-                ApplicationClubVisitId = v.ApplicationClubVisitId,
-                ApplicationId = v.ApplicationId,
-                VisitDate = v.VisitDate,
-                MetWith = v.MetWith,
-                Notes = v.Notes,
-                CreatedAt = v.CreatedAt,
-                CreatedByUserId = v.CreatedByUserId
-            })
-            .ToListAsync(cancellationToken);
+        var app = await _db.Applications.AsNoTracking()
+            .Include(a => a.Applicant)
+            .Include(a => a.ClubVisits)
+            .FirstOrDefaultAsync(a => a.ApplicationId == applicationId, cancellationToken);
+        if (app is null) return [];
+        return await MergeClubVisitsAsync(app, cancellationToken);
     }
 
     public async Task<ApplicationClubVisitDto?> AddClubVisitAsync(
@@ -340,7 +371,7 @@ END
         return await GetReadinessAsync(applicationId, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<ApplicationListItemDto>> ListManagerQueueAsync(CancellationToken cancellationToken)
+    public async Task<PagedResult<ApplicationListItemDto>> ListManagerQueueAsync(PagedRequest paging, CancellationToken cancellationToken)
     {
         var apps = await _db.Applications.AsNoTracking()
             .Include(a => a.Applicant)
@@ -364,10 +395,10 @@ END
             var readiness = await BuildReadinessAsync(app, cancellationToken);
             queue.Add(ToQueueItem(app, readiness, code));
         }
-        return queue;
+        return Paging.FromList(queue, paging);
     }
 
-    public async Task<IReadOnlyList<ApplicationListItemDto>> ListStageAHistoryAsync(CancellationToken cancellationToken)
+    public async Task<PagedResult<ApplicationListItemDto>> ListStageAHistoryAsync(PagedRequest paging, CancellationToken cancellationToken)
     {
         // Only applications the manager explicitly authorized out of Stage A.
         var apps = await _db.Applications.AsNoTracking()
@@ -380,7 +411,8 @@ END
             .OrderByDescending(a => a.StageAAuthorizedAt)
             .ToListAsync(cancellationToken);
 
-        return apps.Select(app =>
+        var rows = new List<ApplicationListItemDto>();
+        foreach (var app in apps)
         {
             var code = NormalizeStatusCode(app.Status?.Code) ?? app.Status?.Code;
             var name = string.Join(" ", new[] { app.Applicant.FirstName, app.Applicant.LastName }.Where(v => !string.IsNullOrWhiteSpace(v)));
@@ -389,7 +421,12 @@ END
                 .Where(i => i.CommitteeMeetingId != null)
                 .OrderByDescending(i => i.InterviewId)
                 .FirstOrDefault();
-            return new ApplicationListItemDto
+            var (joining, annual) = await LoadFeeLinesAsync(app.ApplicantProfileId, cancellationToken);
+            var lines = new List<ApplicationPaymentLineDto> { ToPaymentLineDto(joining), ToPaymentLineDto(annual) };
+            var snapshot = PaymentSnapshot(lines);
+            var received = joining.Received && annual.Received;
+            var initiated = joining.Initiated && annual.Initiated;
+            rows.Add(new ApplicationListItemDto
             {
                 ApplicationId = app.ApplicationId,
                 ApplicationNo = app.ApplicationNo,
@@ -403,6 +440,14 @@ END
                 MembershipTypeName = ResolveMembershipTypeName(app.FormDataJson, app.ElectionType?.Name),
                 AppliedAt = app.SubmittedAt ?? app.CreatedAt,
                 UpdatedAt = app.StageAAuthorizedAt ?? app.UpdatedAt,
+                SectionsCompleted = CountCompletedSteps(app.CompletedStepsJson),
+                TotalSections = 7,
+                PaymentStatus = received ? "Fees received" : initiated ? "Payment initiated" : "Awaiting payment",
+                PaymentStatusCode = received ? "PAID" : initiated ? "PENDING" : "UNPAID",
+                PaymentReceiptNumber = snapshot.Receipt,
+                PaymentAmount = snapshot.Amount,
+                PaymentDate = snapshot.Date,
+                PaymentLines = lines,
                 SponsorStatus = sponsor ? "Complete" : "Pending",
                 SponsorStatusCode = sponsor ? "COMPLETE" : "PENDING",
                 EndorsementsCompleted = sponsor ? 2 : app.Endorsements.Count(e =>
@@ -412,14 +457,17 @@ END
                 AnnualSubscriptionAmount = app.AnnualSubscriptionAmount,
                 InterviewRequiredFlag = app.InterviewRequiredFlag,
                 StageAReadyForManager = true,
+                StageAPaymentsReady = received,
                 CanAuthorizeToInterview = false,
+                MemberDetailsComplete = MemberDetailsComplete(app.CompletedStepsJson),
                 CommitteeMeetingId = assigned?.CommitteeMeetingId,
                 CommitteeMeetingDate = assigned?.CommitteeMeeting?.MeetingDate.ToString("yyyy-MM-dd"),
                 CommitteeMeetingName = assigned?.CommitteeMeeting?.MeetingName,
                 CommitteeMeetingTime = assigned?.CommitteeMeeting?.MeetingTime,
                 AssignedToMeeting = assigned?.CommitteeMeetingId != null,
-            };
-        }).ToList();
+            });
+        }
+        return Paging.FromList(rows, paging);
     }
 
     public async Task MarkStageAAuthorizedAsync(long applicationId, long? actorUserId, CancellationToken cancellationToken)
@@ -727,10 +775,8 @@ END
     private ApplicationListItemDto ToQueueItem(MApplication app, ManagerReadinessDto readiness, string? code)
     {
         var name = string.Join(" ", new[] { app.Applicant.FirstName, app.Applicant.LastName }.Where(v => !string.IsNullOrWhiteSpace(v)));
-        var paymentLabel = readiness.PaymentsReady
-            ? (readiness.EntranceFeeOk && readiness.AnnualSubscriptionOk ? "Fees received" : "Partial")
-            : "Awaiting payment";
-        var paymentCode = readiness.PaymentsReady ? "PAID" : "PENDING";
+        var (paymentLabel, paymentCode) = PaymentBadge(readiness);
+        var snapshot = PaymentSnapshot(readiness.PaymentLines);
 
         return new ApplicationListItemDto
         {
@@ -741,15 +787,23 @@ END
             ApplicantName = name,
             ApplicationStatusId = app.ApplicationStatusId,
             StatusCode = code,
-            StatusName = readiness.PaymentsReady
+            StatusName = readiness.PaymentsReceived
                 ? (app.Status?.Name ?? code)
-                : "Awaiting entrance & annual fees",
+                : readiness.PaymentsReady
+                    ? "Payment initiated"
+                    : "Awaiting entrance & annual fees",
             ElectionTypeId = app.ElectionTypeId,
             MembershipTypeName = ResolveMembershipTypeName(app.FormDataJson, app.ElectionType?.Name),
             AppliedAt = app.SubmittedAt ?? app.CreatedAt,
             UpdatedAt = app.UpdatedAt,
+            SectionsCompleted = CountCompletedSteps(app.CompletedStepsJson),
+            TotalSections = 7,
             PaymentStatus = paymentLabel,
             PaymentStatusCode = paymentCode,
+            PaymentReceiptNumber = snapshot.Receipt,
+            PaymentAmount = snapshot.Amount,
+            PaymentDate = snapshot.Date,
+            PaymentLines = readiness.PaymentLines,
             SponsorStatus = "Complete",
             SponsorStatusCode = "COMPLETE",
             EndorsementsCompleted = 2,
@@ -758,11 +812,12 @@ END
             AnnualSubscriptionAmount = app.AnnualSubscriptionAmount,
             InterviewRequiredFlag = app.InterviewRequiredFlag,
             StageAReadyForManager = readiness.ReadyForManager,
-            StageAPaymentsReady = readiness.PaymentsReady,
+            StageAPaymentsReady = readiness.PaymentsReceived,
             StageADocumentsReady = readiness.DocumentsReady,
             ClubVisitsLogged = readiness.ClubVisitsLogged,
             ClubVisitsMet = readiness.ClubVisitsMet,
             CanAuthorizeToInterview = readiness.CanProceedToInterview,
+            MemberDetailsComplete = readiness.MemberDetailsComplete,
         };
     }
 
@@ -793,36 +848,58 @@ END
     private async Task<ManagerReadinessDto> BuildReadinessAsync(MApplication app, CancellationToken cancellationToken)
     {
         var endorsementsComplete = AreEndorsementsComplete(app.Endorsements);
-        var docs = app.AplicationDocuments.Where(d => d.DocumentType != null).ToList();
-        var hasCv = docs.Any(d => CvCodes.Contains(d.DocumentType!.Code, StringComparer.OrdinalIgnoreCase));
-        var hasId = docs.Any(d => IdPassportCodes.Contains(d.DocumentType!.Code, StringComparer.OrdinalIgnoreCase));
-        var hasLicense = docs.Any(d => LicenseCodes.Contains(d.DocumentType!.Code, StringComparer.OrdinalIgnoreCase));
+        var docs = app.AplicationDocuments.ToList();
+        var hasCv = docs.Any(d => DocumentCodeIs(d, CvCodes) || DocumentNameContains(d, "cv", "curriculum"));
+        var hasAnnualCheque = docs.Any(d => DocumentCodeIs(d, AnnualChequeCodes) || DocumentNameContains(d, "annual subscription cheque"))
+            || FormHasPersonalFile(app.FormDataJson, "annualCheque");
+        var hasJoiningCheque = docs.Any(d => DocumentCodeIs(d, JoiningChequeCodes) || DocumentNameContains(d, "joining / entrance fee cheque", "joining fee cheque", "entrance fee cheque"))
+            || FormHasPersonalFile(app.FormDataJson, "joiningCheque");
+        var feeChequesUploaded = hasAnnualCheque && hasJoiningCheque;
+        var hasId = docs.Any(d => DocumentCodeIs(d, IdPassportCodes) || DocumentNameContains(d, "passport", "national id", "id copy"));
         var licenseRequired = PilotLicenseRequired(app.FormDataJson);
+        var licenseLinked = await _db.MemberLicenses.AsNoTracking()
+            .AnyAsync(
+                l => l.ProfileId == app.ApplicantProfileId && l.IsActive && l.LicenseDocumentId != null,
+                cancellationToken);
+        var hasLicense = docs.Any(IsLicenseDocument)
+            || licenseLinked
+            || FormHasLicenseCopy(app.FormDataJson);
 
-        var (joiningOk, annualOk) = await FeePaymentsOkAsync(app.ApplicantProfileId, cancellationToken);
-        var paymentsReady = joiningOk && annualOk;
+        var (joining, annual) = await LoadFeeLinesAsync(app.ApplicantProfileId, cancellationToken);
+        // Uploaded annual + joining/entrance cheques represent payment for manager review.
+        var joiningSatisfied = joining.Received || joining.Initiated || hasJoiningCheque;
+        var annualSatisfied = annual.Received || annual.Initiated || hasAnnualCheque;
+        var joiningReceivedOrCheque = joining.Received || hasJoiningCheque;
+        var annualReceivedOrCheque = annual.Received || hasAnnualCheque;
+        var paymentsReady = joiningSatisfied && annualSatisfied;
+        var paymentsReceived = joiningReceivedOrCheque && annualReceivedOrCheque;
         var documentsReady = hasCv && hasId && (!licenseRequired || hasLicense);
+        var memberDetailsComplete = MemberDetailsComplete(app.CompletedStepsJson);
 
         var pendingPayments = new List<string>();
-        if (!joiningOk) pendingPayments.Add("Entrance / joining fee");
-        if (!annualOk) pendingPayments.Add("Annual subscription fee");
+        if (!joiningSatisfied) pendingPayments.Add("Entrance / joining fee");
+        else if (!joiningReceivedOrCheque) pendingPayments.Add("Entrance / joining fee (not yet received)");
+        if (!annualSatisfied) pendingPayments.Add("Annual subscription fee");
+        else if (!annualReceivedOrCheque) pendingPayments.Add("Annual subscription fee (not yet received)");
 
         var pending = new List<string>();
         if (!endorsementsComplete) pending.Add("Both proposer and seconder endorsements");
-        pending.AddRange(pendingPayments.Select(p => $"{p} payment (initiate or complete)"));
+        pending.AddRange(pendingPayments.Select(p => $"{p} payment"));
+        if (!memberDetailsComplete) pending.Add("Complete member details on the application form");
         if (!hasCv) pending.Add("Upload CV");
         if (!hasId) pending.Add("Upload ID / Passport copy");
+        if (!hasAnnualCheque) pending.Add("Upload annual subscription cheque");
+        if (!hasJoiningCheque) pending.Add("Upload joining / entrance fee cheque");
         if (licenseRequired && !hasLicense) pending.Add("Upload pilot licence copy");
 
-        var logged = app.ClubVisits?.Count
-            ?? await _db.ApplicationClubVisits.CountAsync(v => v.ApplicationId == app.ApplicationId, cancellationToken);
+        var mergedVisits = await MergeClubVisitsAsync(app, cancellationToken);
+        var logged = mergedVisits.Count;
         if (logged == 0 && app.ClubVisitsCount > 0) logged = app.ClubVisitsCount;
         var visitsMet = logged >= RequiredClubVisits || app.ClubVisitsOverride;
 
-        // Manager notification gate: sponsors done + both fees.
         var readyForManager = endorsementsComplete && paymentsReady;
-        // Authorize to interview: also documents + 3 visits (who they met).
-        var canInterview = readyForManager && documentsReady && visitsMet;
+        var canInterview = endorsementsComplete && paymentsReceived && memberDetailsComplete
+            && documentsReady && visitsMet && feeChequesUploaded;
 
         var status = NormalizeStatusCode(app.Status?.Code);
         var visible = endorsementsComplete
@@ -835,14 +912,20 @@ END
             StatusCode = status,
             StatusName = app.Status?.Name,
             EndorsementsComplete = endorsementsComplete,
-            EntranceFeeOk = joiningOk,
-            AnnualSubscriptionOk = annualOk,
+            EntranceFeeOk = joiningSatisfied,
+            AnnualSubscriptionOk = annualSatisfied,
             CvUploaded = hasCv,
             IdPassportUploaded = hasId,
+            AnnualChequeUploaded = hasAnnualCheque,
+            JoiningChequeUploaded = hasJoiningCheque,
+            FeeChequesUploaded = feeChequesUploaded,
             PilotLicenseRequired = licenseRequired,
             PilotLicenseUploaded = hasLicense,
             ReadyForManager = readyForManager,
             PaymentsReady = paymentsReady,
+            PaymentsReceived = paymentsReceived,
+            MemberDetailsComplete = memberDetailsComplete,
+            PaymentLines = [ToPaymentLineDto(joining), ToPaymentLineDto(annual)],
             DocumentsReady = documentsReady,
             PendingItems = pending,
             PendingPaymentItems = pendingPayments,
@@ -876,25 +959,181 @@ END
         return electionTypeName;
     }
 
-    private async Task<(bool Joining, bool Annual)> FeePaymentsOkAsync(long profileId, CancellationToken cancellationToken)
+    private sealed class FeeLine
     {
+        public string FeeCode { get; set; } = "";
+        public string FeeLabel { get; set; } = "";
+        public bool Initiated { get; set; }
+        public bool Received { get; set; }
+        public decimal Amount { get; set; }
+        public string? ReceiptNumber { get; set; }
+        public DateOnly? PaymentDate { get; set; }
+        public string? Status { get; set; }
+    }
+
+    private async Task<(FeeLine Joining, FeeLine Annual)> LoadFeeLinesAsync(
+        long profileId, CancellationToken cancellationToken)
+    {
+        var accountIds = await _db.Accounts.AsNoTracking()
+            .Where(a => a.ProfileId == profileId && !a.IsDeleted)
+            .Select(a => a.AccountId)
+            .ToListAsync(cancellationToken);
+
         var txs = await _db.Transactions.AsNoTracking()
             .Include(t => t.FeeType)
             .Include(t => t.PaymentStatus)
-            .Where(t => t.ProfileId == profileId)
+            .Include(t => t.Receipt)
+            .Where(t =>
+                t.ProfileId == profileId
+                || (t.AccountId != null && accountIds.Contains(t.AccountId.Value)))
             .ToListAsync(cancellationToken);
 
-        bool Ok(string feeCode) => txs.Any(t =>
-            t.FeeType != null
-            && (string.Equals(t.FeeType.Code, feeCode, StringComparison.OrdinalIgnoreCase)
-                || t.FeeType.Code.Contains(feeCode, StringComparison.OrdinalIgnoreCase)
-                || (feeCode == "JOINING" && t.FeeType.Code.Contains("JOIN", StringComparison.OrdinalIgnoreCase))
-                || (feeCode == "ANNUAL" && t.FeeType.Code.Contains("ANNUAL", StringComparison.OrdinalIgnoreCase)))
-            && t.PaymentStatus != null
-            && PaymentOkStatuses.Contains(NormalizePay(t.PaymentStatus.Code)));
+        var txIds = txs.Select(t => t.TransactionId).ToList();
+        var receiptRows = txIds.Count == 0
+            ? []
+            : await _db.Receipts.AsNoTracking()
+                .Where(r => txIds.Contains(r.TransactionId))
+                .Select(r => new { r.TransactionId, r.ReceiptNumber })
+                .ToListAsync(cancellationToken);
+        var receipts = receiptRows
+            .GroupBy(r => r.TransactionId)
+            .ToDictionary(g => g.Key, g => g.First().ReceiptNumber);
 
-        return (Ok("JOINING"), Ok("ANNUAL"));
+        var joining = PickFeeLine(txs, receipts, "JOINING", "Entrance / joining");
+        var annual = PickFeeLine(txs, receipts, "ANNUAL", "Annual subscription");
+        if (joining.Amount == 0 && annual.Amount == 0 && txs.Count > 0)
+        {
+            var ordered = txs.OrderByDescending(t => t.PaymentDate).ThenByDescending(t => t.TransactionId).ToList();
+            joining = LineFromTransaction(ordered[0], receipts, "JOINING",
+                ordered[0].FeeType?.Name ?? "Entrance / joining");
+            if (ordered.Count > 1)
+                annual = LineFromTransaction(ordered[1], receipts, "ANNUAL",
+                    ordered[1].FeeType?.Name ?? "Annual subscription");
+        }
+
+        return (joining, annual);
     }
+
+    private static FeeLine PickFeeLine(
+        List<Entities.Subscriptions.MTransaction> txs,
+        IReadOnlyDictionary<long, string> receipts,
+        string feeCode,
+        string label)
+    {
+        var matches = txs
+            .Where(t => MatchesFee(t, feeCode))
+            .OrderByDescending(t => t.PaymentDate)
+            .ThenByDescending(t => t.TransactionId)
+            .ToList();
+        var received = matches.FirstOrDefault(t =>
+            t.PaymentStatus != null && PaymentReceivedStatuses.Contains(NormalizePay(t.PaymentStatus.Code)));
+        var initiated = matches.Any(t =>
+            t.PaymentStatus != null && PaymentOkStatuses.Contains(NormalizePay(t.PaymentStatus.Code)));
+        var shown = received ?? matches.FirstOrDefault();
+        string? receiptNo = null;
+        if (shown is not null)
+        {
+            receiptNo = shown.Receipt?.ReceiptNumber;
+            if (string.IsNullOrWhiteSpace(receiptNo))
+                receipts.TryGetValue(shown.TransactionId, out receiptNo);
+        }
+        return new FeeLine
+        {
+            FeeCode = feeCode,
+            FeeLabel = label,
+            Initiated = initiated,
+            Received = received != null,
+            Amount = shown?.Amount ?? 0,
+            ReceiptNumber = receiptNo,
+            PaymentDate = shown?.PaymentDate,
+            Status = shown?.PaymentStatus?.Name
+        };
+    }
+
+    private static FeeLine LineFromTransaction(
+        Entities.Subscriptions.MTransaction tx,
+        IReadOnlyDictionary<long, string> receipts,
+        string feeCode,
+        string label)
+    {
+        receipts.TryGetValue(tx.TransactionId, out var receiptNo);
+        var code = NormalizePay(tx.PaymentStatus?.Code);
+        return new FeeLine
+        {
+            FeeCode = feeCode,
+            FeeLabel = label,
+            Initiated = PaymentOkStatuses.Contains(code),
+            Received = PaymentReceivedStatuses.Contains(code),
+            Amount = tx.Amount,
+            ReceiptNumber = tx.Receipt?.ReceiptNumber ?? receiptNo,
+            PaymentDate = tx.PaymentDate,
+            Status = tx.PaymentStatus?.Name
+        };
+    }
+
+    private static bool MatchesFee(Entities.Subscriptions.MTransaction t, string feeCode)
+    {
+        var code = t.FeeType?.Code ?? "";
+        var name = t.FeeType?.Name ?? "";
+        var hay = $"{code} {name}";
+        if (t.FeeType == null) return false;
+        if (string.Equals(code, feeCode, StringComparison.OrdinalIgnoreCase)) return true;
+        if (code.Contains(feeCode, StringComparison.OrdinalIgnoreCase)) return true;
+        if (feeCode == "JOINING" && (hay.Contains("JOIN", StringComparison.OrdinalIgnoreCase)
+            || hay.Contains("ENTRANCE", StringComparison.OrdinalIgnoreCase)))
+            return true;
+        if (feeCode == "ANNUAL" && (hay.Contains("ANNUAL", StringComparison.OrdinalIgnoreCase)
+            || hay.Contains("SUBSCR", StringComparison.OrdinalIgnoreCase)))
+            return true;
+        return false;
+    }
+
+    private static ApplicationPaymentLineDto ToPaymentLineDto(FeeLine line) => new()
+    {
+        FeeCode = line.FeeCode,
+        FeeLabel = line.FeeLabel,
+        Amount = line.Amount,
+        ReceiptNumber = line.ReceiptNumber,
+        PaymentDate = line.PaymentDate?.ToString("yyyy-MM-dd"),
+        Status = line.Status,
+        Received = line.Received
+    };
+
+    private static (string? Receipt, decimal? Amount, string? Date) PaymentSnapshot(
+        IReadOnlyList<ApplicationPaymentLineDto> lines)
+    {
+        var withReceipt = lines.FirstOrDefault(l => !string.IsNullOrWhiteSpace(l.ReceiptNumber));
+        var total = lines.Sum(l => l.Amount);
+        var date = lines
+            .Select(l => l.PaymentDate)
+            .Where(d => !string.IsNullOrWhiteSpace(d))
+            .OrderByDescending(d => d)
+            .FirstOrDefault();
+        return (withReceipt?.ReceiptNumber, total > 0 ? total : null, date);
+    }
+
+    private static (string Label, string Code) PaymentBadge(ManagerReadinessDto readiness)
+    {
+        if (readiness.PaymentsReceived) return ("Fees received", "PAID");
+        if (readiness.PaymentsReady) return ("Payment initiated", "PENDING");
+        return ("Awaiting payment", "UNPAID");
+    }
+
+    private static int CountCompletedSteps(string? completedJson)
+    {
+        if (string.IsNullOrWhiteSpace(completedJson)) return 0;
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(completedJson)?.Count ?? 0;
+        }
+        catch (JsonException)
+        {
+            return 0;
+        }
+    }
+
+    private static bool MemberDetailsComplete(string? completedJson) =>
+        CountCompletedSteps(completedJson) >= 7;
 
     private static string NormalizePay(string? code) =>
         (code ?? "").Trim().ToUpperInvariant().Replace(' ', '_').Replace('-', '_');
@@ -931,6 +1170,61 @@ END
         }
         catch { /* ignore */ }
         return false;
+    }
+
+    private static bool FormHasLicenseCopy(string? formJson)
+    {
+        if (string.IsNullOrWhiteSpace(formJson)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(formJson);
+            if (!doc.RootElement.TryGetProperty("aviation", out var av)) return false;
+            if (av.TryGetProperty("licenseFile", out var file) && file.ValueKind == JsonValueKind.Object)
+            {
+                if (file.TryGetProperty("fileName", out var name) && !string.IsNullOrWhiteSpace(name.GetString()))
+                    return true;
+                if (file.TryGetProperty("url", out var url) && !string.IsNullOrWhiteSpace(url.GetString()))
+                    return true;
+            }
+        }
+        catch { /* ignore */ }
+        return false;
+    }
+
+    private static bool FormHasPersonalFile(string? formJson, string field)
+    {
+        if (string.IsNullOrWhiteSpace(formJson) || string.IsNullOrWhiteSpace(field)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(formJson);
+            if (!doc.RootElement.TryGetProperty("personal", out var personal)) return false;
+            if (!personal.TryGetProperty(field, out var file) || file.ValueKind != JsonValueKind.Object) return false;
+            if (file.TryGetProperty("fileName", out var name) && !string.IsNullOrWhiteSpace(name.GetString()))
+                return true;
+            if (file.TryGetProperty("url", out var url) && !string.IsNullOrWhiteSpace(url.GetString()))
+                return true;
+        }
+        catch { /* ignore */ }
+        return false;
+    }
+
+    private static bool IsLicenseDocument(AplicationDocument d)
+    {
+        if (DocumentCodeIs(d, LicenseCodes)) return true;
+        if (DocumentNameContains(d, "licen")) return true;
+        return d.DocumentTypeId == 3;
+    }
+
+    private static bool DocumentCodeIs(AplicationDocument d, string[] codes)
+    {
+        var code = d.DocumentType?.Code;
+        return !string.IsNullOrWhiteSpace(code) && codes.Contains(code, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool DocumentNameContains(AplicationDocument d, params string[] needles)
+    {
+        var name = d.DocumentType?.Name ?? "";
+        return needles.Any(n => name.Contains(n, StringComparison.OrdinalIgnoreCase));
     }
 
     private async Task NotifyApplicantPaymentRequiredAsync(
@@ -1024,6 +1318,237 @@ END
         }
     }
 
+    public async Task SendManagerRequestAsync(
+        long applicationId,
+        ManagerItemRequest request,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var kind = (request.RequestType ?? "").Trim().ToLowerInvariant();
+        if (kind is not ("payment" or "documents" or "endorsements" or "details"))
+            throw new InvalidOperationException("Request type must be payment, documents, endorsements, or details.");
+
+        var app = await _db.Applications
+            .Include(a => a.Applicant)
+            .Include(a => a.Proposer)
+            .Include(a => a.Seconder)
+            .Include(a => a.Endorsements)
+            .Include(a => a.AplicationDocuments).ThenInclude(d => d.DocumentType)
+            .Include(a => a.Status)
+            .FirstOrDefaultAsync(a => a.ApplicationId == applicationId, cancellationToken)
+            ?? throw new InvalidOperationException("Application was not found.");
+        if (app.Applicant is null)
+            throw new InvalidOperationException("Applicant profile was not found.");
+
+        var readiness = await BuildReadinessAsync(app, cancellationToken);
+        var extra = string.IsNullOrWhiteSpace(request.Message) ? "" : $"\n\nManager note: {request.Message.Trim()}";
+        var portal = (_app.PublicBaseUrl ?? "http://localhost:8080").TrimEnd('/');
+        var name = string.Join(" ", new[] { app.Applicant.FirstName, app.Applicant.LastName }.Where(v => !string.IsNullOrWhiteSpace(v)));
+
+        if (kind == "payment")
+        {
+            var fees = readiness.PendingPaymentItems.Count > 0
+                ? string.Join(" and ", readiness.PendingPaymentItems)
+                : "entrance / joining fee and annual subscription";
+            var subject = $"Payment requested for {app.ApplicationNo}";
+            var body =
+                $"The General Manager requested payment on application {app.ApplicationNo}.\n\n" +
+                $"Please pay: {fees}.\nPay here: {portal}/payment\n" +
+                $"Your existing application stays in place — you are not starting over." + extra;
+            await PushNotificationAsync(
+                "MANAGER_PAYMENT_REQUEST",
+                "Payment requested",
+                app.Applicant.ProfileId,
+                app.Applicant.Email,
+                subject,
+                body,
+                applicationId,
+                cancellationToken);
+            return;
+        }
+
+        if (kind == "documents")
+        {
+            var missing = new List<string>();
+            if (!readiness.CvUploaded) missing.Add("CV");
+            if (!readiness.IdPassportUploaded) missing.Add("ID / Passport copy");
+            if (readiness.PilotLicenseRequired && !readiness.PilotLicenseUploaded) missing.Add("Pilot licence copy");
+            var docs = missing.Count > 0 ? string.Join(", ", missing) : "required application documents";
+            var subject = $"Documents requested for {app.ApplicationNo}";
+            var body =
+                $"The General Manager requested documents on application {app.ApplicationNo}.\n\n" +
+                $"Please upload: {docs}.\nUpload here: {portal}/documents\n" +
+                $"This updates the application you already submitted." + extra;
+            await PushNotificationAsync(
+                "MANAGER_DOCUMENT_REQUEST",
+                "Documents requested",
+                app.Applicant.ProfileId,
+                app.Applicant.Email,
+                subject,
+                body,
+                applicationId,
+                cancellationToken);
+            return;
+        }
+
+        if (kind == "details")
+        {
+            var pending = readiness.PendingItems.Count > 0
+                ? string.Join("\n- ", readiness.PendingItems)
+                : "additional details requested by the manager";
+            var subject = $"More details requested for {app.ApplicationNo}";
+            var body =
+                $"The General Manager requested more information on application {app.ApplicationNo}.\n\n" +
+                $"Please complete:\n- {pending}\n\n" +
+                $"Update your existing application here (do not start a new one): {portal}/application" + extra;
+            await PushNotificationAsync(
+                "MANAGER_DETAILS_REQUEST",
+                "Details requested",
+                app.Applicant.ProfileId,
+                app.Applicant.Email,
+                subject,
+                body,
+                applicationId,
+                cancellationToken);
+            return;
+        }
+
+        // endorsements — applicant + named proposer/seconder
+        var applicantSubject = $"Sponsor recommendations requested for {app.ApplicationNo}";
+        var applicantBody =
+            $"The General Manager requested proposer and seconder recommendations on application {app.ApplicationNo}.\n\n" +
+            $"Ask your named proposer and seconder to complete their statements in the member portal.\n" +
+            $"You can also update this same application: {portal}/application" + extra;
+        await PushNotificationAsync(
+            "MANAGER_ENDORSEMENT_REQUEST",
+            "Sponsor recommendations requested",
+            app.Applicant.ProfileId,
+            app.Applicant.Email,
+            applicantSubject,
+            applicantBody,
+            applicationId,
+            cancellationToken);
+
+        await NotifyEndorserFollowUpAsync(app.ProposerProfileId, app.Proposer?.Email, "Proposer", name, app.ApplicationNo, applicationId, extra, cancellationToken);
+        await NotifyEndorserFollowUpAsync(app.SeconderProfileId, app.Seconder?.Email, "Seconder", name, app.ApplicationNo, applicationId, extra, cancellationToken);
+        _ = actorUserId;
+    }
+
+    public async Task NotifyApplicantRejectedAsync(long applicationId, string reason, CancellationToken cancellationToken)
+    {
+        var app = await _db.Applications
+            .Include(a => a.Applicant)
+            .Include(a => a.Status)
+            .FirstOrDefaultAsync(a => a.ApplicationId == applicationId, cancellationToken);
+        if (app?.Applicant is null) return;
+
+        var name = string.Join(" ", new[] { app.Applicant.Title, app.Applicant.FirstName, app.Applicant.LastName }.Where(v => !string.IsNullOrWhiteSpace(v)));
+        await _decisions.NotifyAsync(new ApplicationDecisionMessage
+        {
+            Kind = ApplicationDecisionKind.Rejected,
+            ApplicationId = app.ApplicationId,
+            ApplicationNo = app.ApplicationNo,
+            ApplicantName = name,
+            ApplicantProfileId = app.ApplicantProfileId,
+            ApplicantEmail = app.Applicant.Email,
+            StageName = app.Status?.Name ?? "",
+            IsFinal = true,
+            Reason = reason,
+            ReturnedStageName = app.Status?.Name,
+            PreviousHandlerUserId = app.CurrentHandlerUserId
+        }, cancellationToken);
+    }
+
+    private async Task NotifyEndorserFollowUpAsync(
+        long? profileId,
+        string? email,
+        string role,
+        string applicantName,
+        string applicationNo,
+        long applicationId,
+        string extra,
+        CancellationToken cancellationToken)
+    {
+        if (profileId is null or 0) return;
+        var profile = await _db.Profiles.AsNoTracking().FirstOrDefaultAsync(p => p.ProfileId == profileId, cancellationToken);
+        if (profile is null) return;
+        var portal = (_app.PublicBaseUrl ?? "http://localhost:8080").TrimEnd('/');
+        var subject = $"Follow-up: complete your {role} recommendation for {applicantName}";
+        var body =
+            $"The General Manager asked you to complete your {role} recommendation for {applicantName} ({applicationNo}).\n\n" +
+            $"Open endorsements: {portal}/endorsements" + extra;
+        await PushNotificationAsync(
+            "MANAGER_ENDORSEMENT_FOLLOWUP",
+            "Sponsor follow-up",
+            profile.ProfileId,
+            email ?? profile.Email,
+            subject,
+            body,
+            applicationId,
+            cancellationToken);
+    }
+
+    private async Task PushNotificationAsync(
+        string typeCode,
+        string typeName,
+        long profileId,
+        string? email,
+        string subject,
+        string body,
+        long applicationId,
+        CancellationToken cancellationToken)
+    {
+        var type = await _db.NotificationTypes.FirstOrDefaultAsync(t => t.Code == typeCode, cancellationToken);
+        if (type is null)
+        {
+            type = new NotificationType
+            {
+                Code = typeCode,
+                Name = typeName,
+                SortOrder = 31,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.NotificationTypes.Add(type);
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        var recipient = !string.IsNullOrWhiteSpace(email) ? email! : profileId.ToString();
+        var since = DateTime.UtcNow.AddMinutes(-2);
+        var already = await _db.Notifications.AnyAsync(n =>
+            n.RelatedEntityType == "APPLICATION"
+            && n.RelatedEntityId == applicationId
+            && n.NotificationTypeId == type.NotificationTypeId
+            && n.Recipient == recipient
+            && n.CreatedAt >= since, cancellationToken);
+        if (already) return;
+
+        var accountId = await _db.Accounts.AsNoTracking()
+            .Where(a => a.ProfileId == profileId && !a.IsDeleted)
+            .Select(a => (long?)a.AccountId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        _db.Notifications.Add(new Notification
+        {
+            AccountId = accountId,
+            NotificationTypeId = type.NotificationTypeId,
+            Recipient = recipient,
+            Channel = "IN_APP",
+            SentDate = DateTime.UtcNow,
+            Content = $"{subject}\n\n{body}",
+            RelatedEntityType = "APPLICATION",
+            RelatedEntityId = applicationId,
+            CreatedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync(cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            try { await _email.SendAsync(email, subject, body, cancellationToken); }
+            catch { /* keep manager action even if SMTP is down */ }
+        }
+    }
+
     private async Task UpsertNotificationAsync(
         string typeCode,
         string typeName,
@@ -1081,4 +1606,179 @@ END
         if (!string.IsNullOrWhiteSpace(email))
             await _email.SendAsync(email, subject, body, cancellationToken);
     }
+
+    private async Task<List<ApplicationClubVisitDto>> MergeClubVisitsAsync(
+        MApplication app,
+        CancellationToken cancellationToken)
+    {
+        var applicant = app.Applicant
+            ?? await _db.Profiles.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.ProfileId == app.ApplicantProfileId, cancellationToken);
+
+        var reception = await LoadReceptionClubVisitsAsync(app.ApplicationId, app.ApplicantProfileId, applicant, cancellationToken);
+        var receptionDates = reception.Select(v => v.VisitDate).ToHashSet();
+
+        var manuals = (app.ClubVisits ?? [])
+            .Where(v => reception.Count == 0 || !receptionDates.Contains(v.VisitDate))
+            .Select(v => new ApplicationClubVisitDto
+            {
+                ApplicationClubVisitId = v.ApplicationClubVisitId,
+                ApplicationId = v.ApplicationId,
+                VisitDate = v.VisitDate,
+                MetWith = v.MetWith,
+                Notes = v.Notes,
+                CreatedAt = v.CreatedAt,
+                CreatedByUserId = v.CreatedByUserId
+            });
+
+        return reception
+            .Concat(manuals)
+            .OrderByDescending(v => v.VisitDate)
+            .ThenByDescending(v => v.ApplicationClubVisitId)
+            .ToList();
+    }
+
+    private async Task<List<ApplicationClubVisitDto>> LoadReceptionClubVisitsAsync(
+        long applicationId,
+        long applicantProfileId,
+        MProfile? applicant,
+        CancellationToken cancellationToken)
+    {
+        var guestIds = await FindGuestIdsForApplicantAsync(applicantProfileId, applicant, cancellationToken);
+        if (guestIds.Count == 0) return [];
+
+        var rows = await _db.Visits.AsNoTracking()
+            .Where(v => guestIds.Contains(v.GuestId))
+            .OrderByDescending(v => v.VisitDate)
+            .ThenByDescending(v => v.TimeIn)
+            .ThenByDescending(v => v.VisitId)
+            .Select(v => new
+            {
+                v.VisitId,
+                v.VisitDate,
+                v.TimeIn,
+                v.CreatedAt,
+                v.CreatedByUserId,
+                v.Notes,
+                v.GuestBookEntryNo,
+                Slip = v.Guest.VisitSlipCode,
+                MemberName = ((v.Visitor.FirstName ?? "") + " " + (v.Visitor.LastName ?? "")).Trim()
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(v =>
+        {
+            var when = v.TimeIn is TimeOnly t ? t.ToString("HH\\:mm") : null;
+            var extra = new List<string>();
+            if (!string.IsNullOrWhiteSpace(when)) extra.Add($"in {when}");
+            if (!string.IsNullOrWhiteSpace(v.Slip)) extra.Add(v.Slip);
+            if (!string.IsNullOrWhiteSpace(v.GuestBookEntryNo)) extra.Add($"book {v.GuestBookEntryNo}");
+            var reason = string.IsNullOrWhiteSpace(v.Notes) ? null : v.Notes.Trim();
+            var meta = extra.Count == 0 ? null : string.Join(" · ", extra);
+            var notes = reason is null && meta is null
+                ? "Logged at reception"
+                : reason is null
+                    ? meta
+                    : meta is null
+                        ? reason
+                        : $"{reason} ({meta})";
+            var met = string.IsNullOrWhiteSpace(v.MemberName) ? "Reception" : v.MemberName;
+            return new ApplicationClubVisitDto
+            {
+                ApplicationClubVisitId = -v.VisitId,
+                ApplicationId = applicationId,
+                VisitDate = v.VisitDate,
+                MetWith = met,
+                Notes = notes,
+                CreatedAt = v.CreatedAt,
+                CreatedByUserId = v.CreatedByUserId
+            };
+        }).ToList();
+    }
+
+    private async Task<List<long>> FindGuestIdsForApplicantAsync(
+        long applicantProfileId,
+        MProfile? applicant,
+        CancellationToken cancellationToken)
+    {
+        var linked = await _db.Guests.AsNoTracking()
+            .Where(g => g.IsActive && g.GuestProfileId == applicantProfileId)
+            .Select(g => g.GuestId)
+            .ToListAsync(cancellationToken);
+        if (linked.Count > 0) return linked;
+
+        if (applicant is null) return [];
+
+        var first = (applicant.FirstName ?? "").Trim();
+        var last = (applicant.LastName ?? "").Trim();
+        var phone = applicant.Mobile;
+        var phoneDigits = PhoneDigits(phone);
+
+        var query = _db.Guests.AsNoTracking().Where(g => g.IsActive);
+        if (!string.IsNullOrWhiteSpace(first) || !string.IsNullOrWhiteSpace(last))
+        {
+            query = query.Where(g =>
+                (!string.IsNullOrWhiteSpace(first) && g.GuestName.Contains(first))
+                || (!string.IsNullOrWhiteSpace(last) && g.GuestName.Contains(last)));
+        }
+
+        var candidates = await query
+            .Select(g => new { g.GuestId, g.GuestName, g.Phone, g.GuestProfileId })
+            .ToListAsync(cancellationToken);
+
+        var matched = candidates.Where(g =>
+            GuestNameMatchesProfile(g.GuestName, first, last)
+            && (g.GuestProfileId is null || g.GuestProfileId == applicantProfileId)
+            && (string.IsNullOrWhiteSpace(phoneDigits) || PhonesMatch(g.Phone, phone)))
+            .Select(g => g.GuestId)
+            .Distinct()
+            .ToList();
+
+        if (matched.Count == 0 && phoneDigits.Length >= 9)
+        {
+            matched = candidates
+                .Where(g => PhonesMatch(g.Phone, phone) && (g.GuestProfileId is null || g.GuestProfileId == applicantProfileId))
+                .Select(g => g.GuestId)
+                .Distinct()
+                .ToList();
+        }
+
+        if (matched.Count == 1)
+        {
+            var guestId = matched[0];
+            var guest = await _db.Guests.FirstOrDefaultAsync(g => g.GuestId == guestId && g.GuestProfileId == null, cancellationToken);
+            if (guest is not null)
+            {
+                guest.GuestProfileId = applicantProfileId;
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+        }
+
+        return matched;
+    }
+
+    private static bool GuestNameMatchesProfile(string guestName, string first, string last)
+    {
+        var g = NormalizePersonName(guestName);
+        if (g.Length == 0) return false;
+        var a = NormalizePersonName($"{first} {last}");
+        var b = NormalizePersonName($"{last} {first}");
+        return g == a || g == b || (!string.IsNullOrEmpty(a) && (g.Contains(a) || a.Contains(g)));
+    }
+
+    private static string NormalizePersonName(string value) =>
+        string.Join(' ', (value ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).ToUpperInvariant();
+
+    private static bool PhonesMatch(string? left, string? right)
+    {
+        var a = PhoneDigits(left);
+        var b = PhoneDigits(right);
+        if (a.Length == 0 || b.Length == 0) return false;
+        if (a.Length >= 9) a = a[^9..];
+        if (b.Length >= 9) b = b[^9..];
+        return a == b;
+    }
+
+    private static string PhoneDigits(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "" : new string(value.Where(char.IsDigit).ToArray());
 }

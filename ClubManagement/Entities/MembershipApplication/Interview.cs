@@ -37,6 +37,9 @@ namespace ClubManagement.Entities
         [Column("notes")]
         public string? Notes { get; set; }
 
+        [Column("interview_form_json")]
+        public string? FormJson { get; set; }
+
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 

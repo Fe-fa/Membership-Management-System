@@ -28,6 +28,9 @@ namespace ClubManagement.Entities.Subscriptions
         [Column("issued_by_user_id")]
         public long? IssuedByUserId { get; set; }
 
+        [Column("cheque_document_id")]
+        public long? ChequeDocumentId { get; set; }
+
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 

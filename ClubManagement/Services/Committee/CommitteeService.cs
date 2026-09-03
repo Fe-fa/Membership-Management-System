@@ -18,6 +18,7 @@ public interface ICommitteeService
     Task<CommitteeDetailDto> CreateAsync(CreateCommitteeRequest request, long? actorUserId, CancellationToken cancellationToken);
     Task<CommitteeDetailDto?> UpdateAsync(long committeeId, UpdateCommitteeRequest request, long? actorUserId, CancellationToken cancellationToken);
     Task<CommitteeMemberDto> AddMemberAsync(long committeeId, AddCommitteeMemberRequest request, long? actorUserId, CancellationToken cancellationToken);
+    Task<CommitteeMemberDto> UpdateMemberContactAsync(long committeeId, long committeeMemberId, UpdateCommitteeMemberContactRequest request, long? actorUserId, CancellationToken cancellationToken);
     Task SoftRemoveMemberAsync(long committeeId, long committeeMemberId, long? actorUserId, CancellationToken cancellationToken);
     Task<CommitteeMeetingDto> CreateMeetingAsync(long committeeId, CreateCommitteeMeetingRequest request, long? actorUserId, CancellationToken cancellationToken);
     Task<CommitteeMeetingDto?> UpdateMeetingStatusAsync(long meetingId, UpdateMeetingStatusRequest request, long? actorUserId, CancellationToken cancellationToken);
@@ -54,15 +55,18 @@ public class CommitteeService : ICommitteeService
 
     private readonly ApplicationModuleDbContext _db;
     private readonly IEmailSender _email;
+    private readonly IInterviewConductService _interviews;
     private readonly AppPublicOptions _app;
 
     public CommitteeService(
         ApplicationModuleDbContext db,
         IEmailSender email,
+        IInterviewConductService interviews,
         IOptions<AppPublicOptions> app)
     {
         _db = db;
         _email = email;
+        _interviews = interviews;
         _app = app.Value;
     }
 
@@ -363,6 +367,30 @@ IF COL_LENGTH(N'dbo.Committee_meeting', N'meeting_time') IS NULL
         // Soft-remove can only help Article 19 counts; no need to re-assert hard fail.
     }
 
+    public async Task<CommitteeMemberDto> UpdateMemberContactAsync(
+        long committeeId,
+        long committeeMemberId,
+        UpdateCommitteeMemberContactRequest request,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var member = await _db.CommitteeMembers
+            .FirstOrDefaultAsync(
+                m => m.CommitteeMemberId == committeeMemberId && m.CommitteeId == committeeId && m.IsActive,
+                cancellationToken)
+            ?? throw new InvalidOperationException("Committee member not found.");
+
+        var profile = await _db.Profiles.FirstOrDefaultAsync(
+            p => p.ProfileId == member.ProfileId && !p.IsDeleted,
+            cancellationToken)
+            ?? throw new InvalidOperationException("Profile not found.");
+
+        profile.Mobile = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
+        profile.UpdatedByUserId = actorUserId;
+        await _db.SaveChangesAsync(cancellationToken);
+        return (await MapMemberAsync(committeeMemberId, cancellationToken))!;
+    }
+
     public async Task<CommitteeMeetingDto> CreateMeetingAsync(
         long committeeId,
         CreateCommitteeMeetingRequest request,
@@ -407,6 +435,26 @@ IF COL_LENGTH(N'dbo.Committee_meeting', N'meeting_time') IS NULL
         };
         _db.CommitteeMeetings.Add(meeting);
         await _db.SaveChangesAsync(cancellationToken);
+
+        var link = (request.MeetingLink ?? "").Trim();
+        if (link.Length >= 3)
+        {
+            meeting.MinutesUrl = link;
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        foreach (var applicationId in (request.ApplicationIds ?? []).Where(id => id > 0).Distinct())
+            await _interviews.AttachAsync(meeting.CommitteeMeetingId, applicationId, actorUserId, cancellationToken);
+
+        if (link.Length >= 3 && !(request.ApplicationIds?.Any(id => id > 0) ?? false))
+        {
+            var reloaded = await _db.CommitteeMeetings
+                .Include(m => m.Committee)
+                .Include(m => m.MeetingType)
+                .FirstAsync(m => m.CommitteeMeetingId == meeting.CommitteeMeetingId, cancellationToken);
+            await ShareMeetingLinkAsync(reloaded, link, cancellationToken);
+        }
+
         return (await MapMeetingAsync(meeting.CommitteeMeetingId, cancellationToken))!;
     }
 
@@ -754,42 +802,47 @@ IF COL_LENGTH(N'dbo.Committee_meeting', N'meeting_time') IS NULL
             })
             .ToDictionaryAsync(x => x.ProfileId, x => x.Affiliated, cancellationToken);
 
-        var membershipNos = await _db.Accounts.AsNoTracking()
-            .Where(a => profileIds.Contains(a.ProfileId) && !a.IsDeleted)
+        var profileNos = members
+            .Select(m => m.Member.MembershipNo)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(n => n!)
+            .Distinct()
+            .ToList();
+
+        var accountRows = await _db.Accounts.AsNoTracking()
+            .Where(a => !a.IsDeleted
+                        && (profileIds.Contains(a.ProfileId)
+                            || (a.MembershipNo != null && profileNos.Contains(a.MembershipNo))))
+            .Select(a => new MemberAccountSnapshot(
+                a.ProfileId,
+                a.AccountId,
+                a.MembershipNo,
+                a.IsActive,
+                a.MembershipType.Name,
+                a.CurrentMemberStatus.Name,
+                a.CurrentMemberStatus.Code,
+                a.CurrentMemberStatus.IsActiveStatus,
+                a.JoinedDate ?? a.StartDate,
+                a.EndDate))
+            .ToListAsync(cancellationToken);
+
+        var accountByProfile = accountRows
             .GroupBy(a => a.ProfileId)
-            .Select(g => new
-            {
-                ProfileId = g.Key,
-                MembershipNo = g.OrderByDescending(a => a.IsActive).Select(a => a.MembershipNo).FirstOrDefault()
-            })
-            .ToDictionaryAsync(x => x.ProfileId, x => x.MembershipNo, cancellationToken);
+            .ToDictionary(g => g.Key, g => PickLiveAccount(g));
+        var accountByNo = accountRows
+            .Where(a => !string.IsNullOrWhiteSpace(a.MembershipNo))
+            .GroupBy(a => a.MembershipNo!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => PickLiveAccount(g), StringComparer.OrdinalIgnoreCase);
 
         var memberDtos = members.Select(m =>
         {
-            var name = string.Join(" ", new[] { m.Member.Title, m.Member.FirstName, m.Member.LastName }
-                .Where(v => !string.IsNullOrWhiteSpace(v)));
             aviation.TryGetValue(m.ProfileId, out var affiliated);
-            membershipNos.TryGetValue(m.ProfileId, out var membershipNo);
-            return new CommitteeMemberDto
-            {
-                CommitteeMemberId = m.CommitteeMemberId,
-                ProfileId = m.ProfileId,
-                ProfileName = name,
-                MembershipNo = membershipNo,
-                PhotoUrl = string.IsNullOrWhiteSpace(m.Member.PhotoUrl) ? null : m.Member.PhotoUrl,
-                ContactEmail = string.IsNullOrWhiteSpace(m.Member.Email)
-                    ? (string.IsNullOrWhiteSpace(m.Member.AltEmail) ? null : m.Member.AltEmail)
-                    : m.Member.Email,
-                CommitteeRoleId = m.CommitteeRoleId,
-                RoleCode = m.CommitteeRole.Code,
-                RoleName = m.CommitteeRole.Name,
-                RoleSortOrder = m.CommitteeRole.SortOrder,
-                CanApproveCredit = m.CommitteeRole.CanApproveCredit,
-                IsAviationAffiliated = affiliated,
-                AppointedDate = m.AppointedDate?.ToString("yyyy-MM-dd"),
-                EndDate = m.EndDate?.ToString("yyyy-MM-dd"),
-                IsActive = m.IsActive
-            };
+            MemberAccountSnapshot? account = null;
+            if (!string.IsNullOrWhiteSpace(m.Member.MembershipNo))
+                accountByNo.TryGetValue(m.Member.MembershipNo, out account);
+            if (account is null)
+                accountByProfile.TryGetValue(m.ProfileId, out account);
+            return MapMemberEntity(m, affiliated, account);
         }).ToList();
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -806,16 +859,19 @@ IF COL_LENGTH(N'dbo.Committee_meeting', N'meeting_time') IS NULL
         var meetingIds = meetings.Select(m => m.CommitteeMeetingId).ToList();
         if (meetingIds.Count > 0)
         {
-            var interviewStats = await _db.Interviews.AsNoTracking()
+            var interviewRows = await _db.Interviews.AsNoTracking()
                 .Where(i => i.CommitteeMeetingId != null && meetingIds.Contains(i.CommitteeMeetingId.Value))
-                .GroupBy(i => i.CommitteeMeetingId!.Value)
+                .Select(i => new { MeetingId = i.CommitteeMeetingId!.Value, i.Outcome })
+                .ToListAsync(cancellationToken);
+            var interviewStats = interviewRows
+                .GroupBy(x => x.MeetingId)
                 .Select(g => new
                 {
                     MeetingId = g.Key,
                     Linked = g.Count(),
-                    Pending = g.Count(i => i.Outcome == null || i.Outcome == "")
+                    Pending = g.Count(x => string.IsNullOrWhiteSpace(x.Outcome))
                 })
-                .ToListAsync(cancellationToken);
+                .ToList();
             var byId = interviewStats.ToDictionary(x => x.MeetingId);
             foreach (var dto in meetingDtos)
             {
@@ -865,23 +921,83 @@ IF COL_LENGTH(N'dbo.Committee_meeting', N'meeting_time') IS NULL
             .OrderByDescending(d => d.MemberAviationDetailId)
             .Select(d => d.IsAviationAffiliated)
             .FirstOrDefaultAsync(cancellationToken);
-        var membershipNo = await _db.Accounts.AsNoTracking()
-            .Where(a => a.ProfileId == m.ProfileId && !a.IsDeleted)
-            .OrderByDescending(a => a.IsActive)
-            .Select(a => a.MembershipNo)
-            .FirstOrDefaultAsync(cancellationToken);
+        var accountRows = await _db.Accounts.AsNoTracking()
+            .Where(a => !a.IsDeleted
+                        && (a.ProfileId == m.ProfileId
+                            || (m.Member.MembershipNo != null && a.MembershipNo == m.Member.MembershipNo)))
+            .Select(a => new MemberAccountSnapshot(
+                a.ProfileId,
+                a.AccountId,
+                a.MembershipNo,
+                a.IsActive,
+                a.MembershipType.Name,
+                a.CurrentMemberStatus.Name,
+                a.CurrentMemberStatus.Code,
+                a.CurrentMemberStatus.IsActiveStatus,
+                a.JoinedDate ?? a.StartDate,
+                a.EndDate))
+            .ToListAsync(cancellationToken);
+        var account =
+            (!string.IsNullOrWhiteSpace(m.Member.MembershipNo)
+                ? accountRows.FirstOrDefault(a =>
+                    string.Equals(a.MembershipNo, m.Member.MembershipNo, StringComparison.OrdinalIgnoreCase))
+                : null)
+            ?? (accountRows.Count == 0 ? null : PickLiveAccount(accountRows));
 
+        return MapMemberEntity(m, affiliated, account);
+    }
+
+    private sealed record MemberAccountSnapshot(
+        long ProfileId,
+        long AccountId,
+        string? MembershipNo,
+        bool AccountIsActive,
+        string? MembershipTypeName,
+        string? MembershipStatusName,
+        string? MembershipStatusCode,
+        bool StatusIsActive,
+        DateOnly? JoinedDate,
+        DateOnly? EndDate);
+
+    private static MemberAccountSnapshot PickLiveAccount(IEnumerable<MemberAccountSnapshot> rows) =>
+        rows.OrderByDescending(a => a.AccountId).First();
+
+    private static string? StatusFromAccount(MemberAccountSnapshot? account)
+    {
+        if (account is null) return null;
+        var name = (account.MembershipStatusName ?? "").Trim();
+        var live = account.AccountIsActive && account.StatusIsActive;
+        if (live) return string.IsNullOrWhiteSpace(name) ? "Active" : name;
+        if (string.IsNullOrWhiteSpace(name)
+            || name.Equals("Active", StringComparison.OrdinalIgnoreCase))
+            return "Inactive";
+        return name;
+    }
+
+    private static CommitteeMemberDto MapMemberEntity(
+        CommitteeMember m,
+        bool affiliated,
+        MemberAccountSnapshot? account)
+    {
         return new CommitteeMemberDto
         {
             CommitteeMemberId = m.CommitteeMemberId,
             ProfileId = m.ProfileId,
             ProfileName = string.Join(" ", new[] { m.Member.Title, m.Member.FirstName, m.Member.LastName }
                 .Where(v => !string.IsNullOrWhiteSpace(v))),
-            MembershipNo = membershipNo,
+            MembershipNo = account?.MembershipNo ?? m.Member.MembershipNo,
             PhotoUrl = string.IsNullOrWhiteSpace(m.Member.PhotoUrl) ? null : m.Member.PhotoUrl,
             ContactEmail = string.IsNullOrWhiteSpace(m.Member.Email)
                 ? (string.IsNullOrWhiteSpace(m.Member.AltEmail) ? null : m.Member.AltEmail)
                 : m.Member.Email,
+            Phone = string.IsNullOrWhiteSpace(m.Member.Mobile) ? null : m.Member.Mobile,
+            AccountId = account?.AccountId,
+            MembershipType = account?.MembershipTypeName,
+            MembershipStatus = StatusFromAccount(account),
+            MembershipStatusCode = account?.MembershipStatusCode,
+            AccountIsActive = account?.AccountIsActive,
+            JoinedDate = account?.JoinedDate?.ToString("yyyy-MM-dd"),
+            NextRenewalDate = NextAnnualFrom(m.AppointedDate),
             CommitteeRoleId = m.CommitteeRoleId,
             RoleCode = m.CommitteeRole.Code,
             RoleName = m.CommitteeRole.Name,
@@ -892,6 +1008,16 @@ IF COL_LENGTH(N'dbo.Committee_meeting', N'meeting_time') IS NULL
             EndDate = m.EndDate?.ToString("yyyy-MM-dd"),
             IsActive = m.IsActive
         };
+    }
+
+    private static string? NextAnnualFrom(DateOnly? appointed)
+    {
+        if (appointed is null) return null;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var next = appointed.Value.AddYears(1);
+        while (next <= today)
+            next = next.AddYears(1);
+        return next.ToString("yyyy-MM-dd");
     }
 
     private async Task<CommitteeMeetingDto?> MapMeetingAsync(long meetingId, CancellationToken cancellationToken)

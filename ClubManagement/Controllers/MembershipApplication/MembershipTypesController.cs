@@ -1,14 +1,22 @@
+using System.Text.RegularExpressions;
+using ClubManagement.Auth;
 using ClubManagement.Data.MembershipApplication;
+using ClubManagement.Entities.Lookups;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClubManagement.Controllers.MembershipApplication;
 
 [ApiController]
+[EnableCors("Open")]
 [Route("api/membership-types")]
 public class MembershipTypesController : ControllerBase
 {
+    private const string ManageRoles = "ADMIN,GENERAL_MANAGER,CHAIRMAN,TREASURER,COMMITTEE_MEMBER";
+    private static readonly Regex CodePattern = new(@"^[A-Z][A-Z0-9_]{0,39}$", RegexOptions.Compiled);
+
     private readonly ApplicationModuleDbContext _dbContext;
 
     public MembershipTypesController(ApplicationModuleDbContext dbContext)
@@ -48,7 +56,136 @@ public class MembershipTypesController : ControllerBase
         return Ok(rows);
     }
 
-    [Authorize(Roles = "GENERAL_MANAGER,CHAIRMAN,ADMIN")]
+    [Authorize(Roles = ManageRoles)]
+    [HttpPost]
+    [HttpPost("create")]
+    [Consumes("application/json")]
+    public async Task<ActionResult<MembershipTypeOptionDto>> Create(
+        [FromBody] CreateMembershipTypeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var code = NormalizeCode(request.Code);
+        var name = request.Name?.Trim() ?? "";
+        var description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+
+        if (string.IsNullOrWhiteSpace(code) || !CodePattern.IsMatch(code))
+            return BadRequest(new { message = "Membership type code is required (letters, numbers, and underscores; start with a letter)." });
+        if (string.IsNullOrWhiteSpace(name))
+            return BadRequest(new { message = "Membership name is required." });
+
+        var exists = await _dbContext.MembershipTypes.AnyAsync(
+            x => x.Code == code,
+            cancellationToken);
+        if (exists)
+            return BadRequest(new { message = $"A membership type with code {code} already exists." });
+
+        var nextSort = await _dbContext.MembershipTypes.MaxAsync(x => (int?)x.SortOrder, cancellationToken) ?? 0;
+
+        var type = new MembershipType
+        {
+            Code = code,
+            Name = name,
+            Description = description,
+            SortOrder = nextSort + 1,
+            IsActive = true,
+            CanVote = false,
+            CanRunForOffice = false,
+            ReciprocationAllowed = false,
+            CanIntroduceGuests = false,
+            CanAccessSubscriptions = false,
+            CanAccessCommittee = false,
+            CanAccessAccommodation = false,
+            CanAccessEndorsements = false,
+            CanAccessDocuments = false,
+            IsPermanent = false,
+            MaxDurationDays = null,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedByUserId = User.UserId(),
+        };
+        _dbContext.MembershipTypes.Add(type);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            return BadRequest(new { message = $"A membership type with code {code} already exists." });
+        }
+
+        return Ok(Map(type));
+    }
+
+    [Authorize(Roles = ManageRoles)]
+    [HttpPut("{membershipTypeId:long}")]
+    [Consumes("application/json")]
+    public async Task<ActionResult<MembershipTypeOptionDto>> Update(
+        long membershipTypeId,
+        [FromBody] CreateMembershipTypeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var type = await _dbContext.MembershipTypes.FirstOrDefaultAsync(
+            x => x.MembershipTypeId == membershipTypeId,
+            cancellationToken);
+        if (type is null) return NotFound();
+
+        var code = NormalizeCode(request.Code);
+        var name = request.Name?.Trim() ?? "";
+        var description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+
+        if (string.IsNullOrWhiteSpace(code) || !CodePattern.IsMatch(code))
+            return BadRequest(new { message = "Membership type code is required (letters, numbers, and underscores; start with a letter)." });
+        if (string.IsNullOrWhiteSpace(name))
+            return BadRequest(new { message = "Membership name is required." });
+
+        var exists = await _dbContext.MembershipTypes.AnyAsync(
+            x => x.Code == code && x.MembershipTypeId != membershipTypeId,
+            cancellationToken);
+        if (exists)
+            return BadRequest(new { message = $"A membership type with code {code} already exists." });
+
+        type.Code = code;
+        type.Name = name;
+        type.Description = description;
+        type.UpdatedByUserId = User.UserId();
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            return BadRequest(new { message = $"A membership type with code {code} already exists." });
+        }
+
+        return Ok(Map(type));
+    }
+
+    [Authorize(Roles = ManageRoles)]
+    [HttpDelete("{membershipTypeId:long}")]
+    public async Task<IActionResult> Delete(long membershipTypeId, CancellationToken cancellationToken)
+    {
+        var type = await _dbContext.MembershipTypes.FirstOrDefaultAsync(
+            x => x.MembershipTypeId == membershipTypeId,
+            cancellationToken);
+        if (type is null) return NotFound();
+
+        var members = await _dbContext.Accounts.CountAsync(
+            a => a.MembershipTypeId == membershipTypeId && !a.IsDeleted,
+            cancellationToken);
+        if (members > 0)
+            return BadRequest(new { message = $"Cannot delete {type.Name} — {members} member(s) are assigned to this class." });
+
+        var fees = await _dbContext.MembershipFeeSchedules.AnyAsync(
+            f => f.MembershipTypeId == membershipTypeId,
+            cancellationToken);
+        if (fees)
+            return BadRequest(new { message = $"Cannot delete {type.Name} — fee schedules still reference this class." });
+
+        _dbContext.MembershipTypes.Remove(type);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
+    [Authorize(Roles = ManageRoles)]
     [HttpPut("{membershipTypeId:long}/privileges")]
     public async Task<ActionResult<MembershipTypeOptionDto>> UpdatePrivileges(
         long membershipTypeId,
@@ -94,6 +231,12 @@ public class MembershipTypesController : ControllerBase
         IsPermanent = type.IsPermanent,
         MaxDurationDays = type.MaxDurationDays,
     };
+
+    private static string NormalizeCode(string? raw)
+    {
+        var value = (raw ?? "").Trim().ToUpperInvariant().Replace(' ', '_');
+        return Regex.Replace(value, @"[^A-Z0-9_]", "");
+    }
 }
 
 public class MembershipTypeOptionDto
@@ -113,6 +256,13 @@ public class MembershipTypeOptionDto
     public bool CanAccessDocuments { get; set; }
     public bool IsPermanent { get; set; }
     public int? MaxDurationDays { get; set; }
+}
+
+public class CreateMembershipTypeRequest
+{
+    public string Code { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
 }
 
 public record MembershipTypePrivilegesRequest(

@@ -24,12 +24,13 @@ public class UserDetailDto : UserListItemDto
     public string? Title { get; set; }
 }
 
-public class UserListResponse
+public class UserListResponse : ClubManagement.DTOs.Common.PagedResult<UserListItemDto>
 {
-    public IReadOnlyList<UserListItemDto> Items { get; set; } = [];
-    public int Total { get; set; }
-    public int Page { get; set; }
-    public int PageSize { get; set; }
+    public int Total
+    {
+        get => TotalCount;
+        set => TotalCount = value;
+    }
 }
 
 public class CreateStaffUserRequest

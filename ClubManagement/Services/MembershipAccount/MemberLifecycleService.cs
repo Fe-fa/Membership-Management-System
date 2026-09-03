@@ -1,4 +1,5 @@
 using ClubManagement.Data.MembershipApplication;
+using ClubManagement.DTOs.Common;
 using ClubManagement.DTOs.Identity;
 using ClubManagement.Entities;
 using ClubManagement.Entities.Identity;
@@ -52,7 +53,7 @@ public record ChangeMemberTypeRequest(long MembershipTypeId, string? Reason);
 
 public interface IMemberLifecycleService
 {
-    Task<IReadOnlyList<MemberListItemDto>> SearchAsync(string? search, string? statusCode, string? typeCode, CancellationToken cancellationToken);
+    Task<PagedResult<MemberListItemDto>> SearchAsync(string? search, string? statusCode, string? typeCode, PagedRequest paging, CancellationToken cancellationToken);
     Task<RegisterExistingMemberResult> RegisterExistingAsync(RegisterExistingMemberRequest request, long? actorUserId, CancellationToken cancellationToken);
     Task<RegisterExistingMemberResult?> IssuePortalInviteAsync(long accountId, long? actorUserId, CancellationToken cancellationToken);
     Task<MemberListItemDto?> ChangeStatusAsync(long accountId, ChangeMemberStatusRequest request, long? actorUserId, CancellationToken cancellationToken);
@@ -81,7 +82,7 @@ public class MemberLifecycleService : IMemberLifecycleService
         _users = users;
     }
 
-    public async Task<IReadOnlyList<MemberListItemDto>> SearchAsync(string? search, string? statusCode, string? typeCode, CancellationToken cancellationToken)
+    public async Task<PagedResult<MemberListItemDto>> SearchAsync(string? search, string? statusCode, string? typeCode, PagedRequest paging, CancellationToken cancellationToken)
     {
         var query = _db.Accounts.AsNoTracking()
             .Where(a => !a.IsDeleted)
@@ -104,7 +105,9 @@ public class MemberLifecycleService : IMemberLifecycleService
                 (a.Profile.Email != null && a.Profile.Email.Contains(term)));
         }
 
-        var rows = await query.OrderBy(a => a.MembershipNo).Take(200).ToListAsync(cancellationToken);
+        var ordered = query.OrderBy(a => a.MembershipNo);
+        var total = await ordered.CountAsync(cancellationToken);
+        var rows = await ordered.Skip(paging.Skip).Take(paging.PageSize).ToListAsync(cancellationToken);
         var accountIds = rows.Select(r => r.AccountId).ToList();
         var arrears = await _db.Arrearses.AsNoTracking()
             .Where(a => accountIds.Contains(a.AccountId) && a.Status == "OPEN")
@@ -112,7 +115,7 @@ public class MemberLifecycleService : IMemberLifecycleService
             .Select(g => new { AccountId = g.Key, Total = g.Sum(x => x.Amount) })
             .ToDictionaryAsync(x => x.AccountId, x => x.Total, cancellationToken);
 
-        return rows.Select(a => Map(a, arrears.GetValueOrDefault(a.AccountId))).ToList();
+        return Paging.Create(rows.Select(a => Map(a, arrears.GetValueOrDefault(a.AccountId))), paging, total);
     }
 
     public async Task<RegisterExistingMemberResult> RegisterExistingAsync(RegisterExistingMemberRequest request, long? actorUserId, CancellationToken cancellationToken)
@@ -468,19 +471,30 @@ public class MemberLifecycleService : IMemberLifecycleService
         await _db.MemberStatuses.FirstOrDefaultAsync(x => x.Code == code, cancellationToken)
         ?? throw new InvalidOperationException($"Member status '{code}' is missing. Run the seed script.");
 
-    private static MemberListItemDto Map(MAccount a, decimal arrears) => new(
-        a.AccountId,
-        a.ProfileId,
-        a.MembershipNo ?? "",
-        string.Join(" ", new[] { a.Profile.Title, a.Profile.FirstName, a.Profile.MiddleName, a.Profile.LastName }.Where(v => !string.IsNullOrWhiteSpace(v))),
-        a.MembershipTypeId,
-        a.MembershipType.Name,
-        a.CurrentMemberStatus.Name,
-        a.JoinedDate,
-        a.MembershipType.CanVote,
-        a.MembershipType.CanRunForOffice,
-        a.MembershipType.ReciprocationAllowed,
-        a.MembershipType.CanIntroduceGuests,
-        a.MembershipType.IsPermanent,
-        arrears);
+    private static MemberListItemDto Map(MAccount a, decimal arrears)
+    {
+        var live = a.IsActive && (a.CurrentMemberStatus?.IsActiveStatus ?? false);
+        var statusName = (a.CurrentMemberStatus?.Name ?? "").Trim();
+        if (!live && (string.IsNullOrWhiteSpace(statusName)
+                      || statusName.Equals("Active", StringComparison.OrdinalIgnoreCase)))
+            statusName = "Inactive";
+        else if (string.IsNullOrWhiteSpace(statusName))
+            statusName = live ? "Active" : "Inactive";
+
+        return new(
+            a.AccountId,
+            a.ProfileId,
+            a.MembershipNo ?? "",
+            string.Join(" ", new[] { a.Profile.Title, a.Profile.FirstName, a.Profile.MiddleName, a.Profile.LastName }.Where(v => !string.IsNullOrWhiteSpace(v))),
+            a.MembershipTypeId,
+            a.MembershipType.Name,
+            statusName,
+            a.JoinedDate ?? a.StartDate,
+            a.MembershipType.CanVote,
+            a.MembershipType.CanRunForOffice,
+            a.MembershipType.ReciprocationAllowed,
+            a.MembershipType.CanIntroduceGuests,
+            a.MembershipType.IsPermanent,
+            arrears);
+    }
 }

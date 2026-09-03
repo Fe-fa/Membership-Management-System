@@ -19,7 +19,13 @@ namespace ClubManagement.Entities.Guests
 
         [Column("guest_name")]
         [Required]
-        public string GuestName { get; set; }
+        public string GuestName { get; set; } = string.Empty;
+
+        [Column("phone")]
+        public string? Phone { get; set; }
+
+        [Column("visit_slip_code")]
+        public string? VisitSlipCode { get; set; }
 
         [Column("introduced_by_profile_id")]
         public long? IntroducedByProfileId { get; set; }

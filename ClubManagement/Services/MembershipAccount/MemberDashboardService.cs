@@ -339,16 +339,47 @@ public class MemberDashboardService : IMemberDashboardService
             .Select(p => p.Email)
             .FirstOrDefaultAsync(cancellationToken);
 
+        var myApplicationIds = await _db.Applications.AsNoTracking()
+            .Where(a => a.ApplicantProfileId == profileId)
+            .Select(a => a.ApplicationId)
+            .ToListAsync(cancellationToken);
+        var committeeIds = await _db.CommitteeMembers.AsNoTracking()
+            .Where(m => m.ProfileId == profileId && m.IsActive)
+            .Select(m => m.CommitteeId)
+            .ToListAsync(cancellationToken);
+        var meetingIdsAsMember = committeeIds.Count == 0
+            ? new List<long>()
+            : await _db.CommitteeMeetings.AsNoTracking()
+                .Where(m => committeeIds.Contains(m.CommitteeId))
+                .Select(m => m.CommitteeMeetingId)
+                .ToListAsync(cancellationToken);
+        var meetingIdsAsApplicant = myApplicationIds.Count == 0
+            ? new List<long>()
+            : await _db.Interviews.AsNoTracking()
+                .Where(i => myApplicationIds.Contains(i.ApplicationId) && i.CommitteeMeetingId != null)
+                .Select(i => i.CommitteeMeetingId!.Value)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+        var allowedMeetingIds = meetingIdsAsMember.Concat(meetingIdsAsApplicant).Distinct().ToList();
+
         var query = _db.Notifications.AsNoTracking()
             .Include(n => n.NotificationType)
             .Where(n =>
                 (accountId != null && n.AccountId == accountId)
                 || (!string.IsNullOrWhiteSpace(email) && n.Recipient == email)
-                || n.Recipient == profileId.ToString());
+                || n.Recipient == profileId.ToString())
+            .Where(n =>
+                (n.NotificationType.Code != "MEETING_LINK" && n.NotificationType.Code != "INTERVIEW_MEETING")
+                || (n.RelatedEntityType == "APPLICATION"
+                    && n.RelatedEntityId != null
+                    && myApplicationIds.Contains(n.RelatedEntityId.Value))
+                || (n.RelatedEntityType == "COMMITTEE_MEETING"
+                    && n.RelatedEntityId != null
+                    && allowedMeetingIds.Contains(n.RelatedEntityId.Value)));
 
         var rows = await query
             .OrderByDescending(n => n.SentDate ?? n.CreatedAt)
-            .Take(50)
+            .Take(80)
             .Select(n => new
             {
                 n.NotificationId,
@@ -363,7 +394,58 @@ public class MemberDashboardService : IMemberDashboardService
             })
             .ToListAsync(cancellationToken);
 
-        return rows.Select(n =>
+        var apps = await _db.Applications.AsNoTracking()
+            .Where(a => a.ApplicantProfileId == profileId)
+            .Select(a => new AppNoticeState(a.ApplicationId, a.UpdatedAt, a.Status.Code))
+            .ToListAsync(cancellationToken);
+        var appById = apps.ToDictionary(a => a.ApplicationId);
+
+        var interviewSittings = myApplicationIds.Count == 0
+            ? new List<InterviewSittingState>()
+            : (await _db.Interviews.AsNoTracking()
+                .Where(i => myApplicationIds.Contains(i.ApplicationId))
+                .Select(i => new
+                {
+                    i.ApplicationId,
+                    i.CommitteeMeetingId,
+                    i.ConductedAt,
+                    i.AttendedFlag,
+                    Date = i.CommitteeMeeting != null ? (DateOnly?)i.CommitteeMeeting.MeetingDate : null,
+                    Time = i.CommitteeMeeting != null ? i.CommitteeMeeting.MeetingTime : null,
+                    Status = i.CommitteeMeeting != null ? i.CommitteeMeeting.Status : null,
+                    i.ScheduledAt
+                })
+                .ToListAsync(cancellationToken))
+                .Select(i => new InterviewSittingState(
+                    i.ApplicationId, i.CommitteeMeetingId, i.ConductedAt, i.AttendedFlag, i.Date, i.Time, i.Status, i.ScheduledAt))
+                .ToList();
+
+        var extraMeetingIds = rows
+            .Where(n => n.RelatedEntityType == "COMMITTEE_MEETING" && n.RelatedEntityId != null)
+            .Select(n => n.RelatedEntityId!.Value)
+            .Distinct()
+            .ToList();
+        var meetingsById = extraMeetingIds.Count == 0
+            ? new Dictionary<long, (DateOnly Date, string? Time, string Status)>()
+            : (await _db.CommitteeMeetings.AsNoTracking()
+                .Where(m => extraMeetingIds.Contains(m.CommitteeMeetingId))
+                .Select(m => new { m.CommitteeMeetingId, m.MeetingDate, m.MeetingTime, m.Status })
+                .ToListAsync(cancellationToken))
+                .ToDictionary(m => m.CommitteeMeetingId, m => (m.MeetingDate, m.MeetingTime, m.Status));
+
+        var kenyaNow = KenyaNow();
+
+        return rows
+            .Where(n => NotificationStillActive(
+                n.TypeCode,
+                n.RelatedEntityType,
+                n.RelatedEntityId,
+                n.CreatedAt,
+                appById,
+                interviewSittings,
+                meetingsById,
+                kenyaNow))
+            .Select(n =>
         {
             var content = (n.Content ?? "").Trim();
             string title;
@@ -394,6 +476,144 @@ public class MemberDashboardService : IMemberDashboardService
             };
         }).ToList();
     }
+
+    private static readonly HashSet<string> ManagerActionTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "MANAGER_PAYMENT_REQUEST",
+        "MANAGER_DOCUMENT_REQUEST",
+        "MANAGER_DETAILS_REQUEST",
+        "MANAGER_ENDORSEMENT_REQUEST",
+        "MANAGER_ENDORSEMENT_FOLLOWUP",
+        "APPLICATION_PAYMENT_REQUIRED",
+        "APPLICATION_PENDING_ITEMS"
+    };
+
+    private static readonly HashSet<string> MeetingNoticeTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "MEETING_LINK",
+        "INTERVIEW_MEETING"
+    };
+
+    private static bool NotificationStillActive(
+        string typeCode,
+        string? relatedType,
+        long? relatedId,
+        DateTime createdAt,
+        Dictionary<long, AppNoticeState> appById,
+        List<InterviewSittingState> sittings,
+        Dictionary<long, (DateOnly Date, string? Time, string Status)> meetingsById,
+        DateTime kenyaNow)
+    {
+        AppNoticeState? relatedApp = relatedType == "APPLICATION" && relatedId is long appId && appById.TryGetValue(appId, out var app)
+            ? app
+            : null;
+        var status = relatedApp?.Status;
+
+        if (ManagerActionTypes.Contains(typeCode))
+        {
+            if (relatedApp != null)
+            {
+                if (relatedApp.UpdatedAt is DateTime ua && ua > createdAt) return false;
+                if (StatusPastEndorsement(status)) return false;
+            }
+            return true;
+        }
+
+        if (MeetingNoticeTypes.Contains(typeCode))
+        {
+            if (relatedType == "APPLICATION" && relatedId is long aid)
+            {
+                if (StatusPastInterview(status)) return false;
+                var mine = sittings.Where(s => s.ApplicationId == aid).ToList();
+                if (mine.Any(s => s.ConductedAt != null || s.Attended)) return false;
+                if (mine.Any(s => MeetingHasEnded(s.Date, s.Time, s.Status, s.ScheduledAt, kenyaNow))) return false;
+            }
+            if (relatedType == "COMMITTEE_MEETING" && relatedId is long mid)
+            {
+                if (meetingsById.TryGetValue(mid, out var meeting)
+                    && MeetingHasEnded(meeting.Date, meeting.Time, meeting.Status, null, kenyaNow))
+                    return false;
+                if (sittings.Any(s => s.MeetingId == mid && MeetingHasEnded(s.Date, s.Time, s.Status, s.ScheduledAt, kenyaNow)))
+                    return false;
+            }
+            return true;
+        }
+
+        if (IsElectionNotice(typeCode) && StatusElectionFinished(status))
+            return false;
+
+        return true;
+    }
+
+    private static bool IsElectionNotice(string typeCode)
+    {
+        if (string.IsNullOrWhiteSpace(typeCode)) return false;
+        var c = typeCode.ToUpperInvariant();
+        return c.Contains("ELECTION") || c.Contains("BALLOT") || c.Contains("AGM") || c.Contains("EGM");
+    }
+
+    private static bool StatusPastEndorsement(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status)) return false;
+        return status is "Interview" or "InterviewReview" or "Waitlist" or "ElectionReview"
+            or "TemporaryMember" or "Committee" or "CommitteeReview" or "Approved" or "NotElected" or "Rejected";
+    }
+
+    private static bool StatusPastInterview(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status)) return false;
+        return status is "InterviewReview" or "Waitlist" or "ElectionReview"
+            or "TemporaryMember" or "Committee" or "CommitteeReview" or "Approved" or "NotElected" or "Rejected";
+    }
+
+    private static bool StatusElectionFinished(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status)) return false;
+        return status is "Committee" or "CommitteeReview" or "Approved" or "NotElected" or "Rejected" or "TemporaryMember";
+    }
+
+    private static bool MeetingHasEnded(
+        DateOnly? date,
+        string? time,
+        string? status,
+        DateTime? scheduledAt,
+        DateTime kenyaNow)
+    {
+        if (status is "HELD" or "CANCELLED" or "CLOSED" or "COMPLETED") return true;
+        if (scheduledAt is DateTime scheduled)
+        {
+            var local = scheduled.Kind == DateTimeKind.Utc
+                ? TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(scheduled, DateTimeKind.Utc), KenyaTimeZone())
+                : scheduled;
+            if (kenyaNow >= local) return true;
+        }
+        if (date is not DateOnly d) return false;
+        var tod = TimeOnly.MinValue;
+        if (string.IsNullOrWhiteSpace(time) || !TimeOnly.TryParse(time.Trim(), out tod))
+            tod = new TimeOnly(23, 59);
+        return kenyaNow >= d.ToDateTime(tod);
+    }
+
+    private static DateTime KenyaNow() =>
+        TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, KenyaTimeZone());
+
+    private static TimeZoneInfo KenyaTimeZone()
+    {
+        try { return TimeZoneInfo.FindSystemTimeZoneById("E. Africa Standard Time"); }
+        catch { return TimeZoneInfo.FindSystemTimeZoneById("Africa/Nairobi"); }
+    }
+
+    private sealed record AppNoticeState(long ApplicationId, DateTime? UpdatedAt, string Status);
+
+    private sealed record InterviewSittingState(
+        long ApplicationId,
+        long? MeetingId,
+        DateTime? ConductedAt,
+        bool Attended,
+        DateOnly? Date,
+        string? Time,
+        string? Status,
+        DateTime? ScheduledAt);
 
     public async Task<MemberDocumentsDto> GetDocumentsAsync(long profileId, CancellationToken cancellationToken)
     {

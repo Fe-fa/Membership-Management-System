@@ -1,4 +1,5 @@
 using ClubManagement.Auth;
+using ClubManagement.DTOs.Common;
 using ClubManagement.DTOs.MembershipAccount;
 using ClubManagement.DTOs.MembershipApplication;
 using ClubManagement.Services.Finance;
@@ -48,17 +49,21 @@ public class ApplicationsController : ControllerBase
 
     [Authorize]
     [HttpGet("manager-queue")]
-    public async Task<ActionResult<IReadOnlyList<ApplicationListItemDto>>> ManagerQueue(CancellationToken cancellationToken)
+    public async Task<ActionResult<PagedResult<ApplicationListItemDto>>> ManagerQueue(
+        [FromQuery] PagedRequest paging,
+        CancellationToken cancellationToken)
     {
         if (!User.HasAnyRole("ADMIN", "GENERAL_MANAGER", "CHAIRMAN")) return Forbid();
-        return Ok(await _managerStage.ListManagerQueueAsync(cancellationToken));
+        return Ok(await _managerStage.ListManagerQueueAsync(paging, cancellationToken));
     }
 
     [HttpGet("manager-history")]
-    public async Task<ActionResult<IReadOnlyList<ApplicationListItemDto>>> ManagerHistory(CancellationToken cancellationToken)
+    public async Task<ActionResult<PagedResult<ApplicationListItemDto>>> ManagerHistory(
+        [FromQuery] PagedRequest paging,
+        CancellationToken cancellationToken)
     {
         if (!User.HasAnyRole("ADMIN", "GENERAL_MANAGER", "CHAIRMAN")) return Forbid();
-        return Ok(await _managerStage.ListStageAHistoryAsync(cancellationToken));
+        return Ok(await _managerStage.ListStageAHistoryAsync(paging, cancellationToken));
     }
 
     [HttpPost("{applicationId:long}/assign-meeting")]
@@ -142,11 +147,37 @@ public class ApplicationsController : ControllerBase
     }
 
     [Authorize]
+    [HttpPost("{applicationId:long}/manager-requests")]
+    public async Task<IActionResult> SendManagerRequest(
+        long applicationId,
+        [FromBody] ManagerItemRequest? request,
+        CancellationToken cancellationToken)
+    {
+        if (!User.HasAnyRole("ADMIN", "GENERAL_MANAGER", "CHAIRMAN")) return Forbid();
+        try
+        {
+            await _managerStage.SendManagerRequestAsync(
+                applicationId,
+                request ?? new ManagerItemRequest { RequestType = "details" },
+                User.UserId(),
+                cancellationToken);
+            return Ok(new { sent = true });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [Authorize]
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<ApplicationListItemDto>>> GetAll(CancellationToken cancellationToken)
+    public async Task<ActionResult<PagedResult<ApplicationListItemDto>>> GetAll(
+        [FromQuery] PagedRequest paging,
+        [FromQuery] string? search,
+        CancellationToken cancellationToken)
     {
         if (!User.IsStaff()) return Forbid();
-        var result = await _applicationService.GetAllAsync(cancellationToken);
+        var result = await _applicationService.GetAllAsync(paging, search, cancellationToken);
         return Ok(result);
     }
 
@@ -399,6 +430,30 @@ public class ApplicationsController : ControllerBase
     }
 
     [Authorize]
+    [HttpPost("{applicationId:long}/payments/{transactionId:long}/receipt")]
+    public async Task<ActionResult<PaymentRowDto>> IssueReceipt(
+        long applicationId,
+        long transactionId,
+        CancellationToken cancellationToken)
+    {
+        if (!User.HasAnyRole("ADMIN", "GENERAL_MANAGER", "CHAIRMAN", "TREASURER")) return Forbid();
+        var existing = await _applicationService.GetByIdAsync(applicationId, cancellationToken);
+        if (existing is null) return NotFound();
+        try
+        {
+            return Ok(await _finance.EnsureReceiptAsync(
+                transactionId,
+                existing.ApplicantProfileId,
+                User.UserId(),
+                cancellationToken));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [Authorize]
     [HttpPost("{applicationId:long}/payments")]
     public async Task<ActionResult<PaymentRowDto>> RecordPayment(
         long applicationId,
@@ -407,6 +462,23 @@ public class ApplicationsController : ControllerBase
     {
         var existing = await _applicationService.GetByIdAsync(applicationId, cancellationToken);
         if (existing is null || !CanAccessApplication(existing.ApplicantProfileId)) return NotFound();
+
+        if (request.TransactionId is > 0)
+        {
+            if (!User.IsStaff()) return Forbid();
+            try
+            {
+                return Ok(await _finance.EnsureReceiptAsync(
+                    request.TransactionId.Value,
+                    existing.ApplicantProfileId,
+                    User.UserId(),
+                    cancellationToken));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
 
         var feeCode = (request.FeeTypeCode ?? "JOINING").Trim().ToUpperInvariant();
         if (feeCode is not ("JOINING" or "ANNUAL"))
@@ -434,7 +506,12 @@ public class ApplicationsController : ControllerBase
                     request.ChequeNo,
                     request.MpesaCode,
                     noteParts.Count == 0 ? null : string.Join(" | ", noteParts),
-                    request.PaymentStatusCode),
+                    request.PaymentStatusCode,
+                    request.ChequeBankName,
+                    request.ChequeBankCode,
+                    request.ChequeDate,
+                    request.ChequeFileName,
+                    request.ChequeFileUrl),
                 User.UserId(),
                 cancellationToken);
             try

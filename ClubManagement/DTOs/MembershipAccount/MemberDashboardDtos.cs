@@ -200,6 +200,13 @@ public class ApplicationPayRequest
     public string? MpesaCode { get; set; }
     public string? MpesaPhone { get; set; }
     public string? ChequeNo { get; set; }
+    public string? ChequeBankName { get; set; }
+    public string? ChequeBankCode { get; set; }
+    public DateOnly? ChequeDate { get; set; }
+    public string? ChequeFileName { get; set; }
+    public string? ChequeFileUrl { get; set; }
     public string? ReferenceNote { get; set; }
     public string? PaymentStatusCode { get; set; }
+    /// <summary>When set, issue a receipt for this existing payment instead of recording a new one.</summary>
+    public long? TransactionId { get; set; }
 }

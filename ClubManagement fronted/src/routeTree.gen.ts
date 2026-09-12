@@ -15,6 +15,8 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as ApplicationRouteImport } from './routes/application'
 import { Route as ApplicationsRouteImport } from './routes/applications'
 import { Route as CommitteeBallotRouteImport } from './routes/committee-ballot'
+import { Route as CorkageRouteImport } from './routes/corkage'
+import { Route as CustomChargesRouteImport } from './routes/custom-charges'
 import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as ElectionRouteImport } from './routes/election'
 import { Route as EndorsementsRouteImport } from './routes/endorsements'
@@ -38,8 +40,18 @@ import { Route as CommitteeBallotIndexRouteImport } from './routes/committee-bal
 import { Route as CommitteeBallotAttendanceRouteImport } from './routes/committee-ballot.attendance'
 import { Route as CommitteeBallotCandidatesRouteImport } from './routes/committee-ballot.candidates'
 import { Route as CommitteeBallotPendingRouteImport } from './routes/committee-ballot.pending'
+import { Route as CommitteeBallotSignaturesRouteImport } from './routes/committee-ballot.signatures'
+import { Route as ElectionIndexRouteImport } from './routes/election.index'
+import { Route as ElectionMinutesRouteImport } from './routes/election.minutes'
+import { Route as ElectionNominationsRouteImport } from './routes/election.nominations'
+import { Route as ElectionNoticeRouteImport } from './routes/election.notice'
+import { Route as ElectionOfficersRouteImport } from './routes/election.officers'
+import { Route as ElectionProxiesRouteImport } from './routes/election.proxies'
+import { Route as ElectionTallyRouteImport } from './routes/election.tally'
 import { Route as ExistingMembersIndexRouteImport } from './routes/existing-members.index'
 import { Route as ExistingMembersAccountIdRouteImport } from './routes/existing-members.$accountId'
+import { Route as FinanceIndexRouteImport } from './routes/finance.index'
+import { Route as FinanceDeskRouteImport } from './routes/finance.desk'
 import { Route as ManageCommitteeIndexRouteImport } from './routes/manage-committee.index'
 import { Route as ManageCommitteeCurrentTermRouteImport } from './routes/manage-committee.current-term'
 import { Route as ManageCommitteeMeetingsRouteImport } from './routes/manage-committee.meetings'
@@ -52,10 +64,14 @@ import { Route as SettingsAccountRouteImport } from './routes/settings.account'
 import { Route as SettingsAppearanceRouteImport } from './routes/settings.appearance'
 import { Route as SettingsAutomationsRouteImport } from './routes/settings.automations'
 import { Route as SettingsClubRouteImport } from './routes/settings.club'
+import { Route as SettingsLookupsRouteImport } from './routes/settings.lookups'
 import { Route as SettingsPrivacyRouteImport } from './routes/settings.privacy'
 import { Route as SettingsRbacRouteImport } from './routes/settings.rbac'
 import { Route as UserManagementIndexRouteImport } from './routes/user-management.index'
 import { Route as UserManagementUserAccountIdRouteImport } from './routes/user-management.$userAccountId'
+import { Route as FinanceNonMembershipAccommodationRouteImport } from './routes/finance.non-membership.accommodation'
+import { Route as FinanceNonMembershipCorkageRouteImport } from './routes/finance.non-membership.corkage'
+import { Route as FinanceNonMembershipCustomChargesRouteImport } from './routes/finance.non-membership.custom-charges'
 import { Route as ManageCommitteeMeetingsIndexRouteImport } from './routes/manage-committee.meetings.index'
 import { Route as ManageCommitteeMeetingsHistoryRouteImport } from './routes/manage-committee.meetings.history'
 import { Route as ManageCommitteeMeetingsInterviewRouteImport } from './routes/manage-committee.meetings.interview'
@@ -90,6 +106,16 @@ const ApplicationsRoute = ApplicationsRouteImport.update({
 const CommitteeBallotRoute = CommitteeBallotRouteImport.update({
   id: '/committee-ballot',
   path: '/committee-ballot',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CorkageRoute = CorkageRouteImport.update({
+  id: '/corkage',
+  path: '/corkage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CustomChargesRoute = CustomChargesRouteImport.update({
+  id: '/custom-charges',
+  path: '/custom-charges',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocumentsRoute = DocumentsRouteImport.update({
@@ -209,6 +235,47 @@ const CommitteeBallotPendingRoute = CommitteeBallotPendingRouteImport.update({
   path: '/pending',
   getParentRoute: () => CommitteeBallotRoute,
 } as any)
+const CommitteeBallotSignaturesRoute =
+  CommitteeBallotSignaturesRouteImport.update({
+    id: '/signatures',
+    path: '/signatures',
+    getParentRoute: () => CommitteeBallotRoute,
+  } as any)
+const ElectionIndexRoute = ElectionIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ElectionRoute,
+} as any)
+const ElectionMinutesRoute = ElectionMinutesRouteImport.update({
+  id: '/minutes',
+  path: '/minutes',
+  getParentRoute: () => ElectionRoute,
+} as any)
+const ElectionNominationsRoute = ElectionNominationsRouteImport.update({
+  id: '/nominations',
+  path: '/nominations',
+  getParentRoute: () => ElectionRoute,
+} as any)
+const ElectionNoticeRoute = ElectionNoticeRouteImport.update({
+  id: '/notice',
+  path: '/notice',
+  getParentRoute: () => ElectionRoute,
+} as any)
+const ElectionOfficersRoute = ElectionOfficersRouteImport.update({
+  id: '/officers',
+  path: '/officers',
+  getParentRoute: () => ElectionRoute,
+} as any)
+const ElectionProxiesRoute = ElectionProxiesRouteImport.update({
+  id: '/proxies',
+  path: '/proxies',
+  getParentRoute: () => ElectionRoute,
+} as any)
+const ElectionTallyRoute = ElectionTallyRouteImport.update({
+  id: '/tally',
+  path: '/tally',
+  getParentRoute: () => ElectionRoute,
+} as any)
 const ExistingMembersIndexRoute = ExistingMembersIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -220,6 +287,16 @@ const ExistingMembersAccountIdRoute =
     path: '/$accountId',
     getParentRoute: () => ExistingMembersRoute,
   } as any)
+const FinanceIndexRoute = FinanceIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => FinanceRoute,
+} as any)
+const FinanceDeskRoute = FinanceDeskRouteImport.update({
+  id: '/desk',
+  path: '/desk',
+  getParentRoute: () => FinanceRoute,
+} as any)
 const ManageCommitteeIndexRoute = ManageCommitteeIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -281,6 +358,11 @@ const SettingsClubRoute = SettingsClubRouteImport.update({
   path: '/club',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsLookupsRoute = SettingsLookupsRouteImport.update({
+  id: '/lookups',
+  path: '/lookups',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsPrivacyRoute = SettingsPrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
@@ -301,6 +383,24 @@ const UserManagementUserAccountIdRoute =
     id: '/$userAccountId',
     path: '/$userAccountId',
     getParentRoute: () => UserManagementRoute,
+  } as any)
+const FinanceNonMembershipAccommodationRoute =
+  FinanceNonMembershipAccommodationRouteImport.update({
+    id: '/non-membership/accommodation',
+    path: '/non-membership/accommodation',
+    getParentRoute: () => FinanceRoute,
+  } as any)
+const FinanceNonMembershipCorkageRoute =
+  FinanceNonMembershipCorkageRouteImport.update({
+    id: '/non-membership/corkage',
+    path: '/non-membership/corkage',
+    getParentRoute: () => FinanceRoute,
+  } as any)
+const FinanceNonMembershipCustomChargesRoute =
+  FinanceNonMembershipCustomChargesRouteImport.update({
+    id: '/non-membership/custom-charges',
+    path: '/non-membership/custom-charges',
+    getParentRoute: () => FinanceRoute,
   } as any)
 const ManageCommitteeMeetingsIndexRoute =
   ManageCommitteeMeetingsIndexRouteImport.update({
@@ -340,11 +440,13 @@ export interface FileRoutesByFullPath {
   '/application': typeof ApplicationRoute
   '/applications': typeof ApplicationsRoute
   '/committee-ballot': typeof CommitteeBallotRouteWithChildren
+  '/corkage': typeof CorkageRoute
+  '/custom-charges': typeof CustomChargesRoute
   '/documents': typeof DocumentsRoute
-  '/election': typeof ElectionRoute
+  '/election': typeof ElectionRouteWithChildren
   '/endorsements': typeof EndorsementsRoute
   '/existing-members': typeof ExistingMembersRouteWithChildren
-  '/finance': typeof FinanceRoute
+  '/finance': typeof FinanceRouteWithChildren
   '/governance': typeof GovernanceRoute
   '/guests': typeof GuestsRoute
   '/login': typeof LoginRoute
@@ -362,7 +464,15 @@ export interface FileRoutesByFullPath {
   '/committee-ballot/attendance': typeof CommitteeBallotAttendanceRoute
   '/committee-ballot/candidates': typeof CommitteeBallotCandidatesRoute
   '/committee-ballot/pending': typeof CommitteeBallotPendingRoute
+  '/committee-ballot/signatures': typeof CommitteeBallotSignaturesRoute
+  '/election/minutes': typeof ElectionMinutesRoute
+  '/election/nominations': typeof ElectionNominationsRoute
+  '/election/notice': typeof ElectionNoticeRoute
+  '/election/officers': typeof ElectionOfficersRoute
+  '/election/proxies': typeof ElectionProxiesRoute
+  '/election/tally': typeof ElectionTallyRoute
   '/existing-members/$accountId': typeof ExistingMembersAccountIdRoute
+  '/finance/desk': typeof FinanceDeskRoute
   '/manage-committee/current-term': typeof ManageCommitteeCurrentTermRoute
   '/manage-committee/meetings': typeof ManageCommitteeMeetingsRouteWithChildren
   '/manage-committee/members': typeof ManageCommitteeMembersRoute
@@ -372,15 +482,21 @@ export interface FileRoutesByFullPath {
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/automations': typeof SettingsAutomationsRoute
   '/settings/club': typeof SettingsClubRoute
+  '/settings/lookups': typeof SettingsLookupsRoute
   '/settings/privacy': typeof SettingsPrivacyRoute
   '/settings/rbac': typeof SettingsRbacRoute
   '/user-management/$userAccountId': typeof UserManagementUserAccountIdRoute
   '/committee-ballot/': typeof CommitteeBallotIndexRoute
+  '/election/': typeof ElectionIndexRoute
   '/existing-members/': typeof ExistingMembersIndexRoute
+  '/finance/': typeof FinanceIndexRoute
   '/manage-committee/': typeof ManageCommitteeIndexRoute
   '/members/': typeof MembersIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/user-management/': typeof UserManagementIndexRoute
+  '/finance/non-membership/accommodation': typeof FinanceNonMembershipAccommodationRoute
+  '/finance/non-membership/corkage': typeof FinanceNonMembershipCorkageRoute
+  '/finance/non-membership/custom-charges': typeof FinanceNonMembershipCustomChargesRoute
   '/manage-committee/meetings/history': typeof ManageCommitteeMeetingsHistoryRoute
   '/manage-committee/meetings/interview': typeof ManageCommitteeMeetingsInterviewRoute
   '/manage-committee/meetings/pending': typeof ManageCommitteeMeetingsPendingRoute
@@ -393,10 +509,10 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRoute
   '/application': typeof ApplicationRoute
   '/applications': typeof ApplicationsRoute
+  '/corkage': typeof CorkageRoute
+  '/custom-charges': typeof CustomChargesRoute
   '/documents': typeof DocumentsRoute
-  '/election': typeof ElectionRoute
   '/endorsements': typeof EndorsementsRoute
-  '/finance': typeof FinanceRoute
   '/governance': typeof GovernanceRoute
   '/guests': typeof GuestsRoute
   '/login': typeof LoginRoute
@@ -410,7 +526,15 @@ export interface FileRoutesByTo {
   '/committee-ballot/attendance': typeof CommitteeBallotAttendanceRoute
   '/committee-ballot/candidates': typeof CommitteeBallotCandidatesRoute
   '/committee-ballot/pending': typeof CommitteeBallotPendingRoute
+  '/committee-ballot/signatures': typeof CommitteeBallotSignaturesRoute
+  '/election/minutes': typeof ElectionMinutesRoute
+  '/election/nominations': typeof ElectionNominationsRoute
+  '/election/notice': typeof ElectionNoticeRoute
+  '/election/officers': typeof ElectionOfficersRoute
+  '/election/proxies': typeof ElectionProxiesRoute
+  '/election/tally': typeof ElectionTallyRoute
   '/existing-members/$accountId': typeof ExistingMembersAccountIdRoute
+  '/finance/desk': typeof FinanceDeskRoute
   '/manage-committee/current-term': typeof ManageCommitteeCurrentTermRoute
   '/manage-committee/members': typeof ManageCommitteeMembersRoute
   '/manage-committee/new-term': typeof ManageCommitteeNewTermRoute
@@ -419,15 +543,21 @@ export interface FileRoutesByTo {
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/automations': typeof SettingsAutomationsRoute
   '/settings/club': typeof SettingsClubRoute
+  '/settings/lookups': typeof SettingsLookupsRoute
   '/settings/privacy': typeof SettingsPrivacyRoute
   '/settings/rbac': typeof SettingsRbacRoute
   '/user-management/$userAccountId': typeof UserManagementUserAccountIdRoute
   '/committee-ballot': typeof CommitteeBallotIndexRoute
+  '/election': typeof ElectionIndexRoute
   '/existing-members': typeof ExistingMembersIndexRoute
+  '/finance': typeof FinanceIndexRoute
   '/manage-committee': typeof ManageCommitteeIndexRoute
   '/members': typeof MembersIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/user-management': typeof UserManagementIndexRoute
+  '/finance/non-membership/accommodation': typeof FinanceNonMembershipAccommodationRoute
+  '/finance/non-membership/corkage': typeof FinanceNonMembershipCorkageRoute
+  '/finance/non-membership/custom-charges': typeof FinanceNonMembershipCustomChargesRoute
   '/manage-committee/meetings/history': typeof ManageCommitteeMeetingsHistoryRoute
   '/manage-committee/meetings/interview': typeof ManageCommitteeMeetingsInterviewRoute
   '/manage-committee/meetings/pending': typeof ManageCommitteeMeetingsPendingRoute
@@ -442,11 +572,13 @@ export interface FileRoutesById {
   '/application': typeof ApplicationRoute
   '/applications': typeof ApplicationsRoute
   '/committee-ballot': typeof CommitteeBallotRouteWithChildren
+  '/corkage': typeof CorkageRoute
+  '/custom-charges': typeof CustomChargesRoute
   '/documents': typeof DocumentsRoute
-  '/election': typeof ElectionRoute
+  '/election': typeof ElectionRouteWithChildren
   '/endorsements': typeof EndorsementsRoute
   '/existing-members': typeof ExistingMembersRouteWithChildren
-  '/finance': typeof FinanceRoute
+  '/finance': typeof FinanceRouteWithChildren
   '/governance': typeof GovernanceRoute
   '/guests': typeof GuestsRoute
   '/login': typeof LoginRoute
@@ -464,7 +596,15 @@ export interface FileRoutesById {
   '/committee-ballot/attendance': typeof CommitteeBallotAttendanceRoute
   '/committee-ballot/candidates': typeof CommitteeBallotCandidatesRoute
   '/committee-ballot/pending': typeof CommitteeBallotPendingRoute
+  '/committee-ballot/signatures': typeof CommitteeBallotSignaturesRoute
+  '/election/minutes': typeof ElectionMinutesRoute
+  '/election/nominations': typeof ElectionNominationsRoute
+  '/election/notice': typeof ElectionNoticeRoute
+  '/election/officers': typeof ElectionOfficersRoute
+  '/election/proxies': typeof ElectionProxiesRoute
+  '/election/tally': typeof ElectionTallyRoute
   '/existing-members/$accountId': typeof ExistingMembersAccountIdRoute
+  '/finance/desk': typeof FinanceDeskRoute
   '/manage-committee/current-term': typeof ManageCommitteeCurrentTermRoute
   '/manage-committee/meetings': typeof ManageCommitteeMeetingsRouteWithChildren
   '/manage-committee/members': typeof ManageCommitteeMembersRoute
@@ -474,15 +614,21 @@ export interface FileRoutesById {
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/automations': typeof SettingsAutomationsRoute
   '/settings/club': typeof SettingsClubRoute
+  '/settings/lookups': typeof SettingsLookupsRoute
   '/settings/privacy': typeof SettingsPrivacyRoute
   '/settings/rbac': typeof SettingsRbacRoute
   '/user-management/$userAccountId': typeof UserManagementUserAccountIdRoute
   '/committee-ballot/': typeof CommitteeBallotIndexRoute
+  '/election/': typeof ElectionIndexRoute
   '/existing-members/': typeof ExistingMembersIndexRoute
+  '/finance/': typeof FinanceIndexRoute
   '/manage-committee/': typeof ManageCommitteeIndexRoute
   '/members/': typeof MembersIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/user-management/': typeof UserManagementIndexRoute
+  '/finance/non-membership/accommodation': typeof FinanceNonMembershipAccommodationRoute
+  '/finance/non-membership/corkage': typeof FinanceNonMembershipCorkageRoute
+  '/finance/non-membership/custom-charges': typeof FinanceNonMembershipCustomChargesRoute
   '/manage-committee/meetings/history': typeof ManageCommitteeMeetingsHistoryRoute
   '/manage-committee/meetings/interview': typeof ManageCommitteeMeetingsInterviewRoute
   '/manage-committee/meetings/pending': typeof ManageCommitteeMeetingsPendingRoute
@@ -498,6 +644,8 @@ export interface FileRouteTypes {
     | '/application'
     | '/applications'
     | '/committee-ballot'
+    | '/corkage'
+    | '/custom-charges'
     | '/documents'
     | '/election'
     | '/endorsements'
@@ -520,7 +668,15 @@ export interface FileRouteTypes {
     | '/committee-ballot/attendance'
     | '/committee-ballot/candidates'
     | '/committee-ballot/pending'
+    | '/committee-ballot/signatures'
+    | '/election/minutes'
+    | '/election/nominations'
+    | '/election/notice'
+    | '/election/officers'
+    | '/election/proxies'
+    | '/election/tally'
     | '/existing-members/$accountId'
+    | '/finance/desk'
     | '/manage-committee/current-term'
     | '/manage-committee/meetings'
     | '/manage-committee/members'
@@ -530,15 +686,21 @@ export interface FileRouteTypes {
     | '/settings/appearance'
     | '/settings/automations'
     | '/settings/club'
+    | '/settings/lookups'
     | '/settings/privacy'
     | '/settings/rbac'
     | '/user-management/$userAccountId'
     | '/committee-ballot/'
+    | '/election/'
     | '/existing-members/'
+    | '/finance/'
     | '/manage-committee/'
     | '/members/'
     | '/settings/'
     | '/user-management/'
+    | '/finance/non-membership/accommodation'
+    | '/finance/non-membership/corkage'
+    | '/finance/non-membership/custom-charges'
     | '/manage-committee/meetings/history'
     | '/manage-committee/meetings/interview'
     | '/manage-committee/meetings/pending'
@@ -551,10 +713,10 @@ export interface FileRouteTypes {
     | '/admin'
     | '/application'
     | '/applications'
+    | '/corkage'
+    | '/custom-charges'
     | '/documents'
-    | '/election'
     | '/endorsements'
-    | '/finance'
     | '/governance'
     | '/guests'
     | '/login'
@@ -568,7 +730,15 @@ export interface FileRouteTypes {
     | '/committee-ballot/attendance'
     | '/committee-ballot/candidates'
     | '/committee-ballot/pending'
+    | '/committee-ballot/signatures'
+    | '/election/minutes'
+    | '/election/nominations'
+    | '/election/notice'
+    | '/election/officers'
+    | '/election/proxies'
+    | '/election/tally'
     | '/existing-members/$accountId'
+    | '/finance/desk'
     | '/manage-committee/current-term'
     | '/manage-committee/members'
     | '/manage-committee/new-term'
@@ -577,15 +747,21 @@ export interface FileRouteTypes {
     | '/settings/appearance'
     | '/settings/automations'
     | '/settings/club'
+    | '/settings/lookups'
     | '/settings/privacy'
     | '/settings/rbac'
     | '/user-management/$userAccountId'
     | '/committee-ballot'
+    | '/election'
     | '/existing-members'
+    | '/finance'
     | '/manage-committee'
     | '/members'
     | '/settings'
     | '/user-management'
+    | '/finance/non-membership/accommodation'
+    | '/finance/non-membership/corkage'
+    | '/finance/non-membership/custom-charges'
     | '/manage-committee/meetings/history'
     | '/manage-committee/meetings/interview'
     | '/manage-committee/meetings/pending'
@@ -599,6 +775,8 @@ export interface FileRouteTypes {
     | '/application'
     | '/applications'
     | '/committee-ballot'
+    | '/corkage'
+    | '/custom-charges'
     | '/documents'
     | '/election'
     | '/endorsements'
@@ -621,7 +799,15 @@ export interface FileRouteTypes {
     | '/committee-ballot/attendance'
     | '/committee-ballot/candidates'
     | '/committee-ballot/pending'
+    | '/committee-ballot/signatures'
+    | '/election/minutes'
+    | '/election/nominations'
+    | '/election/notice'
+    | '/election/officers'
+    | '/election/proxies'
+    | '/election/tally'
     | '/existing-members/$accountId'
+    | '/finance/desk'
     | '/manage-committee/current-term'
     | '/manage-committee/meetings'
     | '/manage-committee/members'
@@ -631,15 +817,21 @@ export interface FileRouteTypes {
     | '/settings/appearance'
     | '/settings/automations'
     | '/settings/club'
+    | '/settings/lookups'
     | '/settings/privacy'
     | '/settings/rbac'
     | '/user-management/$userAccountId'
     | '/committee-ballot/'
+    | '/election/'
     | '/existing-members/'
+    | '/finance/'
     | '/manage-committee/'
     | '/members/'
     | '/settings/'
     | '/user-management/'
+    | '/finance/non-membership/accommodation'
+    | '/finance/non-membership/corkage'
+    | '/finance/non-membership/custom-charges'
     | '/manage-committee/meetings/history'
     | '/manage-committee/meetings/interview'
     | '/manage-committee/meetings/pending'
@@ -654,11 +846,13 @@ export interface RootRouteChildren {
   ApplicationRoute: typeof ApplicationRoute
   ApplicationsRoute: typeof ApplicationsRoute
   CommitteeBallotRoute: typeof CommitteeBallotRouteWithChildren
+  CorkageRoute: typeof CorkageRoute
+  CustomChargesRoute: typeof CustomChargesRoute
   DocumentsRoute: typeof DocumentsRoute
-  ElectionRoute: typeof ElectionRoute
+  ElectionRoute: typeof ElectionRouteWithChildren
   EndorsementsRoute: typeof EndorsementsRoute
   ExistingMembersRoute: typeof ExistingMembersRouteWithChildren
-  FinanceRoute: typeof FinanceRoute
+  FinanceRoute: typeof FinanceRouteWithChildren
   GovernanceRoute: typeof GovernanceRoute
   GuestsRoute: typeof GuestsRoute
   LoginRoute: typeof LoginRoute
@@ -717,6 +911,20 @@ declare module '@tanstack/react-router' {
       path: '/committee-ballot'
       fullPath: '/committee-ballot'
       preLoaderRoute: typeof CommitteeBallotRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/corkage': {
+      id: '/corkage'
+      path: '/corkage'
+      fullPath: '/corkage'
+      preLoaderRoute: typeof CorkageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/custom-charges': {
+      id: '/custom-charges'
+      path: '/custom-charges'
+      fullPath: '/custom-charges'
+      preLoaderRoute: typeof CustomChargesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/documents': {
@@ -880,6 +1088,62 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CommitteeBallotPendingRouteImport
       parentRoute: typeof CommitteeBallotRoute
     }
+    '/committee-ballot/signatures': {
+      id: '/committee-ballot/signatures'
+      path: '/signatures'
+      fullPath: '/committee-ballot/signatures'
+      preLoaderRoute: typeof CommitteeBallotSignaturesRouteImport
+      parentRoute: typeof CommitteeBallotRoute
+    }
+    '/election/': {
+      id: '/election/'
+      path: '/'
+      fullPath: '/election/'
+      preLoaderRoute: typeof ElectionIndexRouteImport
+      parentRoute: typeof ElectionRoute
+    }
+    '/election/minutes': {
+      id: '/election/minutes'
+      path: '/minutes'
+      fullPath: '/election/minutes'
+      preLoaderRoute: typeof ElectionMinutesRouteImport
+      parentRoute: typeof ElectionRoute
+    }
+    '/election/nominations': {
+      id: '/election/nominations'
+      path: '/nominations'
+      fullPath: '/election/nominations'
+      preLoaderRoute: typeof ElectionNominationsRouteImport
+      parentRoute: typeof ElectionRoute
+    }
+    '/election/notice': {
+      id: '/election/notice'
+      path: '/notice'
+      fullPath: '/election/notice'
+      preLoaderRoute: typeof ElectionNoticeRouteImport
+      parentRoute: typeof ElectionRoute
+    }
+    '/election/officers': {
+      id: '/election/officers'
+      path: '/officers'
+      fullPath: '/election/officers'
+      preLoaderRoute: typeof ElectionOfficersRouteImport
+      parentRoute: typeof ElectionRoute
+    }
+    '/election/proxies': {
+      id: '/election/proxies'
+      path: '/proxies'
+      fullPath: '/election/proxies'
+      preLoaderRoute: typeof ElectionProxiesRouteImport
+      parentRoute: typeof ElectionRoute
+    }
+    '/election/tally': {
+      id: '/election/tally'
+      path: '/tally'
+      fullPath: '/election/tally'
+      preLoaderRoute: typeof ElectionTallyRouteImport
+      parentRoute: typeof ElectionRoute
+    }
     '/existing-members/': {
       id: '/existing-members/'
       path: '/'
@@ -893,6 +1157,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/existing-members/$accountId'
       preLoaderRoute: typeof ExistingMembersAccountIdRouteImport
       parentRoute: typeof ExistingMembersRoute
+    }
+    '/finance/': {
+      id: '/finance/'
+      path: '/'
+      fullPath: '/finance/'
+      preLoaderRoute: typeof FinanceIndexRouteImport
+      parentRoute: typeof FinanceRoute
+    }
+    '/finance/desk': {
+      id: '/finance/desk'
+      path: '/desk'
+      fullPath: '/finance/desk'
+      preLoaderRoute: typeof FinanceDeskRouteImport
+      parentRoute: typeof FinanceRoute
     }
     '/manage-committee/': {
       id: '/manage-committee/'
@@ -978,6 +1256,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsClubRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/lookups': {
+      id: '/settings/lookups'
+      path: '/lookups'
+      fullPath: '/settings/lookups'
+      preLoaderRoute: typeof SettingsLookupsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/privacy': {
       id: '/settings/privacy'
       path: '/privacy'
@@ -1005,6 +1290,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/user-management/$userAccountId'
       preLoaderRoute: typeof UserManagementUserAccountIdRouteImport
       parentRoute: typeof UserManagementRoute
+    }
+    '/finance/non-membership/accommodation': {
+      id: '/finance/non-membership/accommodation'
+      path: '/non-membership/accommodation'
+      fullPath: '/finance/non-membership/accommodation'
+      preLoaderRoute: typeof FinanceNonMembershipAccommodationRouteImport
+      parentRoute: typeof FinanceRoute
+    }
+    '/finance/non-membership/corkage': {
+      id: '/finance/non-membership/corkage'
+      path: '/non-membership/corkage'
+      fullPath: '/finance/non-membership/corkage'
+      preLoaderRoute: typeof FinanceNonMembershipCorkageRouteImport
+      parentRoute: typeof FinanceRoute
+    }
+    '/finance/non-membership/custom-charges': {
+      id: '/finance/non-membership/custom-charges'
+      path: '/non-membership/custom-charges'
+      fullPath: '/finance/non-membership/custom-charges'
+      preLoaderRoute: typeof FinanceNonMembershipCustomChargesRouteImport
+      parentRoute: typeof FinanceRoute
     }
     '/manage-committee/meetings/': {
       id: '/manage-committee/meetings/'
@@ -1048,6 +1354,7 @@ interface CommitteeBallotRouteChildren {
   CommitteeBallotAttendanceRoute: typeof CommitteeBallotAttendanceRoute
   CommitteeBallotCandidatesRoute: typeof CommitteeBallotCandidatesRoute
   CommitteeBallotPendingRoute: typeof CommitteeBallotPendingRoute
+  CommitteeBallotSignaturesRoute: typeof CommitteeBallotSignaturesRoute
   CommitteeBallotIndexRoute: typeof CommitteeBallotIndexRoute
 }
 
@@ -1055,11 +1362,36 @@ const CommitteeBallotRouteChildren: CommitteeBallotRouteChildren = {
   CommitteeBallotAttendanceRoute: CommitteeBallotAttendanceRoute,
   CommitteeBallotCandidatesRoute: CommitteeBallotCandidatesRoute,
   CommitteeBallotPendingRoute: CommitteeBallotPendingRoute,
+  CommitteeBallotSignaturesRoute: CommitteeBallotSignaturesRoute,
   CommitteeBallotIndexRoute: CommitteeBallotIndexRoute,
 }
 
 const CommitteeBallotRouteWithChildren = CommitteeBallotRoute._addFileChildren(
   CommitteeBallotRouteChildren,
+)
+
+interface ElectionRouteChildren {
+  ElectionMinutesRoute: typeof ElectionMinutesRoute
+  ElectionNominationsRoute: typeof ElectionNominationsRoute
+  ElectionNoticeRoute: typeof ElectionNoticeRoute
+  ElectionOfficersRoute: typeof ElectionOfficersRoute
+  ElectionProxiesRoute: typeof ElectionProxiesRoute
+  ElectionTallyRoute: typeof ElectionTallyRoute
+  ElectionIndexRoute: typeof ElectionIndexRoute
+}
+
+const ElectionRouteChildren: ElectionRouteChildren = {
+  ElectionMinutesRoute: ElectionMinutesRoute,
+  ElectionNominationsRoute: ElectionNominationsRoute,
+  ElectionNoticeRoute: ElectionNoticeRoute,
+  ElectionOfficersRoute: ElectionOfficersRoute,
+  ElectionProxiesRoute: ElectionProxiesRoute,
+  ElectionTallyRoute: ElectionTallyRoute,
+  ElectionIndexRoute: ElectionIndexRoute,
+}
+
+const ElectionRouteWithChildren = ElectionRoute._addFileChildren(
+  ElectionRouteChildren,
 )
 
 interface ExistingMembersRouteChildren {
@@ -1075,6 +1407,27 @@ const ExistingMembersRouteChildren: ExistingMembersRouteChildren = {
 const ExistingMembersRouteWithChildren = ExistingMembersRoute._addFileChildren(
   ExistingMembersRouteChildren,
 )
+
+interface FinanceRouteChildren {
+  FinanceDeskRoute: typeof FinanceDeskRoute
+  FinanceIndexRoute: typeof FinanceIndexRoute
+  FinanceNonMembershipAccommodationRoute: typeof FinanceNonMembershipAccommodationRoute
+  FinanceNonMembershipCorkageRoute: typeof FinanceNonMembershipCorkageRoute
+  FinanceNonMembershipCustomChargesRoute: typeof FinanceNonMembershipCustomChargesRoute
+}
+
+const FinanceRouteChildren: FinanceRouteChildren = {
+  FinanceDeskRoute: FinanceDeskRoute,
+  FinanceIndexRoute: FinanceIndexRoute,
+  FinanceNonMembershipAccommodationRoute:
+    FinanceNonMembershipAccommodationRoute,
+  FinanceNonMembershipCorkageRoute: FinanceNonMembershipCorkageRoute,
+  FinanceNonMembershipCustomChargesRoute:
+    FinanceNonMembershipCustomChargesRoute,
+}
+
+const FinanceRouteWithChildren =
+  FinanceRoute._addFileChildren(FinanceRouteChildren)
 
 interface ManageCommitteeMeetingsRouteChildren {
   ManageCommitteeMeetingsHistoryRoute: typeof ManageCommitteeMeetingsHistoryRoute
@@ -1137,6 +1490,7 @@ interface SettingsRouteChildren {
   SettingsAppearanceRoute: typeof SettingsAppearanceRoute
   SettingsAutomationsRoute: typeof SettingsAutomationsRoute
   SettingsClubRoute: typeof SettingsClubRoute
+  SettingsLookupsRoute: typeof SettingsLookupsRoute
   SettingsPrivacyRoute: typeof SettingsPrivacyRoute
   SettingsRbacRoute: typeof SettingsRbacRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
@@ -1147,6 +1501,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsAppearanceRoute: SettingsAppearanceRoute,
   SettingsAutomationsRoute: SettingsAutomationsRoute,
   SettingsClubRoute: SettingsClubRoute,
+  SettingsLookupsRoute: SettingsLookupsRoute,
   SettingsPrivacyRoute: SettingsPrivacyRoute,
   SettingsRbacRoute: SettingsRbacRoute,
   SettingsIndexRoute: SettingsIndexRoute,
@@ -1177,11 +1532,13 @@ const rootRouteChildren: RootRouteChildren = {
   ApplicationRoute: ApplicationRoute,
   ApplicationsRoute: ApplicationsRoute,
   CommitteeBallotRoute: CommitteeBallotRouteWithChildren,
+  CorkageRoute: CorkageRoute,
+  CustomChargesRoute: CustomChargesRoute,
   DocumentsRoute: DocumentsRoute,
-  ElectionRoute: ElectionRoute,
+  ElectionRoute: ElectionRouteWithChildren,
   EndorsementsRoute: EndorsementsRoute,
   ExistingMembersRoute: ExistingMembersRouteWithChildren,
-  FinanceRoute: FinanceRoute,
+  FinanceRoute: FinanceRouteWithChildren,
   GovernanceRoute: GovernanceRoute,
   GuestsRoute: GuestsRoute,
   LoginRoute: LoginRoute,

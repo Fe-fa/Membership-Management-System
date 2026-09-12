@@ -13,6 +13,12 @@ public class CastCommitteeBallotRequest
     public string VoteValue { get; set; } = string.Empty;
 }
 
+public class SetBallotVotingRequest
+{
+    /// <summary>true = OPEN voting, false = CLOSED</summary>
+    public bool Open { get; set; }
+}
+
 public class SetAttendanceRequest
 {
     public List<long> CommitteeMemberIds { get; set; } = [];
@@ -72,7 +78,13 @@ public class CommitteeBallotItemDto
     public string? ExcludedUntil { get; set; }
     public bool MyVoteCast { get; set; }
     public string? MyVoteValue { get; set; }
+    /// <summary>True when item status is OPEN (voting accepted).</summary>
+    public bool VotingOpen { get; set; }
     public bool CanProceedToSignatures { get; set; }
+    /// <summary>Entrance + annual fees cleared by Finance (Paid/Waived) for cash, cheque, M-Pesa, or bank.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    [JsonPropertyName("financeFeesCleared")]
+    public bool FinanceFeesCleared { get; set; }
     public int CommitteeSignatures { get; set; }
     public int GmSignatures { get; set; }
     public bool ChairmanSigned { get; set; }
@@ -103,6 +115,7 @@ public class BallotVoterDto
     public string RoleName { get; set; } = string.Empty;
     public string? VoteValue { get; set; }
     public bool Present { get; set; }
+    public string? CastAt { get; set; }
 }
 
 public class BallotSignatureDto
@@ -112,6 +125,7 @@ public class BallotSignatureDto
     public string RoleName { get; set; } = string.Empty;
     public string Kind { get; set; } = string.Empty;
     public string? DateElected { get; set; }
+    public string? SignedAt { get; set; }
 }
 
 public class BallotCandidateDto

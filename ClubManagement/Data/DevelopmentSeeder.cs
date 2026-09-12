@@ -44,7 +44,8 @@ public static class DevelopmentSeeder
         await EnsurePayment(db, db.PaymentMethods, "CHEQUE", "Cheque");
         await EnsurePayment(db, db.PaymentMethods, "MPESA", "M-Pesa");
         await EnsurePayment(db, db.PaymentMethods, "BANK_TRANSFER", "Bank transfer");
-        await EnsurePayment(db, db.PaymentMethods, "CARD", "Card");
+        await EnsurePayment(db, db.PaymentMethods, "CARD", "Credit / debit card");
+        await EnsurePayment(db, db.PaymentMethods, "CLUB_CARD", "Club card / account");
 
         await EnsurePayment(db, db.PaymentStatuses, "PENDING", "Pending");
         await EnsurePayment(db, db.PaymentStatuses, "PAID", "Paid");
@@ -55,6 +56,9 @@ public static class DevelopmentSeeder
 
         await EnsureFeeType(db, "JOINING", "Joining fee");
         await EnsureFeeType(db, "ANNUAL", "Annual subscription");
+        await EnsureFeeType(db, "ACCOMMODATION", "Accommodation / room");
+        await EnsureFeeType(db, "CORKAGE", "Corkage / outside food");
+        await EnsureFeeType(db, "OTHER", "Other club charge");
 
         await EnsureGuestStatus(db, "ACTIVE", "Active");
         await EnsureGuestStatus(db, "BARRED", "Barred");

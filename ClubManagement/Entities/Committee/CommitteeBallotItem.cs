@@ -16,7 +16,7 @@ public class CommitteeBallotItem
     [Column("application_id")]
     public long ApplicationId { get; set; }
 
-    /// <summary>OPEN | PASSED | REJECTED</summary>
+    /// <summary>OPEN | CLOSED | PASSED | REJECTED</summary>
     [Column("status")]
     [Required]
     public string Status { get; set; } = "OPEN";

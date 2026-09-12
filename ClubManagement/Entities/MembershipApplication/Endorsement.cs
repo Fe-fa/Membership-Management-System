@@ -43,6 +43,22 @@ namespace ClubManagement.Entities
         [Column("endorser_email")]
         public string? EndorserEmail { get; set; }
 
+        /// <summary>COMPLETE | DECLINED. Null/empty means a live or legacy statement.</summary>
+        [Column("status")]
+        [MaxLength(20)]
+        public string? Status { get; set; }
+
+        [Column("declined_at")]
+        public DateTime? DeclinedAt { get; set; }
+
+        [Column("decline_reason")]
+        [MaxLength(1000)]
+        public string? DeclineReason { get; set; }
+
+        /// <summary>When true, this row is omitted from the member's History tab until restored.</summary>
+        [Column("hidden_from_endorser")]
+        public bool HiddenFromEndorser { get; set; }
+
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 
@@ -58,6 +74,16 @@ namespace ClubManagement.Entities
         public virtual MApplication Application { get; set; } = null!;
 
         public virtual MProfile Endorser { get; set; } = null!;
+
+        public const string StatusComplete = "COMPLETE";
+        public const string StatusDeclined = "DECLINED";
+        public const string DeclinedPrefix = "DECLINED:";
+
+        public bool IsDeclined => IsDeclinedRecord(Status, PersonalKnowledge);
+
+        public static bool IsDeclinedRecord(string? status, string? personalKnowledge) =>
+            string.Equals(status, StatusDeclined, StringComparison.OrdinalIgnoreCase)
+            || (personalKnowledge ?? "").StartsWith(DeclinedPrefix, StringComparison.OrdinalIgnoreCase);
 
     }
 }

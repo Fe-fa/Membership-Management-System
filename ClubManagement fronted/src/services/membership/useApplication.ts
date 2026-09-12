@@ -18,6 +18,7 @@ import {
   type ApplicationDraft,
 } from "./schema";
 import { STEPS, stepIndex, type StepId } from "./steps";
+import { applyApplicantPath } from "./applicantPath";
 
 export type ErrorMap = Record<string, string>;
 
@@ -65,7 +66,7 @@ export function useApplication() {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
-    setDraft(emptyDraft());
+    setDraft(applyApplicantPath(emptyDraft()));
     setCompleted([]);
     setStep("personal");
     setErrors({});
@@ -73,7 +74,7 @@ export function useApplication() {
 
   useEffect(() => {
     if (!record?.id) return;
-    setDraft(normalizeDraft({ ...emptyDraft(), ...record.draft }));
+    setDraft(applyApplicantPath(normalizeDraft({ ...emptyDraft(), ...record.draft })));
     setCompleted((record.completedSteps as StepId[]) ?? []);
     if (record.status && record.status !== "Draft") {
       setStep("review");

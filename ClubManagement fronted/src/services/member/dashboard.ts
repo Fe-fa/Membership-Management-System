@@ -39,6 +39,7 @@ export type MemberDashboard = {
   standing: string;
   standingDetail: string;
   pendingEndorsements: number;
+  pendingProxies: number;
   childrenRequiringOwnMembership: number;
 };
 
@@ -79,6 +80,7 @@ export function fallbackMemberDashboard(user: AuthUser): MemberDashboard {
     standing: "InGoodStanding",
     standingDetail: "Article 5 Full-class privileges apply until class is confirmed on the register.",
     pendingEndorsements: 0,
+    pendingProxies: 0,
     childrenRequiringOwnMembership: 0,
   };
 }

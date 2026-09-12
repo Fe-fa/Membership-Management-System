@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { ApplicantReview } from "@/components/panels/ApplicantReview";
 import { PageBackLink, PageFrame, PageHeader } from "@/components/layout/PageFrame";
+import { PageBodyLoading } from "@/components/layout/PageLoading";
 import { StaffMembershipForm } from "@/components/membership/StaffMembershipForm";
 import { Button } from "@/components/ui/button";
 import { draftToMemberUpdate, memberProfileToDraft } from "@/services/admin/memberForm";
@@ -78,7 +79,7 @@ export function ExistingMemberDetailPage() {
     return (
       <PageFrame width="lg">
         <PageBackLink to="/existing-members" label="Back to existing members" />
-        <p className="text-sm text-muted-foreground">Loading member profile…</p>
+        <PageBodyLoading label="Loading member profile…" />
       </PageFrame>
     );
   }

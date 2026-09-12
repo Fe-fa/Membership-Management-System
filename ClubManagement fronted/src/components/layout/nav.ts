@@ -7,11 +7,13 @@
   ClipboardCheck,
   ClipboardList,
   ConciergeBell,
+  Database,
   FileClock,
   FileText,
   BookUser,
   CircleAlert,
   ClipboardPen,
+  FileSignature,
   Headset,
   Landmark,
   LayoutGrid,
@@ -24,8 +26,10 @@
   UserCog,
   Users,
   UsersRound,
+  ScrollText,
   Vote,
   Wallet,
+  Wine,
   type LucideIcon,
 } from "lucide-react";
 
@@ -41,6 +45,7 @@ export type AppNavItem = {
   roles?: string[];
   card?: keyof MemberDashboard["cards"];
   disabled?: boolean;
+  exact?: boolean;
 };
 
 export type AppNavGroup = {
@@ -55,11 +60,10 @@ const APPLICANT_NAV: AppNavGroup[] = [
     items: [
       { label: "Home", to: "/", icon: LayoutGrid },
       { label: "Application status", to: "/applications", icon: FileClock },
-      { label: "Profile", to: "/profile", icon: UserRound },
       { label: "Documents", to: "/documents", icon: FileText },
-      { label: "Payment history", to: "/payment", icon: Receipt },
+      { label: "Payment", to: "/payment", icon: Receipt },
       { label: "Support", to: "/support", icon: LifeBuoy },
-      { label: "Settings", to: "/settings", icon: Settings },
+      { label: "Settings", to: "/settings/account", icon: Settings },
     ],
   },
 ];
@@ -140,6 +144,12 @@ function electedMemberModuleNav(pathname: string): AppNavGroup[] {
             icon: ClipboardList,
             card: "committeeBallot",
           },
+          {
+            label: "Signatures",
+            to: "/committee-ballot/signatures",
+            icon: FileSignature,
+            card: "committeeBallot",
+          },
         ],
       },
     ];
@@ -149,6 +159,22 @@ function electedMemberModuleNav(pathname: string): AppNavGroup[] {
       label: "Accommodation",
       to: "/accommodation",
       icon: BedDouble,
+      card: "accommodation",
+    });
+  }
+  if (pathname === "/corkage" || pathname.startsWith("/corkage/")) {
+    return memberCardNav("Corkage", {
+      label: "Corkage",
+      to: "/corkage",
+      icon: Wine,
+      card: "accommodation",
+    });
+  }
+  if (pathname === "/custom-charges" || pathname.startsWith("/custom-charges/")) {
+    return memberCardNav("Custom charges", {
+      label: "Custom charges",
+      to: "/custom-charges",
+      icon: Receipt,
       card: "accommodation",
     });
   }
@@ -252,13 +278,10 @@ const FINANCE_NAV: AppNavGroup[] = [
   {
     label: "Finance",
     items: [
-      { label: "Finance desk", to: "/finance", icon: Wallet },
-      {
-        label: "Subscriptions & receipts",
-        to: "/finance",
-        icon: Receipt,
-        match: ["/finance"],
-      },
+      { label: "Finance desk", to: "/finance/desk", icon: Wallet, match: ["/finance/desk", "/finance"] },
+      { label: "Accommodation", to: "/finance/non-membership/accommodation", icon: BedDouble },
+      { label: "Corkage", to: "/finance/non-membership/corkage", icon: Wine },
+      { label: "Custom charges", to: "/finance/non-membership/custom-charges", icon: Receipt },
     ],
   },
 ];
@@ -329,14 +352,27 @@ const COMMITTEE_BALLOT_NAV: AppNavGroup[] = [
         to: "/committee-ballot/candidates",
         icon: ClipboardList,
       },
+      {
+        label: "Signatures",
+        to: "/committee-ballot/signatures",
+        icon: FileSignature,
+      },
     ],
   },
 ];
 
 const ELECTION_NAV: AppNavGroup[] = [
   {
-    label: "AGM / EGM Election",
-    items: [{ label: "Election desk", to: "/election", icon: Vote }],
+    label: "Election desk",
+    collapsible: true,
+    items: [
+      { label: "Meeting notice", to: "/election/notice", icon: FileText, exact: true },
+      { label: "Officers & ballot", to: "/election/officers", icon: ShieldCheck, exact: true },
+      { label: "Live tally", to: "/election/tally", icon: ClipboardList, exact: true },
+      { label: "Lodged proxies", to: "/election/proxies", icon: UsersRound, exact: true },
+      { label: "Nominations", to: "/election/nominations", icon: UserPlus, exact: true },
+      { label: "Meeting minutes", to: "/election/minutes", icon: ScrollText, exact: true },
+    ],
   },
 ];
 
@@ -375,7 +411,7 @@ const RECEPTION_NAV: AppNavGroup[] = [
     label: "Reception",
     items: [
       {
-        label: "Guest Directory (Lookup)",
+        label: "Guest Directory ",
         to: "/reception",
         icon: BookUser,
         search: { section: "lookup" },
@@ -383,21 +419,21 @@ const RECEPTION_NAV: AppNavGroup[] = [
       },
       {
         label: "Log Visit",
-        to: "/reception",
+        to: "#",
         icon: ClipboardPen,
         search: { section: "visit" },
         roles: ["RECEPTIONIST"],
       },
       {
         label: "Guests On Site",
-        to: "/reception",
+        to: "#",
         icon: Users,
         search: { section: "onsite" },
         roles: ["RECEPTIONIST"],
       },
       {
         label: "Visit Policy & Rules",
-        to: "/reception",
+        to: "#",
         icon: CircleAlert,
         search: { section: "policy" },
         roles: ["RECEPTIONIST"],
@@ -406,6 +442,7 @@ const RECEPTION_NAV: AppNavGroup[] = [
         label: "Guest visits",
         to: "/reception",
         icon: ConciergeBell,
+        search: { section: "visit" },
         roles: ["ADMIN", "GENERAL_MANAGER", "CHAIRMAN"],
       },
     ],
@@ -416,11 +453,16 @@ const SETTINGS_NAV: AppNavGroup[] = [
   {
     label: "Settings",
     items: [
-      { label: "Settings home", to: "/settings", icon: Settings },
       {
-        label: "Role-based access",
+        label: "Roles & permissions",
         to: "/settings/rbac",
         icon: ShieldCheck,
+        roles: ["ADMIN", "GENERAL_MANAGER", "CHAIRMAN"],
+      },
+      {
+        label: "Lookups & fees",
+        to: "/settings/lookups",
+        icon: Database,
         roles: ["ADMIN", "GENERAL_MANAGER", "CHAIRMAN"],
       },
       {
@@ -443,7 +485,6 @@ const PERSONAL_SETTINGS_NAV: AppNavGroup[] = [
   {
     label: "Settings",
     items: [
-      { label: "Settings home", to: "/settings", icon: Settings },
       { label: "Account & Profile", to: "/settings/account", icon: UserRound },
       { label: "Privacy & Data", to: "/settings/privacy", icon: ShieldCheck },
       { label: "Interface", to: "/settings/appearance", icon: Settings },
@@ -550,8 +591,11 @@ export function navForUser(
 export function isNavActive(
   pathname: string,
   search: unknown,
-  item: Pick<AppNavItem, "to" | "match" | "search">,
+  item: Pick<AppNavItem, "to" | "match" | "search" | "exact">,
 ) {
+  if (item.exact) {
+    return pathname === item.to || pathname === `${item.to}/`;
+  }
   if (item.search?.section) {
     const section = currentSection(search);
     const onPath = pathname === item.to || pathname.startsWith(`${item.to}/`);

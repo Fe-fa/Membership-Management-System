@@ -23,7 +23,7 @@ namespace ClubManagement.Entities.Settings
 
         [Column("setting_value")]
         [Required]
-        public string SettingValue { get; set; }
+        public string SettingValue { get; set; } = string.Empty;
 
         [Column("effective_date")]
         public DateOnly? EffectiveDate { get; set; }

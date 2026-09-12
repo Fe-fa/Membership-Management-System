@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { ListPagination } from "@/components/common/ListPagination";
 import { PageBackLink, PageFrame, PageHeader } from "@/components/layout/PageFrame";
+import { PageDataGate } from "@/components/layout/PageLoading";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -128,6 +129,7 @@ export function UserManagementPage() {
         </label>
       </div>
 
+      <PageDataGate loading={list.isLoading} label="Loading users…" minHeightClassName="min-h-[22rem]">
       <div className="overflow-x-auto rounded-xl border border-border">
         <table className="w-full min-w-[860px] text-left text-sm">
           <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
@@ -140,13 +142,7 @@ export function UserManagementPage() {
             </tr>
           </thead>
           <tbody>
-            {list.isLoading ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
-                  Loading users…
-                </td>
-              </tr>
-            ) : (data?.items.length ?? 0) === 0 ? (
+            {(data?.items.length ?? 0) === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
                   No users match these filters.
@@ -204,6 +200,7 @@ export function UserManagementPage() {
           </tbody>
         </table>
       </div>
+      </PageDataGate>
 
       <ListPagination
         page={page}

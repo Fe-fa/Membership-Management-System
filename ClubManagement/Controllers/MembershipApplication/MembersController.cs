@@ -1,4 +1,5 @@
 using ClubManagement.Data.MembershipApplication;
+using ClubManagement.Entities;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -24,6 +25,7 @@ public class MembersController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<EligibleSupporterDto>>> GetEligibleSupporters(
         [FromQuery] string? search,
         [FromQuery] int minYears = 3,
+        [FromQuery] long? applicationId = null,
         CancellationToken cancellationToken = default)
     {
         var term = (search ?? "").Trim();
@@ -33,6 +35,19 @@ public class MembersController : ControllerBase
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var requiredYears = Math.Max(minYears, 0);
         var earliestEligibleJoin = today.AddYears(-requiredYears);
+
+        HashSet<long> declinedForApplication = [];
+        if (applicationId is > 0)
+        {
+            var declinedIds = await _dbContext.Endorsements.AsNoTracking()
+                .Where(e => e.ApplicationId == applicationId.Value
+                    && (e.Status == Endorsement.StatusDeclined
+                        || (e.PersonalKnowledge != null && e.PersonalKnowledge.StartsWith(Endorsement.DeclinedPrefix))))
+                .Select(e => e.EndorserProfileId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+            declinedForApplication = declinedIds.ToHashSet();
+        }
 
         // Find by membership number among live accounts (eligibility applied after load).
         var rows = await _dbContext.Accounts
@@ -59,7 +74,9 @@ public class MembersController : ControllerBase
             })
             .ToListAsync(cancellationToken);
 
-        var members = rows.Select(a =>
+        var members = rows
+            .Where(a => !declinedForApplication.Contains(a.ProfileId))
+            .Select(a =>
         {
             var fullName = string.Join(" ", new[] { a.Title, a.FirstName, a.MiddleName, a.LastName }
                 .Where(v => !string.IsNullOrWhiteSpace(v)));

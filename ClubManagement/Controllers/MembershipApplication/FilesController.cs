@@ -19,7 +19,7 @@ public class FilesController : ControllerBase
 
     private static readonly HashSet<string> AllowedPurposes = new(StringComparer.OrdinalIgnoreCase)
     {
-        "photo", "cv", "license", "idPassport", "cheque", "chequeAnnual", "chequeJoining"
+        "photo", "cv", "license", "idPassport", "cheque", "chequeAnnual", "chequeJoining", "proxy"
     };
 
     private static readonly HashSet<string> AllowedContentTypes = new(StringComparer.OrdinalIgnoreCase)

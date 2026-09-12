@@ -21,6 +21,8 @@ export type BallotPerson = {
   present?: boolean;
   kind?: string;
   dateElected?: string | null;
+  castAt?: string | null;
+  signedAt?: string | null;
 };
 
 export type BallotItem = {
@@ -39,7 +41,9 @@ export type BallotItem = {
   excludedUntil?: string | null;
   myVoteCast: boolean;
   myVoteValue?: string | null;
+  votingOpen?: boolean;
   canProceedToSignatures: boolean;
+  financeFeesCleared?: boolean;
   committeeSignatures: number;
   gmSignatures: number;
   chairmanSigned: boolean;
@@ -99,15 +103,31 @@ export function peopleList(...candidates: unknown[]): BallotPerson[] {
         present: Boolean(pick("present", "Present") ?? false),
         kind: String(pick("kind", "Kind") ?? ""),
         dateElected: (pick("dateElected", "DateElected") as string | undefined) ?? null,
+        castAt: (pick("castAt", "CastAt") as string | undefined) ?? null,
+        signedAt: (pick("signedAt", "SignedAt") as string | undefined) ?? null,
       };
     });
   }
   return [];
 }
 
+/** True when joining + annual are Paid/Waived (cash, cheque, M-Pesa, bank). */
+export function isFinanceFeesCleared(row: BallotItem) {
+  const anyRow = row as BallotItem & { FinanceFeesCleared?: boolean };
+  return anyRow.financeFeesCleared === true || anyRow.FinanceFeesCleared === true;
+}
+
 /** Signatures appear only after more than 4 members have voted on that applicant. */
 export function signaturesUnlocked(row: Pick<BallotItem, "votesCast" | "itemStatus">) {
-  return row.votesCast > 4 || row.itemStatus !== "OPEN";
+  return row.votesCast > 4 || row.itemStatus === "PASSED" || row.itemStatus === "CLOSED";
+}
+
+export function isVotingOpen(row: Pick<BallotItem, "itemStatus" | "votingOpen">) {
+  return row.votingOpen === true || row.itemStatus === "OPEN";
+}
+
+export function canToggleVoting(row: Pick<BallotItem, "itemStatus" | "autoRejected">) {
+  return !row.autoRejected && (row.itemStatus === "OPEN" || row.itemStatus === "CLOSED");
 }
 
 export function useAdmissionBallot() {
@@ -178,6 +198,19 @@ export function useAdmissionBallot() {
     onError: (e) => toast.error(extractErrorMessage(e)),
   });
 
+  const setVoting = useMutation({
+    mutationFn: ({ itemId, open }: { itemId: number; open: boolean }) =>
+      apiRequest(`/api/committees/ballot/${itemId}/voting`, {
+        method: "POST",
+        body: JSON.stringify({ open }),
+      }),
+    onSuccess: (_d, vars) => {
+      toast.success(vars.open ? "Voting opened." : "Voting closed.");
+      invalidate();
+    },
+    onError: (e) => toast.error(extractErrorMessage(e)),
+  });
+
   const proceed = useMutation({
     mutationFn: (itemId: number) =>
       apiRequest(`/api/committees/ballot/${itemId}/signatures`, { method: "POST" }),
@@ -211,13 +244,23 @@ export function useAdmissionBallot() {
           ? "Chairman election recorded — membership number, date elected, and type assigned."
           : "Signature recorded.",
       );
+      if (vars.kind === "CHAIRMAN") {
+        setMembershipNumber("");
+        setElectedType("");
+        setDateElected(kenyaTodayISO());
+      }
       invalidate();
     },
     onError: (e) => toast.error(extractErrorMessage(e)),
   });
 
   const busy =
-    attach.isPending || vote.isPending || proceed.isPending || sign.isPending || saveAttendance.isPending;
+    attach.isPending ||
+    vote.isPending ||
+    setVoting.isPending ||
+    proceed.isPending ||
+    sign.isPending ||
+    saveAttendance.isPending;
 
   const toggleSeat = (id: number) => {
     setPresentIds((prev) => {
@@ -236,6 +279,7 @@ export function useAdmissionBallot() {
     saveAttendance,
     attach,
     vote,
+    setVoting,
     proceed,
     sign,
     toggleSeat,

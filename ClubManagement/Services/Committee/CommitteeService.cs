@@ -9,6 +9,8 @@ using Microsoft.Extensions.Options;
 
 namespace ClubManagement.Services.Committee;
 
+
+
 public interface ICommitteeService
 {
     Task EnsureLookupsAsync(CancellationToken cancellationToken);

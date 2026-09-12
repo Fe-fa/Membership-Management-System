@@ -24,6 +24,7 @@ export type CommitteeBallotItem = {
   myVoteCast: boolean;
   myVoteValue?: string | null;
   canProceedToSignatures: boolean;
+  financeFeesCleared?: boolean;
 };
 
 type BallotMeeting = {
@@ -231,16 +232,37 @@ export function MeetingBallotPanel({
                   </td>
                   <td className="px-3 py-2">
                     {row.canProceedToSignatures ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() => proceed.mutate(row.committeeBallotItemId)}
-                      >
-                        {proceed.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-                        Proceed to signatures
-                      </Button>
+                      <div className="space-y-1">
+                        {!(row.financeFeesCleared || (row as { FinanceFeesCleared?: boolean }).FinanceFeesCleared) ? (
+                          <p className="text-[11px] text-amber-900">
+                            Finance must mark entrance &amp; annual fees Paid (cash / cheque / M-Pesa / bank)
+                          </p>
+                        ) : null}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={
+                            busy ||
+                            !(
+                              row.financeFeesCleared ||
+                              (row as { FinanceFeesCleared?: boolean }).FinanceFeesCleared
+                            )
+                          }
+                          title={
+                            !(
+                              row.financeFeesCleared ||
+                              (row as { FinanceFeesCleared?: boolean }).FinanceFeesCleared
+                            )
+                              ? "Finance must mark entrance and annual fees Paid first"
+                              : undefined
+                          }
+                          onClick={() => proceed.mutate(row.committeeBallotItemId)}
+                        >
+                          {proceed.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+                          Proceed to signatures
+                        </Button>
+                      </div>
                     ) : null}
                   </td>
                 </tr>

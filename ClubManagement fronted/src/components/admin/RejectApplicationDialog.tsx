@@ -19,12 +19,24 @@ export function RejectApplicationDialog({
   pending = false,
   onOpenChange,
   onConfirm,
+  title = "Are you sure you want to reject?",
+  description,
+  reasonTitle = "Rejection reason",
+  reasonDescription = "Required. This message is shown to the applicant.",
+  reasonPlaceholder = "Why this application is being rejected",
+  submitLabel = "Reject application",
 }: {
   open: boolean;
   applicantLabel?: string;
   pending?: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (reason: string) => void;
+  title?: string;
+  description?: string;
+  reasonTitle?: string;
+  reasonDescription?: string;
+  reasonPlaceholder?: string;
+  submitLabel?: string;
 }) {
   const [step, setStep] = useState<"confirm" | "reason">("confirm");
   const [reason, setReason] = useState("");
@@ -46,11 +58,12 @@ export function RejectApplicationDialog({
         {step === "confirm" ? (
           <>
             <DialogHeader>
-              <DialogTitle>Are you sure you want to reject?</DialogTitle>
+              <DialogTitle>{title}</DialogTitle>
               <DialogDescription>
-                {applicantLabel
-                  ? `This will reject ${applicantLabel}. The applicant will see your reason.`
-                  : "The applicant will see your reason."}
+                {description
+                  ?? (applicantLabel
+                    ? `This will reject ${applicantLabel}. The applicant will see your reason.`
+                    : "The applicant will see your reason.")}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
@@ -65,10 +78,8 @@ export function RejectApplicationDialog({
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>Rejection reason</DialogTitle>
-              <DialogDescription>
-                Required. This message is shown to the applicant.
-              </DialogDescription>
+              <DialogTitle>{reasonTitle}</DialogTitle>
+              <DialogDescription>{reasonDescription}</DialogDescription>
             </DialogHeader>
             <label className="grid gap-1 text-sm">
               <Label htmlFor="reject-reason">Reason</Label>
@@ -76,7 +87,7 @@ export function RejectApplicationDialog({
                 id="reject-reason"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="Why this application is being rejected"
+                placeholder={reasonPlaceholder}
                 rows={4}
               />
             </label>
@@ -91,7 +102,7 @@ export function RejectApplicationDialog({
                 onClick={() => onConfirm(reason.trim())}
               >
                 {pending ? <Loader2 className="size-4 animate-spin" /> : null}
-                Reject application
+                {submitLabel}
               </Button>
             </DialogFooter>
           </>

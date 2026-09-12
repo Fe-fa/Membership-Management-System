@@ -4,7 +4,9 @@ using System.Text;
 using ClubManagement.Auth;
 using ClubManagement.Data.MembershipApplication;
 using ClubManagement.Entities;
+using ClubManagement.Entities.Guests;
 using ClubManagement.Entities.Identity;
+using ClubManagement.Services.Guests;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -20,7 +22,12 @@ public record RegisterRequest(
     string? Username = null,
     long? GuestId = null,
     string? IdPassportNo = null,
-    string? VisitSlipCode = null);
+    string? VisitSlipCode = null,
+    string? ApplicationCategory = null,
+    long? ParentAccountId = null,
+    string? ParentMembershipNo = null,
+    string? ParentFullName = null,
+    DateOnly? DateOfBirth = null);
 /// <summary>Sign-in identifier: email (any role) or membership number (members / staff).</summary>
 public record LoginRequest(string Password, string? Login = null, string? Username = null, string? Email = null);
 public record AuthUserDto(
@@ -55,17 +62,20 @@ public class AuthService : IAuthService
     private readonly JwtOptions _jwt;
     private readonly IUserManagementService _users;
     private readonly ITenantContext _tenant;
+    private readonly IGuestService _guests;
 
     public AuthService(
         ApplicationModuleDbContext db,
         IOptions<JwtOptions> jwt,
         IUserManagementService users,
-        ITenantContext tenant)
+        ITenantContext tenant,
+        IGuestService guests)
     {
         _db = db;
         _jwt = jwt.Value;
         _users = users;
         _tenant = tenant;
+        _guests = guests;
     }
 
     public async Task<AuthResponse> RegisterApplicantAsync(RegisterRequest request, CancellationToken cancellationToken)
@@ -75,32 +85,52 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("Email and a password of at least 8 characters are required.");
         if (!email.Contains('@'))
             throw new InvalidOperationException("Enter a valid email address.");
-        if (request.GuestId is null or <= 0)
+
+        var childOfMember = string.Equals(request.ApplicationCategory, "CHILD_OF_MEMBER", StringComparison.OrdinalIgnoreCase);
+        ParentApplicantEligibilityDto? parent = null;
+        if (childOfMember)
+        {
+            parent = await _guests.CheckParentApplicantAsync(new ParentApplicantRequest(
+                $"{request.FirstName} {request.LastName}",
+                email,
+                request.Mobile,
+                request.ParentMembershipNo,
+                request.ParentFullName), cancellationToken);
+            if (!parent.CanContinue || parent.ParentAccountId is null)
+                throw new InvalidOperationException(parent.Message);
+            if (request.ParentAccountId is long claimed && claimed != parent.ParentAccountId)
+                throw new InvalidOperationException("Parent verification does not match. Verify the parent again.");
+        }
+        else if (request.GuestId is null or <= 0)
             throw new InvalidOperationException("We have no record of your visits. Please visit the Aero Club of East Africa and ask reception to introduce and log you as a guest of an existing member before registering an account.");
         var idPassport = (request.IdPassportNo ?? "").Trim();
         if (string.IsNullOrWhiteSpace(idPassport))
             throw new InvalidOperationException("ID / Passport number is required to create your applicant profile.");
 
-        var guest = await _db.Guests
-            .Include(g => g.GuestStatus)
-            .Include(g => g.MVisits)
-            .FirstOrDefaultAsync(g => g.GuestId == request.GuestId.Value && g.IsActive, cancellationToken);
-        if (guest is null)
-            throw new InvalidOperationException("We have no record of your visits. Please visit the Aero Club of East Africa and ask reception to introduce and log you as a guest of an existing member before registering an account.");
-        if (!string.IsNullOrWhiteSpace(guest.BarredReason) ||
-            string.Equals(guest.GuestStatus.Code, "BARRED", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("This guest is barred and may not register.");
-        if (guest.GuestProfileId is not null)
-            throw new InvalidOperationException("This guest already has an applicant account. Sign in instead.");
-        if (!string.IsNullOrWhiteSpace(request.VisitSlipCode) &&
-            !string.Equals(guest.VisitSlipCode, request.VisitSlipCode.Trim(), StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("The visit slip code does not match this guest record.");
+        MGuest? guest = null;
+        if (!childOfMember)
+        {
+            guest = await _db.Guests
+                .Include(g => g.GuestStatus)
+                .Include(g => g.MVisits)
+                .FirstOrDefaultAsync(g => g.GuestId == request.GuestId!.Value && g.IsActive, cancellationToken);
+            if (guest is null)
+                throw new InvalidOperationException("We have no record of your visits. Please visit the Aero Club of East Africa and ask reception to introduce and log you as a guest of an existing member before registering an account.");
+            if (!string.IsNullOrWhiteSpace(guest.BarredReason) ||
+                string.Equals(guest.GuestStatus.Code, "BARRED", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("This guest is barred and may not register.");
+            if (guest.GuestProfileId is not null)
+                throw new InvalidOperationException("This guest already has an applicant account. Sign in instead.");
+            if (!string.IsNullOrWhiteSpace(request.VisitSlipCode) &&
+                !string.Equals(guest.VisitSlipCode, request.VisitSlipCode.Trim(), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("The visit slip code does not match this guest record.");
 
-        const int requiredVisits = 3;
-        var visitCount = guest.MVisits.Count;
-        if (visitCount < requiredVisits)
-            throw new InvalidOperationException(
-                $"You need to visit the Club at least {requiredVisits} times before registering. Visits recorded so far: {visitCount}/{requiredVisits}. Please visit the Club again.");
+            const int requiredVisits = 3;
+            var visitCount = guest.MVisits.Count;
+            if (visitCount < requiredVisits)
+                throw new InvalidOperationException(
+                    $"You need to visit the Club at least {requiredVisits} times before registering. Visits recorded so far: {visitCount}/{requiredVisits}. Please visit the Club again.");
+        }
 
         if (await _db.Profiles.AnyAsync(x => x.IdPassportNo == idPassport, cancellationToken))
             throw new InvalidOperationException("An account with that ID / Passport number already exists.");
@@ -114,7 +144,7 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("An account with that email already exists.");
 
         var now = DateTime.UtcNow;
-        var mobile = string.IsNullOrWhiteSpace(request.Mobile) ? guest.Phone : request.Mobile.Trim();
+        var mobile = string.IsNullOrWhiteSpace(request.Mobile) ? guest?.Phone : request.Mobile.Trim();
         var profile = new MProfile
         {
             FirstName = request.FirstName.Trim(),
@@ -122,14 +152,18 @@ public class AuthService : IAuthService
             Email = email,
             Mobile = mobile,
             IdPassportNo = idPassport,
+            DateOfBirth = childOfMember ? parent?.RecordedDateOfBirth : request.DateOfBirth,
             DataConsentGiven = false,
             IsActive = true,
             CreatedAt = now
         };
         _db.Profiles.Add(profile);
         await _db.SaveChangesAsync(cancellationToken);
-        guest.GuestProfileId = profile.ProfileId;
-        guest.UpdatedByUserId = null;
+        if (guest is not null)
+        {
+            guest.GuestProfileId = profile.ProfileId;
+            guest.UpdatedByUserId = null;
+        }
 
         var applicantRole = await _db.SystemRoles.FirstOrDefaultAsync(x => x.Code == "APPLICANT", cancellationToken)
             ?? throw new InvalidOperationException("APPLICANT system role is missing. Run the seed script.");

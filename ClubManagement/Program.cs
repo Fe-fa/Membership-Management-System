@@ -10,6 +10,7 @@ using ClubManagement.Services.Guests;
 using ClubManagement.Services.Identity;
 using ClubManagement.Services.MembershipAccount;
 using ClubManagement.Services.MembershipApplication;
+using ClubManagement.Services.Settings;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -33,6 +34,7 @@ builder.Services
     .AddControllers()
     .AddJsonOptions(options =>
     {
+        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
         options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
         options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
     });
@@ -45,6 +47,7 @@ builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOpt
 builder.Services.Configure<AppPublicOptions>(builder.Configuration.GetSection(AppPublicOptions.SectionName));
 builder.Services.AddSingleton<IEmailDispatchQueue, EmailDispatchQueue>();
 builder.Services.AddHostedService<EmailDispatchWorker>();
+builder.Services.AddHostedService<SubscriptionLifecycleWorker>();
 builder.Services.AddScoped<IEmailSender, EmailSender>();
 builder.Services.AddScoped<IApplicationDecisionNotifier, ApplicationDecisionNotifier>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -61,6 +64,9 @@ builder.Services.AddScoped<IInterviewConductService, InterviewConductService>();
 builder.Services.AddScoped<ICommitteeBallotService, CommitteeBallotService>();
 builder.Services.AddScoped<ClubManagement.Services.Governance.IElectionService, ClubManagement.Services.Governance.ElectionService>();
 builder.Services.AddScoped<IFinanceService, FinanceService>();
+builder.Services.AddScoped<INonMembershipBillingService, NonMembershipBillingService>();
+builder.Services.AddScoped<ILookupAdminService, LookupAdminService>();
+builder.Services.AddScoped<IOfficePermissionService, OfficePermissionService>();
 builder.Services.AddScoped<IGuestService, GuestService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 
@@ -143,6 +149,8 @@ using (var scope = app.Services.CreateScope())
         await ballot.EnsureSchemaAsync(CancellationToken.None);
         var elections = scope.ServiceProvider.GetRequiredService<ClubManagement.Services.Governance.IElectionService>();
         await elections.EnsureSchemaAsync(CancellationToken.None);
+        var nmBilling = scope.ServiceProvider.GetRequiredService<INonMembershipBillingService>();
+        await nmBilling.EnsureSchemaAsync(CancellationToken.None);
         await db.Database.ExecuteSqlRawAsync(@"
 IF COL_LENGTH(N'dbo.Aplication_document', N'is_verified') IS NULL
     ALTER TABLE dbo.Aplication_document ADD is_verified BIT NOT NULL CONSTRAINT DF_appdoc_is_verified DEFAULT(0);");
@@ -187,6 +195,56 @@ WHERE membership_no LIKE N'TM-[0-9][0-9][0-9][0-9]'
         await db.Database.ExecuteSqlRawAsync(@"
 IF COL_LENGTH(N'dbo.Member_aircraft', N'country_of_registration') IS NULL
     ALTER TABLE dbo.Member_aircraft ADD country_of_registration NVARCHAR(120) NULL;");
+        await db.Database.ExecuteSqlRawAsync(@"
+IF OBJECT_ID(N'dbo.Endorsement', N'U') IS NOT NULL
+   AND COL_LENGTH(N'dbo.Endorsement', N'status') IS NULL
+    ALTER TABLE dbo.Endorsement ADD [status] NVARCHAR(20) NULL;");
+        await db.Database.ExecuteSqlRawAsync(@"
+IF OBJECT_ID(N'dbo.Endorsement', N'U') IS NOT NULL
+   AND COL_LENGTH(N'dbo.Endorsement', N'declined_at') IS NULL
+    ALTER TABLE dbo.Endorsement ADD declined_at DATETIME2 NULL;");
+        await db.Database.ExecuteSqlRawAsync(@"
+IF OBJECT_ID(N'dbo.Endorsement', N'U') IS NOT NULL
+   AND COL_LENGTH(N'dbo.Endorsement', N'decline_reason') IS NULL
+    ALTER TABLE dbo.Endorsement ADD decline_reason NVARCHAR(1000) NULL;");
+        await db.Database.ExecuteSqlRawAsync(@"
+IF OBJECT_ID(N'dbo.Endorsement', N'U') IS NOT NULL
+   AND COL_LENGTH(N'dbo.Endorsement', N'hidden_from_endorser') IS NULL
+    ALTER TABLE dbo.Endorsement ADD hidden_from_endorser BIT NOT NULL CONSTRAINT DF_endorsement_hidden DEFAULT(0);");
+        await db.Database.ExecuteSqlRawAsync(@"
+IF OBJECT_ID(N'dbo.Endorsement', N'U') IS NOT NULL
+   AND COL_LENGTH(N'dbo.Endorsement', N'status') IS NOT NULL
+   AND NOT EXISTS (
+        SELECT 1 FROM sys.indexes
+        WHERE name = N'IX_Endorsement_app_profile_status'
+          AND object_id = OBJECT_ID(N'dbo.Endorsement'))
+    EXEC(N'CREATE INDEX IX_Endorsement_app_profile_status
+            ON dbo.Endorsement (application_id, endorser_profile_id, [status])');");
+        await db.Database.ExecuteSqlRawAsync(@"
+IF OBJECT_ID(N'dbo.Endorsement', N'U') IS NOT NULL
+   AND COL_LENGTH(N'dbo.Endorsement', N'status') IS NOT NULL
+   AND COL_LENGTH(N'dbo.Endorsement', N'declined_at') IS NOT NULL
+   AND COL_LENGTH(N'dbo.Endorsement', N'decline_reason') IS NOT NULL
+BEGIN
+    EXEC(N'
+        UPDATE dbo.Endorsement
+        SET [status] = N''DECLINED'',
+            declined_at = ISNULL(declined_at, ISNULL(updated_at, created_at)),
+            decline_reason = ISNULL(
+                NULLIF(decline_reason, N''''),
+                LTRIM(SUBSTRING(personal_knowledge, LEN(N''DECLINED:'') + 1, 1000)))
+        WHERE personal_knowledge LIKE N''DECLINED:%''
+          AND ([status] IS NULL OR [status] <> N''DECLINED'');
+
+        UPDATE dbo.Endorsement
+        SET [status] = N''COMPLETE''
+        WHERE ([status] IS NULL OR [status] = N'''')
+          AND personal_knowledge IS NOT NULL AND LTRIM(RTRIM(personal_knowledge)) <> N''''
+          AND personal_knowledge NOT LIKE N''DECLINED:%''
+          AND professional_knowledge IS NOT NULL AND LTRIM(RTRIM(professional_knowledge)) <> N''''
+          AND value_addition IS NOT NULL AND LTRIM(RTRIM(value_addition)) <> N'''';
+    ');
+END");
         await db.Database.ExecuteSqlRawAsync(@"
 DECLARE @tid BIGINT = (SELECT TOP 1 tenant_id FROM dbo.Tenant WHERE code = N'ACEA');
 IF @tid IS NULL SET @tid = 1;
@@ -264,6 +322,8 @@ if (app.Environment.IsDevelopment())
         await ballot.EnsureSchemaAsync(CancellationToken.None);
         var elections = scope.ServiceProvider.GetRequiredService<ClubManagement.Services.Governance.IElectionService>();
         await elections.EnsureSchemaAsync(CancellationToken.None);
+        var nmBilling = scope.ServiceProvider.GetRequiredService<INonMembershipBillingService>();
+        await nmBilling.EnsureSchemaAsync(CancellationToken.None);
         await db.Database.ExecuteSqlRawAsync(@"
 IF OBJECT_ID(N'dbo.Membership_fee_schedule', N'U') IS NULL
 BEGIN
@@ -330,6 +390,7 @@ VALUES (N'ACEA', N'Aero Club of East Africa', N'ACEA', N'info@aeroclubea.com', N
     await EnsureTenantColumnMApplicationAsync(db);
     await EnsureTenantColumnMembershipTypeAsync(db);
     await EnsureTenantColumnClubSettingAsync(db);
+    await EnsureClubSettingValueMaxAsync(db);
     await EnsureTenantColumnCommitteeAsync(db);
 }
 
@@ -391,6 +452,23 @@ static async Task EnsureTenantColumnClubSettingAsync(ApplicationModuleDbContext 
         "UPDATE dbo.[Club_setting] SET tenant_id = (SELECT TOP 1 tenant_id FROM dbo.Tenant WHERE code = N'ACEA') WHERE tenant_id IS NULL;");
     await db.Database.ExecuteSqlRawAsync(
         "IF COL_LENGTH(N'dbo.Club_setting', N'tenant_id') IS NOT NULL AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.Club_setting') AND name = N'tenant_id' AND is_nullable = 1) ALTER TABLE dbo.[Club_setting] ALTER COLUMN tenant_id BIGINT NOT NULL;");
+}
+
+/// <summary>Office permission JSON exceeds typical NVARCHAR(100/255) — widen setting_value.</summary>
+static async Task EnsureClubSettingValueMaxAsync(ApplicationModuleDbContext db)
+{
+    // sys.columns.max_length: bytes for fixed nvarchar(n); -1 means NVARCHAR(MAX).
+    await db.Database.ExecuteSqlRawAsync(@"
+IF COL_LENGTH(N'dbo.Club_setting', N'setting_value') IS NOT NULL
+   AND EXISTS (
+        SELECT 1
+        FROM sys.columns c
+        WHERE c.object_id = OBJECT_ID(N'dbo.Club_setting')
+          AND c.name = N'setting_value'
+          AND c.max_length <> -1
+   )
+    ALTER TABLE dbo.[Club_setting] ALTER COLUMN setting_value NVARCHAR(MAX) NOT NULL;
+");
 }
 
 static async Task EnsureTenantColumnCommitteeAsync(ApplicationModuleDbContext db)

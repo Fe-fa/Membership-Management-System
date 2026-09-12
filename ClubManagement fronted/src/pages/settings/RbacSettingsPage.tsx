@@ -4,12 +4,21 @@ import { Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { PageFrame, PageHeader } from "@/components/layout/PageFrame";
+import { PageDataGate, TableLoadingSkeleton } from "@/components/layout/PageLoading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type RoleOption, type UserListResponse } from "@/services/admin/userManagement";
-import { apiRequest, extractErrorMessage } from "@/services/membership/api";
+import {
+  extractErrorMessage,
+  type OfficeAccess,
+  type OfficeModulePermission,
+  useOfficePermissionMatrix,
+  useSaveOfficePermissions,
+} from "@/services/admin/officePermissions";
+import { apiRequest } from "@/services/membership/api";
 
-export function RbacSettingsPage() {
+function AssignRolesPanel() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [draft, setDraft] = useState<Record<number, string[]>>({});
@@ -30,6 +39,8 @@ export function RbacSettingsPage() {
 
   const catalog = roles.data ?? [];
   const items = list.data?.items ?? [];
+  const loading = list.isLoading || roles.isLoading;
+  const fetching = list.isFetching || roles.isFetching;
 
   const selected = useMemo(() => {
     const map: Record<number, string[]> = {};
@@ -62,11 +73,11 @@ export function RbacSettingsPage() {
   }
 
   return (
-    <PageFrame width="lg">
-      <PageHeader
-        title="Role-Based Access Control"
-        description="Assign System_role codes to each User_account. Changes write to User_role (assigned_date is set on save)."
-      />
+    <div className="grid gap-4">
+      <p className="min-h-10 text-sm text-muted-foreground">
+        Assign System_role codes to each User_account. Changes write to User_role (assigned_date is set
+        on save). Access is the union of checked roles.
+      </p>
 
       <div className="relative max-w-md">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -75,12 +86,18 @@ export function RbacSettingsPage() {
           placeholder="Search name, username or email"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          disabled={loading}
         />
+        {fetching && !loading ? (
+          <Loader2 className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+        ) : null}
       </div>
 
-      {list.isLoading || roles.isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading accounts and System_role catalog…</p>
-      ) : (
+      <PageDataGate
+        loading={loading}
+        label="Loading accounts and roles…"
+        minHeightClassName="min-h-[28rem]"
+      >
         <div className="overflow-x-auto rounded-xl border">
           <table className="w-full min-w-[720px] text-sm">
             <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -104,7 +121,8 @@ export function RbacSettingsPage() {
               ) : (
                 items.map((row) => {
                   const codes = selected[row.userAccountId] ?? [];
-                  const dirty = JSON.stringify([...(row.roles ?? [])].sort()) !== JSON.stringify([...codes].sort());
+                  const dirty =
+                    JSON.stringify([...(row.roles ?? [])].sort()) !== JSON.stringify([...codes].sort());
                   return (
                     <tr key={row.userAccountId} className="border-t align-middle">
                       <td className="px-3 py-2">
@@ -142,10 +160,184 @@ export function RbacSettingsPage() {
             </tbody>
           </table>
         </div>
-      )}
+      </PageDataGate>
+
       <p className="text-xs text-muted-foreground">
-        Applicant is not listed here — applicants self-register. Access is the union of checked System_role rows.
+        Applicant is not listed here — applicants self-register. MEMBER grants member-portal access;
+        office roles (Admin, GM, Treasurer, …) unlock staff cards via Office / staff permissions.
       </p>
+    </div>
+  );
+}
+
+function roleLabel(code: string) {
+  return code
+    .split("_")
+    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function OfficePermissionsPanel() {
+  const matrix = useOfficePermissionMatrix();
+  const save = useSaveOfficePermissions();
+  const [draft, setDraft] = useState<OfficeModulePermission[] | null>(null);
+
+  const roles = matrix.data?.roleCodes ?? [];
+  const modules = draft ?? matrix.data?.modules ?? [];
+
+  const dirty = useMemo(() => {
+    if (!matrix.data || !draft) return false;
+    return JSON.stringify(draft) !== JSON.stringify(matrix.data.modules);
+  }, [draft, matrix.data]);
+
+  function setAccess(moduleId: string, role: string, patch: Partial<OfficeAccess>) {
+    setDraft((prev) => {
+      const base = prev ?? matrix.data?.modules ?? [];
+      return base.map((mod) => {
+        if (mod.moduleId !== moduleId) return mod;
+        const current = mod.access[role] ?? { view: false, write: false };
+        let next: OfficeAccess = { ...current, ...patch };
+        if (next.write) next = { ...next, view: true };
+        if (patch.view === false) next = { view: false, write: false };
+        return {
+          ...mod,
+          access: { ...mod.access, [role]: next },
+        };
+      });
+    });
+  }
+
+  return (
+    <div className="grid gap-4">
+      <div className="flex min-h-10 flex-wrap items-start justify-between gap-3">
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          Set which office roles can view and write each admin module. Membership-type privileges stay
+          separate.
+        </p>
+        <Button
+          type="button"
+          disabled={!dirty || save.isPending || modules.length === 0 || matrix.isLoading}
+          onClick={() => {
+            save.mutate(modules, {
+              onSuccess: () => {
+                setDraft(null);
+                toast.success("Office / staff permissions saved.");
+              },
+              onError: (error) => toast.error(extractErrorMessage(error)),
+            });
+          }}
+        >
+          {save.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+          Save permissions
+        </Button>
+      </div>
+
+      <PageDataGate
+        loading={matrix.isLoading}
+        error={matrix.isError ? extractErrorMessage(matrix.error) : null}
+        label="Loading office permission matrix…"
+        minHeightClassName="min-h-[28rem]"
+      >
+        <div className="overflow-x-auto rounded-xl border">
+          <table className="w-full min-w-[960px] text-sm">
+            <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="sticky left-0 z-10 bg-muted/50 px-3 py-2">Admin module</th>
+                {roles.map((role) => (
+                  <th key={role} className="px-2 py-2 text-center font-medium">
+                    <span className="block whitespace-nowrap">{roleLabel(role)}</span>
+                    <span className="mt-1 flex justify-center gap-3 text-[10px] font-normal normal-case tracking-normal text-muted-foreground">
+                      <span>View</span>
+                      <span>Write</span>
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {modules.map((mod) => (
+                <tr key={mod.moduleId} className="border-t align-middle">
+                  <td className="sticky left-0 z-10 bg-card px-3 py-3">
+                    <p className="font-medium">{mod.title}</p>
+                    <p className="text-xs text-muted-foreground">{mod.description}</p>
+                  </td>
+                  {roles.map((role) => {
+                    const cell = mod.access[role] ?? { view: false, write: false };
+                    return (
+                      <td key={`${mod.moduleId}-${role}`} className="px-2 py-3 text-center">
+                        <div className="inline-flex items-center justify-center gap-3">
+                          <label className="inline-flex cursor-pointer items-center" title="View">
+                            <input
+                              type="checkbox"
+                              className="size-4 accent-primary"
+                              checked={cell.view}
+                              onChange={(e) =>
+                                setAccess(mod.moduleId, role, { view: e.target.checked })
+                              }
+                            />
+                            <span className="sr-only">View</span>
+                          </label>
+                          <label className="inline-flex cursor-pointer items-center" title="Write">
+                            <input
+                              type="checkbox"
+                              className="size-4 accent-primary"
+                              checked={cell.write}
+                              onChange={(e) =>
+                                setAccess(mod.moduleId, role, { write: e.target.checked })
+                              }
+                            />
+                            <span className="sr-only">Write</span>
+                          </label>
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </PageDataGate>
+
+      <p className="text-xs text-muted-foreground">
+        Write always includes view. ADMIN / GM / Chairman can edit this matrix. Card visibility on the
+        admin dashboard uses the View column for the signed-in user&apos;s roles.
+      </p>
+    </div>
+  );
+}
+
+export function RbacSettingsPage() {
+  return (
+    <PageFrame width="lg" className="min-h-[36rem]">
+      <PageHeader
+        title="Role-Based Access Control"
+        description="Assign System_role to user accounts, then configure office / staff view & write permissions per admin module."
+      />
+
+      <Tabs defaultValue="roles" className="gap-0">
+        <TabsList className="h-auto w-full justify-start gap-1 rounded-xl bg-muted/80 p-1 sm:w-auto">
+          <TabsTrigger value="roles" className="rounded-lg px-3 py-2 data-[state=active]:shadow-sm">
+            Assign roles
+          </TabsTrigger>
+          <TabsTrigger
+            value="permissions"
+            className="rounded-lg px-3 py-2 data-[state=active]:shadow-sm"
+          >
+            Office / staff permissions
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="roles" className="mt-4 outline-none">
+          <AssignRolesPanel />
+        </TabsContent>
+        <TabsContent value="permissions" className="mt-4 outline-none">
+          <OfficePermissionsPanel />
+        </TabsContent>
+      </Tabs>
     </PageFrame>
   );
 }
+
+/** Kept for potential reuse in other settings tables. */
+export { TableLoadingSkeleton };

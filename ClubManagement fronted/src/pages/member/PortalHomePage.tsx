@@ -11,16 +11,19 @@ import {
   FileText,
   Landmark,
   Plane,
+  Receipt,
   Settings,
   UserRound,
   Users,
   Vote,
+  Wine,
 } from "lucide-react";
 
 import heroImage from "@/assets/acea-hero.jpg";
 import { AdminPortalCard } from "@/components/card/AdminPortalCard";
 import { ActionCard } from "@/components/card/ActionCard";
 import { PageFrame } from "@/components/layout/PageFrame";
+import { PageBodyLoading } from "@/components/layout/PageLoading";
 import { Button } from "@/components/ui/button";
 import { apiRequest, fetchApplication } from "@/services/membership/api";
 import { applicationQueryKey, validateSection } from "@/services/membership/useApplication";
@@ -70,6 +73,13 @@ export function PortalHomePage() {
   if (mode === "admin") return null;
 
   if (mode === "member" || (isClubMember(user) && mode !== "applicant")) {
+    if (member.isLoading) {
+      return (
+        <PageFrame width="lg">
+          <PageBodyLoading label="Loading your portal…" />
+        </PageFrame>
+      );
+    }
     return <MemberHome me={member.data ?? fallbackMemberDashboard(user)} />;
   }
   return <ApplicantHome />;
@@ -116,13 +126,16 @@ function MemberHome({ me }: { me: MemberDashboard }) {
     {
       id: "election",
       title: "Election",
-      description: "AGM notices, votes, proxies and nominations.",
+      description:
+        me.pendingProxies > 0
+          ? `${me.pendingProxies} member${me.pendingProxies === 1 ? " has" : "s have"} appointed you as proxy.`
+          : "AGM notices, votes, proxies and nominations.",
       to: "/election",
       icon: Vote,
       tone: "violet" as const,
-      locked: !me.cards.election,
-    },
-    {
+      locked: !me.cards.election && !(me.pendingProxies > 0),
+      badgeCount: me.pendingProxies,
+    },    {
       id: "committee-ballot",
       title: "Committee Ballot",
       description: "Membership admission ballot per candidate (Article 6).",
@@ -134,10 +147,28 @@ function MemberHome({ me }: { me: MemberDashboard }) {
     {
       id: "accommodation",
       title: "Accommodation",
-      description: "Room bookings and Clubhouse facility rules.",
+      description: "Book rooms — Finance collects advance payment and issues receipts.",
       to: "/accommodation",
       icon: BedDouble,
       tone: "emerald" as const,
+      locked: !me.cards.accommodation,
+    },
+    {
+      id: "corkage",
+      title: "Corkage",
+      description: "Log outside F&B corkage — pay at the Finance corkage desk.",
+      to: "/corkage",
+      icon: Wine,
+      tone: "rose" as const,
+      locked: !me.cards.accommodation,
+    },
+    {
+      id: "custom-charges",
+      title: "Custom charges",
+      description: "Facility hire, deposits, damage fees — collect at Finance.",
+      to: "/custom-charges",
+      icon: Receipt,
+      tone: "amber" as const,
       locked: !me.cards.accommodation,
     },
     {
@@ -166,7 +197,7 @@ function MemberHome({ me }: { me: MemberDashboard }) {
       id: "settings",
       title: "Settings",
       description: "Account, privacy, appearance, and scheduled actions.",
-      to: "/settings",
+      to: "/settings/account",
       icon: Settings,
       tone: "slate" as const,
     },
@@ -224,12 +255,13 @@ function MemberHome({ me }: { me: MemberDashboard }) {
 
 function ApplicantHome() {
   const user = readUser();
-  const { data: record } = useQuery({
+  const application = useQuery({
     queryKey: applicationQueryKey(user?.userAccountId),
     queryFn: fetchApplication,
     staleTime: 30_000,
     enabled: Boolean(user?.userAccountId),
   });
+  const record = application.data;
 
   const mine = useQuery({
     queryKey: ["applications", "me", user?.userAccountId],
@@ -247,7 +279,7 @@ function ApplicantHome() {
     enabled: Boolean(user?.userAccountId),
   });
 
-  const { data: notifications = [] } = useQuery({
+  const notificationsQuery = useQuery({
     queryKey: ["member-notifications", readUser()?.profileId],
     queryFn: () =>
       apiRequest<
@@ -265,6 +297,15 @@ function ApplicantHome() {
     staleTime: 15_000,
     enabled: Boolean(readUser()?.profileId),
   });
+  const notifications = notificationsQuery.data ?? [];
+
+  if (application.isLoading || mine.isLoading || notificationsQuery.isLoading) {
+    return (
+      <PageFrame width="lg">
+        <PageBodyLoading label="Loading your application…" />
+      </PageFrame>
+    );
+  }
 
   const status = record?.status ?? "Draft";
   const meetingNotice = notifications.find(
@@ -281,7 +322,9 @@ function ApplicantHome() {
         "MANAGER_DETAILS_REQUEST",
         "MANAGER_ENDORSEMENT_REQUEST",
         "APPLICATION_PAYMENT_REQUIRED",
+        "APPLICATION_PAYMENT_REJECTED",
         "APPLICATION_PENDING_ITEMS",
+        "ENDORSEMENT_DECLINED",
       ].includes(n.typeCode) && managerRequestStillActive(n, status, record?.updatedAt),
   );
   const electionNotice = notifications.find(

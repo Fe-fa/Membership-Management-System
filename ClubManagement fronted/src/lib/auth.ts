@@ -197,6 +197,10 @@ function classifyPath(pathname: string): "public" | "admin" | "member" | "applic
     pathname.startsWith("/governance/") ||
     pathname === "/accommodation" ||
     pathname.startsWith("/accommodation/") ||
+    pathname === "/corkage" ||
+    pathname.startsWith("/corkage/") ||
+    pathname === "/custom-charges" ||
+    pathname.startsWith("/custom-charges/") ||
     pathname === "/election" ||
     pathname.startsWith("/election/") ||
     pathname === "/committee-ballot" ||
@@ -256,6 +260,11 @@ export function isReceptionistOnly(user: AuthUser | null) {
 
 export function canOperateReception(user: AuthUser | null) {
   return hasAnyRole(user, ["RECEPTIONIST"]);
+}
+
+/** Full guest book. Reception only sees who is on site, plus a named lookup. */
+export function canViewAllReceptionVisits(user: AuthUser | null) {
+  return hasAnyRole(user, ["ADMIN", "GENERAL_MANAGER", "CHAIRMAN"]);
 }
 
 export function homePathForUser(user: AuthUser | null): "/" | "/admin" | "/reception" {

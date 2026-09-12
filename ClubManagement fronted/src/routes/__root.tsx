@@ -9,6 +9,7 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
+import { AppBootSpinner } from "@/components/layout/PageLoading";
 import { SidebarShell } from "@/components/layout/SidebarShell";
 import appCss from "../styles/index.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -165,6 +166,18 @@ function RootComponent() {
   }, [pathname, ready, router, authed]);
 
   const mode = readPortalMode(user);
+  const publicPath = isPublicPath(pathname);
+
+  // Avoid flashing page content without the sidebar shell while auth hydrates.
+  if (!ready && !publicPath) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <AppBootSpinner label="Loading workspace…" />
+        <Toaster position="top-right" richColors />
+      </QueryClientProvider>
+    );
+  }
+
   // Until client auth is ready, keep a bare shell so SSR HTML matches hydration.
   const bare =
     !ready ||
@@ -175,6 +188,7 @@ function RootComponent() {
 
   const portalHome =
     pathname === "/admin" ||
+    pathname.startsWith("/reception") ||
     (pathname === "/" &&
       authed &&
       (mode === "member" || (mode !== "applicant" && isClubMember(user))));

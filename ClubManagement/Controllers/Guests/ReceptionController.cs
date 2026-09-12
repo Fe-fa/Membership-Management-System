@@ -16,8 +16,27 @@ public class ReceptionController : ControllerBase
 
     [HttpGet("members")]
     [Authorize(Roles = "RECEPTIONIST")]
-    public async Task<ActionResult<IReadOnlyList<ReceptionMemberDto>>> Members(CancellationToken cancellationToken) =>
-        Ok(await _guests.ListActiveHostsAsync(cancellationToken));
+    public async Task<ActionResult<IReadOnlyList<ReceptionMemberDto>>> Members(
+        [FromQuery] string? search,
+        CancellationToken cancellationToken) =>
+        Ok(await _guests.ListActiveHostsAsync(search, cancellationToken));
+
+    [HttpGet("members/{profileId:long}/visits")]
+    [Authorize(Roles = "RECEPTIONIST")]
+    public async Task<ActionResult<IReadOnlyList<ReceptionVisitDto>>> HostVisits(
+        long profileId,
+        CancellationToken cancellationToken) =>
+        Ok(await _guests.ListHostVisitsAsync(profileId, cancellationToken));
+
+    [HttpPost("register")]
+    [Authorize(Roles = "RECEPTIONIST")]
+    public async Task<ActionResult<ReceptionVisitDto>> Register(
+        [FromBody] RegisterGuestVisitRequest request,
+        CancellationToken cancellationToken)
+    {
+        try { return Ok(await _guests.RegisterGuestVisitAsync(request, User.UserId(), cancellationToken)); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
 
     [HttpGet("guests")]
     [Authorize(Roles = "RECEPTIONIST")]
@@ -36,11 +55,35 @@ public class ReceptionController : ControllerBase
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
+    [HttpGet("visits/lookup")]
+    public async Task<ActionResult<IReadOnlyList<ReceptionVisitDto>>> LookupVisits(
+        [FromQuery] string? name,
+        CancellationToken cancellationToken)
+    {
+        try { return Ok(await _guests.LookupGuestVisitsAsync(name, cancellationToken)); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [HttpGet("visits/{visitId:long}")]
+    public async Task<ActionResult<ReceptionVisitDto>> Visit(long visitId, CancellationToken cancellationToken)
+    {
+        var visit = await _guests.GetReceptionVisitAsync(visitId, cancellationToken);
+        if (visit is null) return NotFound();
+        if (!User.HasAnyRole("ADMIN", "GENERAL_MANAGER", "CHAIRMAN"))
+            visit = visit with { Signature = null };
+        return Ok(visit);
+    }
+
     [HttpGet("visits")]
     public async Task<ActionResult<PagedResult<ReceptionVisitDto>>> Visits(
         [FromQuery] PagedRequest paging,
-        CancellationToken cancellationToken) =>
-        Ok(await _guests.ListReceptionVisitsAsync(paging, cancellationToken));
+        [FromQuery] bool currentOnly,
+        CancellationToken cancellationToken)
+    {
+        if (!currentOnly && !User.HasAnyRole("ADMIN", "GENERAL_MANAGER", "CHAIRMAN"))
+            return Forbid();
+        return Ok(await _guests.ListReceptionVisitsAsync(paging, currentOnly, cancellationToken));
+    }
 
     [HttpPost("visits")]
     [Authorize(Roles = "RECEPTIONIST")]
@@ -71,6 +114,16 @@ public class GuestRegistrationController : ControllerBase
     public async Task<ActionResult<GuestEligibilityDto>> Eligibility([FromBody] GuestEligibilityRequest request, CancellationToken cancellationToken)
     {
         try { return Ok(await _guests.CheckRegistrationEligibilityAsync(request, cancellationToken)); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [AllowAnonymous]
+    [HttpPost("parent-eligibility")]
+    public async Task<ActionResult<ParentApplicantEligibilityDto>> ParentEligibility(
+        [FromBody] ParentApplicantRequest request,
+        CancellationToken cancellationToken)
+    {
+        try { return Ok(await _guests.CheckParentApplicantAsync(request, cancellationToken)); }
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 }

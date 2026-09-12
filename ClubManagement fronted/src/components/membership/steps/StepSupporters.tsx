@@ -14,6 +14,7 @@ function MemberPicker({
   role,
   value,
   excludeProfileId,
+  applicationId,
   error,
   onSelect,
   onClear,
@@ -21,6 +22,7 @@ function MemberPicker({
   role: Role;
   value: SupporterDraft;
   excludeProfileId?: string | undefined;
+  applicationId?: string | number | null;
   error?: string | undefined;
   onSelect: (member: EligibleMember) => void;
   onClear: () => void;
@@ -29,8 +31,8 @@ function MemberPicker({
   const selectedId = String(value["memberProfileId"] ?? "");
   const term = search.trim();
   const { data: members = [], isFetching } = useQuery({
-    queryKey: ["members", "eligible", "membershipNo", term],
-    queryFn: () => searchEligibleMembers(term),
+    queryKey: ["members", "eligible", "membershipNo", term, applicationId ?? "none"],
+    queryFn: () => searchEligibleMembers(term, applicationId),
     enabled: !selectedId && term.length >= 2,
     staleTime: 60_000,
   });
@@ -45,13 +47,13 @@ function MemberPicker({
             <div>
               <p className="font-medium text-foreground">{String(value["membershipNo"] ?? "")}</p>
               <p className="text-muted-foreground">{String(value["name"] ?? "")}</p>
-              <p className="text-muted-foreground">
+              {/* <p className="text-muted-foreground">
                 Member since {String(value["yearOfJoining"] ?? "")}
-              </p>
-              <p className="mt-1 text-muted-foreground">
+              </p> */}
+              {/* <p className="mt-1 text-muted-foreground">
                 Eligible club member with at least {MIN_SUPPORTER_YEARS} years of continuous
                 membership.
-              </p>
+              </p> */}
             </div>
           </div>
           <button
@@ -90,12 +92,11 @@ function MemberPicker({
       <ul className="max-h-64 divide-y divide-border overflow-auto rounded-md border border-border">
         {term.length < 2 ? (
           <li className="p-3 text-sm text-muted-foreground">
-            Search by membership number only. Names are not used because more than one member can
-            share the same name.
+            Search by membership number only.
           </li>
         ) : !visible.length && !isFetching ? (
           <li className="p-3 text-sm text-muted-foreground">
-            No member found for this membership number. Confirm the number under Existing members.
+            No member found for this membership number.
           </li>
         ) : (
           visible.map((member) => {
@@ -147,12 +148,14 @@ function SupporterSelector({
   value,
   error,
   excludeProfileId,
+  applicationId,
   onChange,
 }: {
   role: Role;
   value: SupporterDraft;
   error?: string | undefined;
   excludeProfileId?: string | undefined;
+  applicationId?: string | number | null;
   onChange: (patch: Partial<SupporterDraft>) => void;
 }) {
   const label = role === "proposer" ? "Proposer" : "Seconder";
@@ -168,6 +171,7 @@ function SupporterSelector({
         role={role}
         value={value}
         excludeProfileId={excludeProfileId}
+        applicationId={applicationId}
         error={error}
         onSelect={(member) =>
           onChange({
@@ -198,10 +202,12 @@ export const StepSupporters = memo(function StepSupporters({
   value,
   errors,
   onChange,
+  applicationId,
 }: {
   value: Value;
   errors: ErrorMap;
   onChange: (patch: Partial<Value>) => void;
+  applicationId?: string | number | null;
 }) {
   const proposer = value.proposer as SupporterDraft;
   const seconder = value.seconder as SupporterDraft;
@@ -216,6 +222,7 @@ export const StepSupporters = memo(function StepSupporters({
         value={proposer}
         error={errors["proposer.memberProfileId"]}
         excludeProfileId={String(seconder["memberProfileId"] ?? "") || undefined}
+        applicationId={applicationId}
         onChange={(patch) =>
           onChange({ proposer: { ...value.proposer, ...patch } as Value["proposer"] })
         }
@@ -225,6 +232,7 @@ export const StepSupporters = memo(function StepSupporters({
         value={seconder}
         error={errors["seconder.memberProfileId"]}
         excludeProfileId={String(proposer["memberProfileId"] ?? "") || undefined}
+        applicationId={applicationId}
         onChange={(patch) =>
           onChange({ seconder: { ...value.seconder, ...patch } as Value["seconder"] })
         }

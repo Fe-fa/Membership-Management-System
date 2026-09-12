@@ -3,8 +3,11 @@ using ClubManagement.Data.MembershipApplication;
 using ClubManagement.DTOs.Common;
 using ClubManagement.Entities;
 using ClubManagement.Entities.Guests;
+using ClubManagement.Entities.MembershipAccount;
+using ClubManagement.Entities.Lookups;
 using Microsoft.EntityFrameworkCore;
 using ClubManagement.Services;
+using ClubManagement.Services.Finance;
 
 namespace ClubManagement.Services.Guests;
 
@@ -12,7 +15,25 @@ public record GuestVisitRequest(string GuestName, DateOnly VisitDate, TimeOnly? 
 public record ReciprocalVisitRequest(long HomeClubId, DateOnly VisitDate, int DaysUsed, string? Notes);
 public record VisitRowDto(long VisitId, string GuestName, DateOnly VisitDate, TimeOnly? TimeIn, TimeOnly? TimeOut, bool IsCurrent, string? EntryNo);
 
-public record ReceptionMemberDto(long ProfileId, string MembershipNo, string FullName);
+public record ReceptionMemberDto(
+    long ProfileId,
+    string MembershipNo,
+    string FullName,
+    string? Email = null,
+    string? Phone = null,
+    string? Status = null,
+    string? FirstName = null,
+    string? LastName = null);
+public record RegisterGuestVisitRequest(
+    string FirstName,
+    string Surname,
+    string? Email,
+    long HostProfileId,
+    DateOnly? VisitDate,
+    string? Purpose,
+    string? Signature,
+    string? Status,
+    string? Phone);
 public record GuestLookupDto(
     long GuestId,
     string GuestName,
@@ -44,8 +65,37 @@ public record ReceptionVisitDto(
     string AccompanyingMemberName,
     string? IntroducedByName,
     string? StaffName,
-    string? Notes);
+    string? Notes,
+    string? Email = null,
+    string? Purpose = null,
+    string? Status = null,
+    bool HasSignature = false,
+    string? Signature = null);
 public record GuestEligibilityRequest(string? GuestName, string? Phone, string? VisitSlipCode);
+public record ParentApplicantRequest(
+    string? ApplicantFullName,
+    string? Email,
+    string? Phone,
+    string? ParentMembershipNo,
+    string? ParentFullName,
+    DateOnly? ApplicantDateOfBirth = null);
+public record ParentApplicantEligibilityDto(
+    bool Found,
+    bool NameMatches,
+    bool CanContinue,
+    bool EntranceFeeWaived,
+    long? ParentAccountId,
+    long? ParentProfileId,
+    string? ParentMembershipNo,
+    string? ParentName,
+    string? ParentStatus,
+    int ParentContinuousYears,
+    string? ParentEmail,
+    string? ParentPhone,
+    int? YearOfJoining,
+    string Message,
+    DateOnly? RecordedDateOfBirth = null,
+    int? ApplicantAgeYears = null);
 public record GuestEligibilityDto(
     bool Found,
     bool Ambiguous,
@@ -64,13 +114,18 @@ public interface IGuestService
     Task SignOutAsync(long visitId, TimeOnly timeOut, CancellationToken cancellationToken);
     Task<IReadOnlyList<VisitRowDto>> ListCurrentAsync(long visitingProfileId, CancellationToken cancellationToken);
     Task RecordReciprocalAsync(long profileId, ReciprocalVisitRequest request, long? actorUserId, CancellationToken cancellationToken);
-    Task<IReadOnlyList<ReceptionMemberDto>> ListActiveHostsAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<ReceptionMemberDto>> ListActiveHostsAsync(string? search, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ReceptionVisitDto>> ListHostVisitsAsync(long profileId, CancellationToken cancellationToken);
+    Task<ReceptionVisitDto> RegisterGuestVisitAsync(RegisterGuestVisitRequest request, long? actorUserId, CancellationToken cancellationToken);
     Task<IReadOnlyList<GuestLookupDto>> SearchGuestsAsync(string? name, string? phone, string? visitSlipCode, CancellationToken cancellationToken);
     Task<GuestLookupDto> UpsertGuestAsync(UpsertGuestRequest request, long? actorUserId, CancellationToken cancellationToken);
     Task<ReceptionVisitDto> ReceptionSignInAsync(ReceptionVisitRequest request, long? actorUserId, CancellationToken cancellationToken);
     Task<ReceptionVisitDto> ReceptionSignOutAsync(long visitId, CancellationToken cancellationToken);
-    Task<PagedResult<ReceptionVisitDto>> ListReceptionVisitsAsync(PagedRequest paging, CancellationToken cancellationToken);
+    Task<PagedResult<ReceptionVisitDto>> ListReceptionVisitsAsync(PagedRequest paging, bool currentOnly, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ReceptionVisitDto>> LookupGuestVisitsAsync(string? name, CancellationToken cancellationToken);
+    Task<ReceptionVisitDto?> GetReceptionVisitAsync(long visitId, CancellationToken cancellationToken);
     Task<GuestEligibilityDto> CheckRegistrationEligibilityAsync(GuestEligibilityRequest request, CancellationToken cancellationToken);
+    Task<ParentApplicantEligibilityDto> CheckParentApplicantAsync(ParentApplicantRequest request, CancellationToken cancellationToken);
 }
 
 public class GuestService : IGuestService
@@ -99,6 +154,15 @@ IF OBJECT_ID(N'dbo.MGuest', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.MGuest', N'vi
         await _db.Database.ExecuteSqlRawAsync(@"
 IF OBJECT_ID(N'dbo.MVisit', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.MVisit', N'notes') IS NULL
     ALTER TABLE dbo.MVisit ADD notes NVARCHAR(500) NULL;", cancellationToken);
+        await _db.Database.ExecuteSqlRawAsync(@"
+IF OBJECT_ID(N'dbo.MGuest', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.MGuest', N'email') IS NULL
+    ALTER TABLE dbo.MGuest ADD email NVARCHAR(255) NULL;", cancellationToken);
+        await _db.Database.ExecuteSqlRawAsync(@"
+IF OBJECT_ID(N'dbo.MVisit', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.MVisit', N'purpose') IS NULL
+    ALTER TABLE dbo.MVisit ADD purpose NVARCHAR(80) NULL;", cancellationToken);
+        await _db.Database.ExecuteSqlRawAsync(@"
+IF OBJECT_ID(N'dbo.MVisit', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.MVisit', N'signature') IS NULL
+    ALTER TABLE dbo.MVisit ADD signature NVARCHAR(MAX) NULL;", cancellationToken);
         await _db.Database.ExecuteSqlRawAsync(@"
 IF COL_LENGTH(N'dbo.MGuest', N'visit_slip_code') IS NOT NULL
 AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_MGuest_visit_slip_code' AND object_id = OBJECT_ID(N'dbo.MGuest'))
@@ -141,6 +205,7 @@ AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_MGuest_visit_slip_co
             }
         }
 
+        await RejectIfAlreadyOnSiteAsync(guest, cancellationToken);
         await RejectIfFrequencyExceededAsync(guest.GuestId, request.VisitDate, cancellationToken);
 
         var visit = new MVisit
@@ -201,16 +266,156 @@ AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_MGuest_visit_slip_co
         await _db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<ReceptionMemberDto>> ListActiveHostsAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ReceptionMemberDto>> ListActiveHostsAsync(string? search, CancellationToken cancellationToken)
     {
+        var term = (search ?? "").Trim();
+        if (term.Length < 2)
+            return [];
+
+        var needle = term.ToLowerInvariant();
+        var digits = new string(term.Where(char.IsDigit).ToArray());
         return await _db.Accounts.AsNoTracking()
             .Where(a => a.IsActive && !a.IsDeleted && a.MembershipType.CanIntroduceGuests && a.CurrentMemberStatus.IsActiveStatus)
+            .Where(a =>
+                a.Profile.FirstName.ToLower().Contains(needle)
+                || a.Profile.LastName.ToLower().Contains(needle)
+                || ((a.Profile.FirstName ?? "") + " " + (a.Profile.LastName ?? "")).ToLower().Contains(needle)
+                || (a.MembershipNo ?? "").ToLower().Contains(needle)
+                || (a.Profile.Email ?? "").ToLower().Contains(needle)
+                || (a.Profile.Mobile ?? "").Contains(term)
+                || (digits.Length >= 4 && (a.Profile.Mobile ?? "").Contains(digits)))
             .OrderBy(a => a.Profile.LastName).ThenBy(a => a.Profile.FirstName)
+            .Take(8)
             .Select(a => new ReceptionMemberDto(
                 a.ProfileId,
                 a.MembershipNo ?? "",
-                ((a.Profile.Title ?? "") + " " + a.Profile.FirstName + " " + a.Profile.LastName).Trim()))
+                ((a.Profile.Title ?? "") + " " + a.Profile.FirstName + " " + a.Profile.LastName).Trim(),
+                a.Profile.Email,
+                a.Profile.Mobile,
+                a.CurrentMemberStatus.Name,
+                a.Profile.FirstName,
+                a.Profile.LastName))
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ReceptionVisitDto>> ListHostVisitsAsync(long profileId, CancellationToken cancellationToken)
+    {
+        await EnsureSchemaAsync(cancellationToken);
+        var ids = await _db.Visits.AsNoTracking()
+            .Where(v => v.VisitingProfileId == profileId || v.Guest.IntroducedByProfileId == profileId)
+            .OrderByDescending(v => v.VisitDate)
+            .ThenByDescending(v => v.CreatedAt)
+            .Take(12)
+            .Select(v => v.VisitId)
+            .ToListAsync(cancellationToken);
+
+        var rows = new List<ReceptionVisitDto>();
+        foreach (var id in ids)
+        {
+            var row = await MapReceptionVisitAsync(id, cancellationToken);
+            if (row is not null) rows.Add(row);
+        }
+        return rows;
+    }
+
+    public async Task<ReceptionVisitDto> RegisterGuestVisitAsync(
+        RegisterGuestVisitRequest request,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        await EnsureSchemaAsync(cancellationToken);
+        var first = (request.FirstName ?? "").Trim();
+        var surname = (request.Surname ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(first) || string.IsNullOrWhiteSpace(surname))
+            throw new InvalidOperationException("Guest first name and surname are required.");
+        if (request.HostProfileId <= 0)
+            throw new InvalidOperationException("Select the host member from the membership record. A new member is not created here.");
+
+        var email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim();
+        if (email is not null && !email.Contains('@'))
+            throw new InvalidOperationException("Enter a valid guest email address.");
+
+        var signature = (request.Signature ?? "").Trim();
+        if (signature.Length < 2)
+            throw new InvalidOperationException("Capture the guest signature before registering the visit.");
+        if (signature.Length > 200_000)
+            throw new InvalidOperationException("The signature is too large. Sign again in the box, or type the guest's name.");
+
+        var purpose = string.IsNullOrWhiteSpace(request.Purpose) ? null : request.Purpose.Trim();
+        if (purpose is { Length: > 80 })
+            throw new InvalidOperationException("Visit purpose must be under 80 characters.");
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var visitDate = request.VisitDate ?? today;
+        if (visitDate > today.AddDays(1))
+            throw new InvalidOperationException("Visit date cannot be in the future.");
+
+        var onSite = !string.Equals(request.Status, "SIGNED_OUT", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(request.Status, "Signed out", StringComparison.OrdinalIgnoreCase);
+
+        await RequireHostAsync(request.HostProfileId, cancellationToken);
+
+        var fullName = $"{first} {surname}";
+        var existing = await FindGuestsAsync(fullName, request.Phone, null, cancellationToken);
+        var guest = existing.FirstOrDefault(g =>
+            NamesMatch(g.GuestName, fullName)
+            && (string.IsNullOrWhiteSpace(email)
+                || string.IsNullOrWhiteSpace(g.Email)
+                || string.Equals(g.Email, email, StringComparison.OrdinalIgnoreCase)));
+
+        if (guest is not null)
+        {
+            RejectIfBarred(guest);
+            if (string.IsNullOrWhiteSpace(guest.Email) && email is not null)
+                guest.Email = email;
+            if (string.IsNullOrWhiteSpace(guest.Phone) && !string.IsNullOrWhiteSpace(request.Phone))
+                guest.Phone = request.Phone.Trim();
+            guest.IntroducedByProfileId ??= request.HostProfileId;
+            guest.UpdatedByUserId = actorUserId;
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            guest = await CreateGuestCoreAsync(fullName, request.HostProfileId, request.Phone, actorUserId, cancellationToken);
+            if (email is not null)
+            {
+                guest.Email = email;
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+        }
+
+        if (onSite)
+        {
+            await RejectIfAlreadyOnSiteAsync(guest, cancellationToken);
+            await EnsureActiveGuestCapacityAsync(request.HostProfileId, cancellationToken);
+            await RejectIfFrequencyExceededAsync(guest.GuestId, visitDate, cancellationToken);
+        }
+
+        if (string.IsNullOrWhiteSpace(guest.VisitSlipCode))
+        {
+            guest.VisitSlipCode = await NextSlipCodeAsync(cancellationToken);
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        var now = DateTime.UtcNow;
+        var visit = new MVisit
+        {
+            GuestId = guest.GuestId,
+            VisitingProfileId = request.HostProfileId,
+            VisitDate = visitDate,
+            TimeIn = TimeOnly.FromDateTime(now),
+            TimeOut = onSite ? null : TimeOnly.FromDateTime(now),
+            GuestBookEntryNo = guest.VisitSlipCode,
+            Purpose = purpose,
+            Signature = signature,
+            Notes = purpose,
+            IsCurrentFlag = onSite,
+            CreatedAt = now,
+            CreatedByUserId = actorUserId
+        };
+        _db.Visits.Add(visit);
+        await _db.SaveChangesAsync(cancellationToken);
+        return (await MapReceptionVisitAsync(visit.VisitId, cancellationToken))!;
     }
 
     public async Task<IReadOnlyList<GuestLookupDto>> SearchGuestsAsync(string? name, string? phone, string? visitSlipCode, CancellationToken cancellationToken)
@@ -300,10 +505,41 @@ AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_MGuest_visit_slip_co
         return (await MapReceptionVisitAsync(visitId, cancellationToken))!;
     }
 
-    public async Task<PagedResult<ReceptionVisitDto>> ListReceptionVisitsAsync(PagedRequest paging, CancellationToken cancellationToken)
+    public Task<ReceptionVisitDto?> GetReceptionVisitAsync(long visitId, CancellationToken cancellationToken) =>
+        MapReceptionVisitAsync(visitId, cancellationToken);
+
+    public async Task<IReadOnlyList<ReceptionVisitDto>> LookupGuestVisitsAsync(string? name, CancellationToken cancellationToken)
+    {
+        var needle = (name ?? "").Trim();
+        if (needle.Length < 2)
+            throw new InvalidOperationException("Enter at least two letters of the guest name.");
+
+        await EnsureSchemaAsync(cancellationToken);
+        var ids = await _db.Visits.AsNoTracking()
+            .Where(v => v.Guest.GuestName.Contains(needle))
+            .OrderByDescending(v => v.IsCurrentFlag)
+            .ThenByDescending(v => v.VisitDate)
+            .ThenByDescending(v => v.CreatedAt)
+            .Take(8)
+            .Select(v => v.VisitId)
+            .ToListAsync(cancellationToken);
+
+        var rows = new List<ReceptionVisitDto>();
+        foreach (var id in ids)
+        {
+            var row = await MapReceptionVisitAsync(id, cancellationToken);
+            if (row is not null) rows.Add(row with { Signature = null });
+        }
+        return rows;
+    }
+
+    public async Task<PagedResult<ReceptionVisitDto>> ListReceptionVisitsAsync(PagedRequest paging, bool currentOnly, CancellationToken cancellationToken)
     {
         await EnsureSchemaAsync(cancellationToken);
-        return await _db.Visits.AsNoTracking()
+        var query = _db.Visits.AsNoTracking();
+        if (currentOnly)
+            query = query.Where(v => v.IsCurrentFlag);
+        return await query
             .OrderByDescending(v => v.IsCurrentFlag)
             .ThenByDescending(v => v.CreatedAt)
             .Select(v => new ReceptionVisitDto(
@@ -321,10 +557,17 @@ AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_MGuest_visit_slip_co
                 v.VisitingProfileId,
                 v.Visitor.FirstName + " " + v.Visitor.LastName,
                 v.Guest.IntroducedBy == null ? null : v.Guest.IntroducedBy.FirstName + " " + v.Guest.IntroducedBy.LastName,
-                _db.UserAccounts.Where(u => u.UserAccountId == v.CreatedByUserId)
-                    .Select(u => u.Profile.FirstName + " " + u.Profile.LastName)
-                    .FirstOrDefault(),
-                v.Notes))
+                v.CreatedByUserId == null
+                    ? null
+                    : _db.UserAccounts.Where(u => u.UserAccountId == v.CreatedByUserId)
+                        .Select(u => u.Profile.FirstName + " " + u.Profile.LastName)
+                        .FirstOrDefault(),
+                v.Notes,
+                v.Guest.Email,
+                v.Purpose,
+                v.IsCurrentFlag ? "On site" : "Signed out",
+                v.Signature != null && v.Signature != "",
+                null))
             .ToPagedResultAsync(paging, cancellationToken);
     }
 
@@ -388,6 +631,177 @@ AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_MGuest_visit_slip_co
             guest.VisitSlipCode,
             "Visit requirement met. Enter your ID / Passport number to create your applicant profile.",
             null);
+    }
+
+    public async Task<ParentApplicantEligibilityDto> CheckParentApplicantAsync(
+        ParentApplicantRequest request,
+        CancellationToken cancellationToken)
+    {
+        var applicantName = (request.ApplicantFullName ?? "").Trim();
+        var email = (request.Email ?? "").Trim();
+        var phone = (request.Phone ?? "").Trim();
+        var membershipNo = (request.ParentMembershipNo ?? "").Trim();
+        var parentName = (request.ParentFullName ?? "").Trim();
+
+        if (string.IsNullOrWhiteSpace(applicantName))
+            throw new InvalidOperationException("Enter your full name.");
+        if (string.IsNullOrWhiteSpace(email) && string.IsNullOrWhiteSpace(phone))
+            throw new InvalidOperationException("Enter an email address or phone number.");
+        if (!string.IsNullOrWhiteSpace(email) && !email.Contains('@'))
+            throw new InvalidOperationException("Enter a valid email address.");
+        if (string.IsNullOrWhiteSpace(membershipNo))
+            throw new InvalidOperationException("Enter your parent's membership number.");
+        if (string.IsNullOrWhiteSpace(parentName))
+            throw new InvalidOperationException("Enter your parent's full name so we can verify the membership number.");
+
+        var wanted = NormalizeMembershipNo(membershipNo);
+        var accounts = await _db.Accounts.AsNoTracking()
+            .Include(a => a.Profile)
+                .ThenInclude(p => p.MDependants)
+                    .ThenInclude(d => d.RelationshipType)
+            .Include(a => a.CurrentMemberStatus)
+            .Where(a => !a.IsDeleted && a.MembershipNo != null)
+            .ToListAsync(cancellationToken);
+        var parent = accounts.FirstOrDefault(a => NormalizeMembershipNo(a.MembershipNo) == wanted);
+        if (parent is null || parent.Profile is null)
+        {
+            return new ParentApplicantEligibilityDto(
+                false, false, false, false, null, null, null, null, null, 0, null, null, null,
+                "No member matches that membership number. Check the number with your parent and try again.");
+        }
+
+        var officialName = $"{parent.Profile.FirstName} {parent.Profile.MiddleName} {parent.Profile.LastName}";
+        if (!ParentNamesMatch(parentName, officialName))
+        {
+            return new ParentApplicantEligibilityDto(
+                true, false, false, false, null, null, parent.MembershipNo, null,
+                parent.CurrentMemberStatus?.Code, 0, null, null, null,
+                $"Parent's name does not match membership {parent.MembershipNo}, which belongs to {($"{parent.Profile.FirstName} {parent.Profile.LastName}").Trim()}. Check the spelling and try again.");
+        }
+
+        var asOf = DateOnly.FromDateTime(DateTime.UtcNow);
+        var joined = parent.JoinedDate ?? parent.StartDate;
+        var years = joined is DateOnly start ? MembershipFeeCalculator.CompletedYears(start, asOf) : 0;
+        var status = (parent.CurrentMemberStatus?.Code ?? "").Trim().ToUpperInvariant();
+        var active = status == "ACTIVE";
+        var waived = active && years >= MembershipFeeCalculator.EntranceWaiverMinimumParentYears;
+        var confirmedName = $"{parent.Profile.FirstName} {parent.Profile.LastName}".Trim();
+        if (!active)
+        {
+            return new ParentApplicantEligibilityDto(
+                true, true, false, false, parent.AccountId, parent.ProfileId, parent.MembershipNo,
+                confirmedName, status, years, null, null, joined?.Year,
+                "That membership is not active, so this parent cannot start a child's application. Ask the club office.");
+        }
+
+        var childLink = MatchRecordedChild(parent.Profile.MDependants, applicantName);
+        if (childLink.Result == ChildLinkResult.NotRecorded)
+        {
+            return new ParentApplicantEligibilityDto(
+                true, true, false, false, parent.AccountId, parent.ProfileId, parent.MembershipNo,
+                confirmedName, status, years, null, null, joined?.Year,
+                $"{applicantName} is not listed as a child of {confirmedName}. This path uses the children already saved on that member's record. Ask the club office to add you, or apply as a standard applicant.");
+        }
+        if (childLink.Result == ChildLinkResult.DateOfBirthMissing || childLink.DateOfBirth is not DateOnly recordedDob)
+        {
+            return new ParentApplicantEligibilityDto(
+                true, true, false, false, parent.AccountId, parent.ProfileId, parent.MembershipNo,
+                confirmedName, status, years, null, null, joined?.Year,
+                $"{confirmedName} has {applicantName} listed as a child, but that record has no date of birth. Ask the club office to record the date of birth already held for this child.");
+        }
+
+        var age = MembershipFeeCalculator.CompletedYears(recordedDob, asOf);
+        if (age < MembershipFeeCalculator.EntranceWaiverMinimumAge)
+        {
+            var eligibleOn = recordedDob.AddYears(MembershipFeeCalculator.EntranceWaiverMinimumAge);
+            return new ParentApplicantEligibilityDto(
+                true, true, false, false, parent.AccountId, parent.ProfileId, parent.MembershipNo,
+                confirmedName, status, years, null, null, joined?.Year,
+                $"A member's child can apply only after reaching 21. The date of birth already on {confirmedName}'s record ({recordedDob:d MMMM yyyy}) shows {applicantName} is {age}. You can apply from {eligibleOn:d MMMM yyyy}.",
+                recordedDob,
+                age);
+        }
+
+        var waiverNote = waived
+            ? $" Entrance fee can be waived ({years} continuous years)."
+            : $" Entrance fee is still payable. This parent has {years} continuous year(s); 5 are required for a waiver.";
+
+        return new ParentApplicantEligibilityDto(
+            true,
+            true,
+            true,
+            waived,
+            parent.AccountId,
+            parent.ProfileId,
+            parent.MembershipNo,
+            confirmedName,
+            status,
+            years,
+            parent.Profile.Email,
+            parent.Profile.Mobile,
+            joined?.Year,
+            $"Parent verified. {confirmedName} has you listed as a child, and the date of birth on that record ({recordedDob:d MMMM yyyy}) shows you have reached 21 (age {age}). Club visits are not required. Your parent can act as proposer. A seconder is still required." + waiverNote,
+            recordedDob,
+            age);
+    }
+
+    private readonly record struct ChildLink(ChildLinkResult Result, DateOnly? DateOfBirth);
+
+    private enum ChildLinkResult
+    {
+        NotRecorded,
+        DateOfBirthMissing,
+        Matched
+    }
+
+    private static ChildLink MatchRecordedChild(IEnumerable<MDependant> dependants, string applicantName)
+    {
+        var nameMatches = dependants
+            .Where(d => d.IsActive && IsChildRelationship(d.RelationshipType))
+            .Where(d => ChildNamesMatch(applicantName, d.DependantName))
+            .ToList();
+        if (nameMatches.Count == 0)
+            return new ChildLink(ChildLinkResult.NotRecorded, null);
+
+        var matched = nameMatches.FirstOrDefault(d => d.DependantDob is not null) ?? nameMatches[0];
+        if (matched.DependantDob is not DateOnly dob)
+            return new ChildLink(ChildLinkResult.DateOfBirthMissing, null);
+        return new ChildLink(ChildLinkResult.Matched, dob);
+    }
+
+    private static bool IsChildRelationship(RelationshipType? relationship)
+    {
+        if (relationship is null) return false;
+        if (string.Equals(relationship.Code, "CHILD", StringComparison.OrdinalIgnoreCase)) return true;
+        var name = relationship.Name ?? "";
+        return name.Contains("child", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("son", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("daughter", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeMembershipNo(string? value) =>
+        new string((value ?? "").Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+
+    private static bool ParentNamesMatch(string provided, string official) => TokenNamesMatch(provided, official);
+
+    private static bool ChildNamesMatch(string applicantName, string recordedName) => TokenNamesMatch(applicantName, recordedName);
+
+    private static bool TokenNamesMatch(string provided, string official)
+    {
+        var left = NameTokens(provided);
+        var right = NameTokens(official);
+        if (left.Count < 2 || right.Count < 2) return false;
+        return left.All(right.Contains) && right.Take(1).All(left.Contains) && right.TakeLast(1).All(left.Contains);
+    }
+
+    private static List<string> NameTokens(string value)
+    {
+        var titles = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "mr", "mrs", "ms", "miss", "dr", "prof", "sir" };
+        return value
+            .Split([' ', ',', '.', '-'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(token => token.Trim().ToLowerInvariant())
+            .Where(token => token.Length > 1 && !titles.Contains(token))
+            .ToList();
     }
 
     private async Task<MGuest> CreateGuestCoreAsync(string guestName, long introducedByProfileId, string? phone, long? actorUserId, CancellationToken cancellationToken)
@@ -498,7 +912,10 @@ AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_MGuest_visit_slip_co
                     ? null
                     : v.Guest.IntroducedBy.FirstName + " " + v.Guest.IntroducedBy.LastName,
                 v.CreatedByUserId,
-                v.Notes
+                v.Notes,
+                Email = v.Guest.Email,
+                v.Purpose,
+                v.Signature
             })
             .FirstOrDefaultAsync(cancellationToken);
         if (result is null) return null;
@@ -531,7 +948,12 @@ AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_MGuest_visit_slip_co
             result.VisitorName,
             result.IntroducedByName,
             staffName,
-            result.Notes);
+            result.Notes,
+            result.Email,
+            result.Purpose,
+            result.IsCurrentFlag ? "On site" : "Signed out",
+            !string.IsNullOrWhiteSpace(result.Signature),
+            result.Signature);
     }
 
     private async Task RequireHostAsync(long profileId, CancellationToken cancellationToken)
@@ -543,6 +965,24 @@ AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_MGuest_visit_slip_co
             throw new InvalidOperationException("This membership class cannot introduce or accompany guests.");
         if (!account.CurrentMemberStatus.IsActiveStatus)
             throw new InvalidOperationException("Members who are posted or removed cannot introduce or accompany guests.");
+    }
+
+    private async Task RejectIfAlreadyOnSiteAsync(MGuest guest, CancellationToken cancellationToken)
+    {
+        var openForGuest = await _db.Visits.AsNoTracking()
+            .AnyAsync(v => v.GuestId == guest.GuestId && v.IsCurrentFlag, cancellationToken);
+        if (openForGuest)
+            throw new InvalidOperationException(
+                $"{guest.GuestName} is already on site. Sign that guest out before registering another visit.");
+
+        // Same person may exist as duplicate guest rows; block any matching name still on site.
+        var otherOpenNames = await _db.Visits.AsNoTracking()
+            .Where(v => v.IsCurrentFlag && v.GuestId != guest.GuestId)
+            .Select(v => v.Guest.GuestName)
+            .ToListAsync(cancellationToken);
+        if (otherOpenNames.Any(name => NamesMatch(name, guest.GuestName)))
+            throw new InvalidOperationException(
+                $"{guest.GuestName} is already on site. Sign that guest out before registering another visit.");
     }
 
     private async Task EnsureActiveGuestCapacityAsync(long profileId, CancellationToken cancellationToken)

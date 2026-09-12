@@ -24,6 +24,9 @@ namespace ClubManagement.Entities.Guests
         [Column("phone")]
         public string? Phone { get; set; }
 
+        [Column("email")]
+        public string? Email { get; set; }
+
         [Column("visit_slip_code")]
         public string? VisitSlipCode { get; set; }
 

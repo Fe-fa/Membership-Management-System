@@ -69,6 +69,7 @@ export function StaffMembershipForm({
   profileStatus,
   profileMeta,
   headerActions,
+  applicationId,
 }: {
   draft: ApplicationDraft;
   onChange: (next: ApplicationDraft) => void;
@@ -82,6 +83,7 @@ export function StaffMembershipForm({
   profileStatus?: string;
   profileMeta?: string;
   headerActions?: ReactNode;
+  applicationId?: string | number | null;
 }) {
   const formSteps = variant === "existingMember" ? EXISTING_MEMBER_STEPS : STEPS;
   const [step, setStep] = useState<StepId>("personal");
@@ -188,7 +190,12 @@ export function StaffMembershipForm({
         />
       ) : null}
       {step === "supporters" && variant !== "existingMember" ? (
-        <StepSupporters value={draft.supporters} errors={errors} onChange={patch("supporters")} />
+        <StepSupporters
+          value={draft.supporters}
+          errors={errors}
+          onChange={patch("supporters")}
+          applicationId={applicationId}
+        />
       ) : null}
       {step === "clubs" ? <StepClubs value={draft.clubs} errors={errors} onChange={patch("clubs")} /> : null}
       {step === "consent" && variant !== "existingMember" ? (

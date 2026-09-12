@@ -365,3 +365,20 @@ D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\_build_check\ClubManagem
 D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\_build_check\ClubManagement.runtimeconfig.json
 D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\_build_check\ClubManagement.dll
 D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\_build_check\ClubManagement.pdb
+C:\Users\fe-fa\AppData\Local\Temp\clubmgmt-build-check\appsettings.Development.json
+C:\Users\fe-fa\AppData\Local\Temp\clubmgmt-build-check\appsettings.json
+C:\Users\fe-fa\AppData\Local\Temp\clubmgmt-build-check\ClubManagement.staticwebassets.runtime.json
+C:\Users\fe-fa\AppData\Local\Temp\clubmgmt-build-check\ClubManagement.staticwebassets.endpoints.json
+C:\Users\fe-fa\AppData\Local\Temp\clubmgmt-build-check\ClubManagement.deps.json
+C:\Users\fe-fa\AppData\Local\Temp\clubmgmt-build-check\ClubManagement.runtimeconfig.json
+C:\Users\fe-fa\AppData\Local\Temp\clubmgmt-build-check\ClubManagement.dll
+C:\Users\fe-fa\AppData\Local\Temp\clubmgmt-build-check\ClubManagement.pdb
+C:\Users\fe-fa\AppData\Local\Temp\clubmgmt-build-check2\appsettings.Development.json
+C:\Users\fe-fa\AppData\Local\Temp\clubmgmt-build-check2\appsettings.json
+C:\Users\fe-fa\AppData\Local\Temp\clubmgmt-build-check2\ClubManagement.staticwebassets.runtime.json
+C:\Users\fe-fa\AppData\Local\Temp\clubmgmt-build-check2\ClubManagement.staticwebassets.endpoints.json
+C:\Users\fe-fa\AppData\Local\Temp\clubmgmt-build-check2\ClubManagement.deps.json
+C:\Users\fe-fa\AppData\Local\Temp\clubmgmt-build-check2\ClubManagement.runtimeconfig.json
+C:\Users\fe-fa\AppData\Local\Temp\clubmgmt-build-check2\ClubManagement.dll
+C:\Users\fe-fa\AppData\Local\Temp\clubmgmt-build-check2\ClubManagement.pdb
+D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\ClubManagement\obj\Debug\net10.0\staticwebassets.upToDateCheck.txt

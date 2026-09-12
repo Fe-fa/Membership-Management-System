@@ -399,6 +399,23 @@ public class CommitteesController : ControllerBase
         }
     }
 
+    [HttpPost("ballot/{itemId:long}/voting")]
+    public async Task<ActionResult<CommitteeBallotItemDto>> SetBallotVoting(
+        long itemId,
+        [FromBody] SetBallotVotingRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!await CanAccessBallotAsync(cancellationToken)) return BallotForbidden();
+        try
+        {
+            return Ok(await _ballots.SetVotingOpenAsync(itemId, request.Open, User.UserId(), cancellationToken));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpPost("ballot/{itemId:long}/signatures")]
     public async Task<ActionResult<CommitteeBallotItemDto>> ProceedToSignatures(
         long itemId,

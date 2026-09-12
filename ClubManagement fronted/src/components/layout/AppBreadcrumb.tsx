@@ -104,8 +104,25 @@ export function crumbsForLocation(
       { label: "Committee Ballot", to: "/committee-ballot/attendance" },
       { label: "Ballot per candidate" },
     );
+  } else if (pathname.startsWith("/committee-ballot/signatures")) {
+    rest.push(
+      { label: "Committee Ballot", to: "/committee-ballot/attendance" },
+      { label: "Signatures" },
+    );
   } else if (pathname.startsWith("/committee-ballot")) {
     rest.push({ label: "Committee Ballot" });
+  } else if (pathname.startsWith("/election/notice")) {
+    rest.push({ label: "AGM/EGM Election", to: "/election/notice" }, { label: "Meeting notice" });
+  } else if (pathname.startsWith("/election/officers")) {
+    rest.push({ label: "AGM/EGM Election", to: "/election/notice" }, { label: "Officers & ballot" });
+  } else if (pathname.startsWith("/election/tally")) {
+    rest.push({ label: "AGM/EGM Election", to: "/election/notice" }, { label: "Live tally" });
+  } else if (pathname.startsWith("/election/proxies")) {
+    rest.push({ label: "AGM/EGM Election", to: "/election/notice" }, { label: "Lodged proxies" });
+  } else if (pathname.startsWith("/election/nominations")) {
+    rest.push({ label: "AGM/EGM Election", to: "/election/notice" }, { label: "Nominations" });
+  } else if (pathname.startsWith("/election/minutes")) {
+    rest.push({ label: "AGM/EGM Election", to: "/election/notice" }, { label: "Meeting minutes" });
   } else if (pathname.startsWith("/election")) {
     rest.push({ label: "AGM/EGM Election" });
   } else if (pathname.startsWith("/governance")) {
@@ -128,26 +145,38 @@ export function crumbsForLocation(
     rest.push({ label: "User management", to: "/user-management" }, { label: "User" });
   } else if (pathname.startsWith("/user-management")) {
     rest.push({ label: "User management" });
+  } else if (pathname.startsWith("/finance/non-membership/accommodation")) {
+    rest.push({ label: "Finance", to: "/finance/desk" }, { label: "Accommodation" });
+  } else if (pathname.startsWith("/finance/non-membership/corkage")) {
+    rest.push({ label: "Finance", to: "/finance/desk" }, { label: "Corkage" });
+  } else if (pathname.startsWith("/finance/non-membership/custom-charges")) {
+    rest.push({ label: "Finance", to: "/finance/desk" }, { label: "Custom charges" });
   } else if (pathname.startsWith("/finance")) {
     rest.push({ label: "Finance" });
   } else if (pathname.startsWith("/reception")) {
     rest.push({ label: "Reception" });
   } else if (pathname.startsWith("/settings/rbac")) {
-    rest.push({ label: "Settings", to: "/settings" }, { label: "Role-based access" });
+    rest.push({ label: "Settings", to: "/settings/rbac" }, { label: "Roles & permissions" });
+  } else if (pathname.startsWith("/settings/lookups")) {
+    rest.push({ label: "Settings", to: "/settings/rbac" }, { label: "Lookups & fee schedule" });
   } else if (pathname.startsWith("/settings/club")) {
-    rest.push({ label: "Settings", to: "/settings" }, { label: "Club preferences" });
+    rest.push({ label: "Settings", to: "/settings/rbac" }, { label: "Club preferences" });
   } else if (pathname.startsWith("/settings/account")) {
-    rest.push({ label: "Settings", to: "/settings" }, { label: "Account & Profile" });
+    rest.push({ label: "Settings", to: "/settings/account" }, { label: "Account & Profile" });
   } else if (pathname.startsWith("/settings/privacy")) {
-    rest.push({ label: "Settings", to: "/settings" }, { label: "Privacy & Data" });
+    rest.push({ label: "Settings", to: "/settings/account" }, { label: "Privacy & Data" });
   } else if (pathname.startsWith("/settings/appearance")) {
-    rest.push({ label: "Settings", to: "/settings" }, { label: "Interface" });
+    rest.push({ label: "Settings", to: "/settings/account" }, { label: "Interface" });
   } else if (pathname.startsWith("/settings/automations")) {
-    rest.push({ label: "Settings", to: "/settings" }, { label: "Automations" });
+    rest.push({ label: "Settings", to: "/settings/account" }, { label: "Automations" });
   } else if (pathname.startsWith("/settings")) {
     rest.push({ label: "Settings" });
   } else if (pathname.startsWith("/accommodation")) {
     rest.push({ label: "Accommodation" });
+  } else if (pathname.startsWith("/corkage")) {
+    rest.push({ label: "Corkage" });
+  } else if (pathname.startsWith("/custom-charges")) {
+    rest.push({ label: "Custom charges" });
   } else if (pathname.startsWith("/support")) {
     rest.push({ label: "Support" });
   } else if (pathname.startsWith("/applications")) {

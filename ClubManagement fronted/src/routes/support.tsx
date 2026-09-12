@@ -3,7 +3,7 @@ import { SupportPage } from "@/pages/admin/SupportPage";
 
 export const Route = createFileRoute("/support")({
   head: () => ({
-    meta: [{ title: "Support — Aero Club of East Africa" }],
+    meta: [{ title: "Applicant Support Center — Aero Club of East Africa" }],
   }),
   component: SupportPage,
 });

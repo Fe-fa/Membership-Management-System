@@ -33,6 +33,12 @@ namespace ClubManagement.Entities.Guests
         [Column("notes")]
         public string? Notes { get; set; }
 
+        [Column("purpose")]
+        public string? Purpose { get; set; }
+
+        [Column("signature")]
+        public string? Signature { get; set; }
+
         [Column("is_current_flag")]
         public bool IsCurrentFlag { get; set; }
 

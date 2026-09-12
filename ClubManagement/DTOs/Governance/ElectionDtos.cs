@@ -15,6 +15,7 @@ public class SetBallotWindowRequest
 {
     public bool Open { get; set; }
     public long? ConductorProfileId { get; set; }
+    public DateTime? OpensAt { get; set; }
     public DateTime? ClosesAt { get; set; }
 }
 
@@ -34,6 +35,8 @@ public class CastMemberBallotRequest
 
 public class AppointProxyRequest
 {
+    /// <summary>Preferred: link to an existing member so they can be notified.</summary>
+    public long? ProxyProfileId { get; set; }
     public string ProxyTitle { get; set; } = string.Empty;
     public string ProxyName { get; set; } = string.Empty;
     public string? AlternateTitle { get; set; }
@@ -42,8 +45,18 @@ public class AppointProxyRequest
     public bool LeaveToDiscretion { get; set; }
     public string? AppointingName { get; set; }
     public string? AppointingPoBox { get; set; }
+    public string? ProxyMembershipNo { get; set; }
+    public string? Notes { get; set; }
+    public string? SignedFormUrl { get; set; }
     public bool IsPoll { get; set; }
     public List<ProxyInstructionDto> Instructions { get; set; } = [];
+}
+
+public class ReviewProxyRequest
+{
+    /// <summary>APPROVE | REJECT</summary>
+    public string Decision { get; set; } = string.Empty;
+    public string? Reason { get; set; }
 }
 
 public class ProxyInstructionDto
@@ -82,10 +95,34 @@ public class AppointElectionOfficersRequest
     public long? ReturningOfficerProfileId { get; set; }
 }
 
+public class SaveMeetingMinutesRequest
+{
+    public string? Proceedings { get; set; }
+}
+
+public class MeetingMinutesDto
+{
+    public long GeneralMeetingId { get; set; }
+    public MeetingNoticeDto Meeting { get; set; } = new();
+    public string? Proceedings { get; set; }
+    /// <summary>DRAFT | SIGNED</summary>
+    public string Status { get; set; } = "DRAFT";
+    public string? RecordedByName { get; set; }
+    public DateTime? RecordedAt { get; set; }
+    public string? SignedByName { get; set; }
+    public DateTime? SignedAt { get; set; }
+    public DateTime? ResultDeclaredAt { get; set; }
+    public string? ResultSummary { get; set; }
+    public IReadOnlyList<AgendaItemTallyDto> Agenda { get; set; } = [];
+    public bool CanEdit { get; set; }
+    public bool CanSign { get; set; }
+}
+
 public class ElectionDeskDto
 {
     public MeetingNoticeDto Meeting { get; set; } = new();
     public bool BallotWindowOpen { get; set; }
+    public DateTime? BallotOpensAt { get; set; }
     public DateTime? BallotClosesAt { get; set; }
     public long? ConductorProfileId { get; set; }
     public string? ConductorName { get; set; }
@@ -102,6 +139,28 @@ public class ElectionDeskDto
     public bool QuorumMet { get; set; }
     public IReadOnlyList<AgendaItemTallyDto> Agenda { get; set; } = [];
     public IReadOnlyList<NominationDto> Nominations { get; set; } = [];
+    public IReadOnlyList<DeskProxyDto> Proxies { get; set; } = [];
+}
+
+public class DeskProxyDto
+{
+    public long ProxyId { get; set; }
+    public string? AppointingName { get; set; }
+    public string? ProxyName { get; set; }
+    public string? ProxyMembershipNo { get; set; }
+    public long? ProxyProfileId { get; set; }
+    /// <summary>True when the proxy was linked to a member account and notified.</summary>
+    public bool LinkedMember { get; set; }
+    /// <summary>True when staff must contact the proxy manually (no member link).</summary>
+    public bool ManualContactRequired { get; set; }
+    public string? VoteInstruction { get; set; }
+    public bool LeaveToDiscretion { get; set; }
+    public DateTime? InstrumentReceivedAt { get; set; }
+    public bool DepositedOnTime { get; set; }
+    public bool IsValid { get; set; }
+    /// <summary>PENDING | APPROVED | REJECTED | LATE</summary>
+    public string ReviewStatus { get; set; } = "PENDING";
+    public string? ReviewReason { get; set; }
 }
 
 public class AgendaItemTallyDto
@@ -123,6 +182,9 @@ public class NominationDto
     public string ProposerName { get; set; } = string.Empty;
     public string SeconderName { get; set; } = string.Empty;
     public string RoleStandingFor { get; set; } = string.Empty;
+    public string? PhotoUrl { get; set; }
+    public string? Occupation { get; set; }
+    public string? Company { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
@@ -147,13 +209,22 @@ public class MemberElectionDto
     public DateTime? PollProxyDeadlineAt { get; set; }
     public IReadOnlyList<MemberBallotItemDto> BallotItems { get; set; } = [];
     public MemberProxyDto? Proxy { get; set; }
+    /// <summary>Members who appointed this profile as their proxy for open / recent meetings.</summary>
+    public IReadOnlyList<ProxyHeldDto> ProxiesHeld { get; set; } = [];
     public IReadOnlyList<NominationDto> Nominations { get; set; } = [];
+    public DateTime? ResultDeclaredAt { get; set; }
+    public bool QuorumMet { get; set; }
+    public int UniqueVoters { get; set; }
+    public int EligibleVoters { get; set; }
+    public int QuorumRequired { get; set; } = 20;
+    public IReadOnlyList<AgendaItemTallyDto> PublishedResults { get; set; } = [];
 }
 
 public class MemberBallotItemDto
 {
     public long AgendaItemId { get; set; }
     public string Subject { get; set; } = string.Empty;
+    public string? ResolutionText { get; set; }
     public bool IsSpecialBusiness { get; set; }
     public string? MyVoteValue { get; set; }
     public string? ReceiptNumber { get; set; }
@@ -173,6 +244,8 @@ public class VoteReceiptDto
 public class MemberProxyDto
 {
     public long ProxyId { get; set; }
+    public long? ProxyProfileId { get; set; }
+    public bool LinkedMember { get; set; }
     public string? ProxyTitle { get; set; }
     public string? ProxyName { get; set; }
     public string? AlternateTitle { get; set; }
@@ -181,7 +254,33 @@ public class MemberProxyDto
     public bool LeaveToDiscretion { get; set; }
     public string? AppointingName { get; set; }
     public string? AppointingPoBox { get; set; }
+    public string? ProxyMembershipNo { get; set; }
+    public string? Notes { get; set; }
+    public string? SignedFormUrl { get; set; }
+    public DateTime? InstrumentReceivedAt { get; set; }
     public bool DepositedOnTime { get; set; }
+    /// <summary>PENDING | APPROVED | REJECTED | LATE</summary>
+    public string? ReviewStatus { get; set; }
+    public string? ReviewReason { get; set; }
+}
+
+/// <summary>Appointment where the logged-in member is the named proxy.</summary>
+public class ProxyHeldDto
+{
+    public long ProxyId { get; set; }
+    public long GeneralMeetingId { get; set; }
+    public string MeetingType { get; set; } = string.Empty;
+    public string MeetingDate { get; set; } = string.Empty;
+    public string? Venue { get; set; }
+    public string AppointingName { get; set; } = string.Empty;
+    public string? AppointingMembershipNo { get; set; }
+    public string? VoteInstruction { get; set; }
+    public bool LeaveToDiscretion { get; set; }
+    public string InstructionLabel { get; set; } = string.Empty;
+    public string? ReviewStatus { get; set; }
+    public DateTime? ProxyDeadlineAt { get; set; }
+    public DateTime? InstrumentReceivedAt { get; set; }
+    public IReadOnlyList<string> Resolutions { get; set; } = [];
 }
 
 public class MemberSearchHitDto

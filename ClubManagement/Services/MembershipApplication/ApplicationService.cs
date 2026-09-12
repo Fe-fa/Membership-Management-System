@@ -292,7 +292,7 @@ public class ApplicationService : IApplicationService
 
     /// <summary>
     /// Sponsor progress from Endorsement: latest row per role (proposer/seconder).
-    /// A role counts as complete when personal, professional, or value-addition text is present.
+    /// A role counts as complete when a real statement is present (declined rows do not count).
     /// </summary>
     private static (string Code, string Name, int CompletedCount, int RequiredCount, DateTime? CompletedAt)
         ResolveSponsorFromEndorsements(IEnumerable<Endorsement> endorsements)
@@ -322,10 +322,15 @@ public class ApplicationService : IApplicationService
         return ("PENDING", "Pending", completed, required, null);
     }
 
-    private static bool IsEndorsementFilled(Endorsement e) =>
-        !string.IsNullOrWhiteSpace(e.PersonalKnowledge) ||
-        !string.IsNullOrWhiteSpace(e.ProfessionalKnowledge) ||
-        !string.IsNullOrWhiteSpace(e.ValueAddition);
+    private static bool IsEndorsementFilled(Endorsement e)
+    {
+        if (IsDeclinedEndorsement(e)) return false;
+        return !string.IsNullOrWhiteSpace(e.PersonalKnowledge) ||
+               !string.IsNullOrWhiteSpace(e.ProfessionalKnowledge) ||
+               !string.IsNullOrWhiteSpace(e.ValueAddition);
+    }
+
+    private static bool IsDeclinedEndorsement(Endorsement e) => e.IsDeclined;
 
     private static string NormalizeEndorserRole(string? role)
     {
@@ -434,7 +439,9 @@ public class ApplicationService : IApplicationService
 
     public async Task<ApplicationDetailDto?> UpdateAsync(long applicationId, UpdateApplicationRequest request, CancellationToken cancellationToken = default)
     {
-        var entity = await _dbContext.Applications.FirstOrDefaultAsync(x => x.ApplicationId == applicationId, cancellationToken);
+        var entity = await _dbContext.Applications
+            .Include(x => x.Status)
+            .FirstOrDefaultAsync(x => x.ApplicationId == applicationId, cancellationToken);
         if (entity is null)
         {
             return null;
@@ -442,6 +449,8 @@ public class ApplicationService : IApplicationService
 
         var before = SnapshotApplication(entity);
         var previousStatusId = entity.ApplicationStatusId;
+        var previousProposerId = entity.ProposerProfileId;
+        var previousSeconderId = entity.SeconderProfileId;
         if (!string.IsNullOrWhiteSpace(request.ApplicationNo))
             entity.ApplicationNo = request.ApplicationNo;
         if (request.ApplicantProfileId.HasValue)
@@ -453,8 +462,12 @@ public class ApplicationService : IApplicationService
         if (request.ApplicationStatusId.HasValue)
             entity.ApplicationStatusId = request.ApplicationStatusId.Value;
 
-        entity.ProposerProfileId = request.ProposerProfileId ?? entity.ProposerProfileId;
-        entity.SeconderProfileId = request.SeconderProfileId ?? entity.SeconderProfileId;
+        entity.ProposerProfileId = request.ProposerProfileId
+            ?? ReadSponsorProfileId(request.FormDataJson ?? entity.FormDataJson, "proposer")
+            ?? entity.ProposerProfileId;
+        entity.SeconderProfileId = request.SeconderProfileId
+            ?? ReadSponsorProfileId(request.FormDataJson ?? entity.FormDataJson, "seconder")
+            ?? entity.SeconderProfileId;
         entity.ReceivedDate = request.ReceivedDate;
         entity.ClubVisitsCount = request.ClubVisitsCount;
         entity.InterviewRequiredFlag = request.InterviewRequiredFlag;
@@ -484,6 +497,25 @@ public class ApplicationService : IApplicationService
             SnapshotApplication(entity),
             request.UpdatedByUserId,
             cancellationToken);
+
+        var atEndorsement = NormalizeStatusCode(entity.Status?.Code) is "Endorsement" or "EndorsementReview";
+        var sponsorsChanged = entity.ProposerProfileId != previousProposerId
+            || entity.SeconderProfileId != previousSeconderId;
+        if (atEndorsement && sponsorsChanged)
+        {
+            try
+            {
+                await _endorsementInvites.NotifyNewlyNamedEndorsersAsync(
+                    applicationId,
+                    previousProposerId,
+                    previousSeconderId,
+                    cancellationToken);
+            }
+            catch
+            {
+                /* keep the name change even if invite email/notify fails */
+            }
+        }
 
         var updated = await LoadApplicationAsync(applicationId, cancellationToken);
         return updated is null ? null : Map(updated);
@@ -919,6 +951,9 @@ public class ApplicationService : IApplicationService
             EndorserYearOfJoining = request.EndorserYearOfJoining,
             EndorserPhone = request.EndorserPhone,
             EndorserEmail = request.EndorserEmail,
+            Status = Endorsement.IsDeclinedRecord(null, request.PersonalKnowledge)
+                ? Endorsement.StatusDeclined
+                : Endorsement.StatusComplete,
             CreatedAt = DateTime.UtcNow,
             CreatedByUserId = request.CreatedByUserId
         };
@@ -1066,6 +1101,30 @@ public class ApplicationService : IApplicationService
             cancellationToken);
         return Map(entity);
     }
+
+    private static long? ReadSponsorProfileId(string? formJson, string role)
+    {
+        if (string.IsNullOrWhiteSpace(formJson)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(formJson);
+            if (!doc.RootElement.TryGetProperty("supporters", out var supporters)) return null;
+            if (!supporters.TryGetProperty(role, out var slot)) return null;
+            if (!slot.TryGetProperty("memberProfileId", out var idEl)) return null;
+            if (idEl.ValueKind == JsonValueKind.Number && idEl.TryGetInt64(out var n) && n > 0)
+                return n;
+            if (idEl.ValueKind == JsonValueKind.String
+                && long.TryParse(idEl.GetString(), out var parsed)
+                && parsed > 0)
+                return parsed;
+        }
+        catch (JsonException)
+        {
+            /* ignore malformed drafts */
+        }
+        return null;
+    }
+
     /// <summary>Reads the wizard‑captured membership type from formDataJson.membership.membershipType
     /// and humanises it ("full" → "Full Membership"). Falls back to the ElectionType
     /// when no draft has been saved.</summary>
@@ -1341,6 +1400,9 @@ public class ApplicationService : IApplicationService
         EndorserYearOfJoining = entity.EndorserYearOfJoining,
         EndorserPhone = entity.EndorserPhone,
         EndorserEmail = entity.EndorserEmail,
+        Status = entity.Status,
+        DeclinedAt = entity.DeclinedAt,
+        DeclineReason = entity.DeclineReason,
         CreatedAt = entity.CreatedAt,
         CreatedByUserId = entity.CreatedByUserId,
         UpdatedByUserId = entity.UpdatedByUserId

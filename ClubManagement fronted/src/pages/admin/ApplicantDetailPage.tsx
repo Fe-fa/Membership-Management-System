@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { ApplicantReview, parseApplicationDraft } from "@/components/panels/ApplicantReview";
 import { RejectApplicationDialog } from "@/components/admin/RejectApplicationDialog";
 import { PageBackLink, PageFrame, PageHeader } from "@/components/layout/PageFrame";
+import { PageBodyLoading } from "@/components/layout/PageLoading";
 import { StaffMembershipForm } from "@/components/membership/StaffMembershipForm";
 import { Button } from "@/components/ui/button";
 import {
@@ -233,7 +234,7 @@ export function ApplicantDetailPage() {
     return (
       <PageFrame width="lg">
         <PageBackLink to={backTo} search={backSearch} label={backLabel} />
-        <p className="text-sm text-muted-foreground">Loading applicant details…</p>
+        <PageBodyLoading label="Loading applicant details…" />
       </PageFrame>
     );
   }
@@ -418,6 +419,7 @@ export function ApplicantDetailPage() {
           readOnly
           saving={false}
           onSave={() => undefined}
+          applicationId={applicationId}
         />
       ) : editing ? (
         <StaffMembershipForm
@@ -426,6 +428,7 @@ export function ApplicantDetailPage() {
           saving={save.isPending}
           saveLabel="Update details"
           onSave={() => save.mutateAsync(currentDraft)}
+          applicationId={applicationId}
         />
       ) : (
         <div className="space-y-4">

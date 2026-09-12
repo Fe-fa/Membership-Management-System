@@ -9,6 +9,7 @@ import {
   type EndorsementRow,
   type ManagerReadiness,
   type PaymentRow,
+  pickActiveEndorsement,
 } from "@/components/admin/ManagerStagePanel";
 import { parseApplicationDraft } from "@/components/panels/ApplicantReview";
 import { Button } from "@/components/ui/button";
@@ -127,15 +128,22 @@ export function ManagerVerifyWizard({
     [detail.data?.formDataJson],
   );
 
-  const endorsements: EndorsementRow[] = (detail.data?.endorsements ?? []).filter(
-    (e) =>
-      Boolean(e.personalKnowledge?.trim()) ||
-      Boolean(e.professionalKnowledge?.trim()) ||
-      Boolean(e.valueAddition?.trim()),
-  );
+  const endorsements: EndorsementRow[] = [
+    pickActiveEndorsement(
+      detail.data?.endorsements ?? [],
+      "PROPOSER",
+      detail.data?.proposerProfileId,
+    ),
+    pickActiveEndorsement(
+      detail.data?.endorsements ?? [],
+      "SECONDER",
+      detail.data?.seconderProfileId,
+    ),
+  ].filter((row): row is EndorsementRow => row != null);
   const r = readiness.data;
   const cheques = pickApplicationCheques(detail.data);
-  const feeChequesOk = Boolean(r?.feeChequesUploaded) || Boolean(cheques.annual && cheques.joining);
+  const paymentsReady = Boolean(r?.paymentsReady) || Boolean(r?.entranceFeeOk && r?.annualSubscriptionOk) || Boolean(cheques.joining && cheques.annual);
+  const paymentsCleared = Boolean(r?.paymentsReceived);
   const allVerified = verified.endorsements && verified.payment && verified.details;
   const statusCode = detail.data?.statusCode ?? row.statusCode;
 
@@ -234,7 +242,7 @@ export function ManagerVerifyWizard({
   const busy = startReview.isPending || authorize.isPending;
   const canAuthorize =
     allVerified &&
-    feeChequesOk &&
+    paymentsReady &&
     Boolean(r?.endorsementsComplete) &&
     r?.memberDetailsComplete !== false &&
     r?.clubVisitsMet !== false &&
@@ -242,7 +250,7 @@ export function ManagerVerifyWizard({
       r?.canProceedToInterview ||
         (r?.cvUploaded &&
           r?.idPassportUploaded &&
-          (r?.paymentsReceived || feeChequesOk)),
+          paymentsReady),
     ) &&
     (statusCode === "Endorsement" || statusCode === "EndorsementReview");
 
@@ -347,21 +355,32 @@ export function ManagerVerifyWizard({
       {step === "payment" ? (
         <section className="space-y-3">
           <h4 className="text-sm font-semibold">Payment</h4>
+          <p className="text-sm text-muted-foreground">
+            Cheque uploads verify Entrance / Annual for authorize. Finance clearance to Paid stays pending until after the ballot (before signatures / membership no.).
+          </p>
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="rounded-lg border border-border p-3 text-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Entrance / joining fee
               </p>
-              <p className={cn("mt-1 font-medium", (r?.entranceFeeOk || Boolean(cheques.joining)) ? "text-emerald-800" : "text-amber-900")}>
-                {r?.entranceFeeOk || cheques.joining ? "Recorded" : "Missing"}
+              <p className={cn("mt-1 font-medium", r?.entranceFeeOk || cheques.joining ? "text-emerald-800" : "text-amber-900")}>
+                {r?.paymentsReceived && r?.entranceFeeOk
+                  ? "Cleared (Paid)"
+                  : r?.entranceFeeOk || cheques.joining
+                    ? "Cheque / payment submitted — authorize OK; finance clearance later"
+                    : "Missing"}
               </p>
             </div>
             <div className="rounded-lg border border-border p-3 text-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Annual subscription
               </p>
-              <p className={cn("mt-1 font-medium", (r?.annualSubscriptionOk || Boolean(cheques.annual)) ? "text-emerald-800" : "text-amber-900")}>
-                {r?.annualSubscriptionOk || cheques.annual ? "Recorded" : "Missing"}
+              <p className={cn("mt-1 font-medium", r?.annualSubscriptionOk || cheques.annual ? "text-emerald-800" : "text-amber-900")}>
+                {r?.paymentsReceived && r?.annualSubscriptionOk
+                  ? "Cleared (Paid)"
+                  : r?.annualSubscriptionOk || cheques.annual
+                    ? "Cheque / payment submitted — authorize OK; finance clearance later"
+                    : "Missing"}
               </p>
             </div>
           </div>
@@ -391,10 +410,10 @@ export function ManagerVerifyWizard({
             </Button>
             <Button
               type="button"
-              disabled={r?.paymentsReady === false && !feeChequesOk}
+              disabled={!paymentsReady}
               title={
-                r?.paymentsReady === false && !feeChequesOk
-                  ? `Awaiting: ${r.pendingPaymentItems?.join(", ") || "fees"}`
+                !paymentsReady
+                  ? `Need fee uploads/payments: ${r?.pendingItems?.filter((p) => /fee|cheque/i.test(p)).join(", ") || "entrance and annual fees"}`
                   : undefined
               }
               onClick={() => markVerified("payment", "details")}
@@ -558,8 +577,9 @@ export function ManagerVerifyWizard({
             <li className={verified.endorsements ? "text-emerald-800" : "text-amber-900"}>
               {verified.endorsements ? "✓" : "○"} Endorsements verified by manager
             </li>
-            <li className={verified.payment && r?.paymentsReceived ? "text-emerald-800" : "text-amber-900"}>
-              {verified.payment && r?.paymentsReceived ? "✓" : "○"} Fees received (joining + annual)
+            <li className={verified.payment && paymentsReady ? "text-emerald-800" : "text-amber-900"}>
+              {verified.payment && paymentsReady ? "✓" : "○"} Fees submitted (joining + annual)
+              {!paymentsCleared ? " · finance clearance after ballot" : ""}
             </li>
             <li className={verified.details && r?.memberDetailsComplete ? "text-emerald-800" : "text-amber-900"}>
               {verified.details && r?.memberDetailsComplete ? "✓" : "○"} Member details complete
@@ -592,8 +612,8 @@ export function ManagerVerifyWizard({
               title={
                 !allVerified
                   ? "Complete verify steps 1–3 first"
-                  : r?.paymentsReceived === false
-                    ? "Both fees must be received (or waived)"
+                  : !paymentsReady
+                    ? "Both fees must be paid or cheque-uploaded"
                     : r?.memberDetailsComplete === false
                       ? "Member details on the form are still incomplete"
                       : r?.canProceedToInterview === false

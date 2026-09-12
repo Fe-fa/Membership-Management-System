@@ -108,13 +108,22 @@ export function decorate(member: MemberSummary): EligibleMember {
 }
 
 
-export async function searchEligibleMembers(search: string): Promise<EligibleMember[]> {
+export async function searchEligibleMembers(
+  search: string,
+  applicationId?: number | string | null,
+): Promise<EligibleMember[]> {
   const term = search.trim();
   if (!term) return [];
 
   if (API_BASE) {
+    const params = new URLSearchParams({
+      search: term,
+      minYears: String(MIN_SUPPORTER_YEARS),
+    });
+    const id = Number(applicationId);
+    if (Number.isFinite(id) && id > 0) params.set("applicationId", String(id));
     const members = await apiRequest<MemberSummary[]>(
-      `/api/members/eligible-supporters?search=${encodeURIComponent(term)}&minYears=${MIN_SUPPORTER_YEARS}`,
+      `/api/members/eligible-supporters?${params.toString()}`,
     );
     return members
       .map(decorate)

@@ -243,6 +243,9 @@ public class EndorsementDto
     public int? EndorserYearOfJoining { get; set; }
     public string? EndorserPhone { get; set; }
     public string? EndorserEmail { get; set; }
+    public string? Status { get; set; }
+    public DateTime? DeclinedAt { get; set; }
+    public string? DeclineReason { get; set; }
     public DateTime CreatedAt { get; set; }
     public long? CreatedByUserId { get; set; }
     public long? UpdatedByUserId { get; set; }
@@ -420,9 +423,9 @@ public class ManagerReadinessDto
     public bool PilotLicenseRequired { get; set; }
     public bool PilotLicenseUploaded { get; set; }
     public bool ReadyForManager { get; set; }
-    /// <summary>Entrance + annual payments initiated/completed (gate for manager notification).</summary>
+    /// <summary>Entrance + annual payments initiated/uploaded (manager authorize gate).</summary>
     public bool PaymentsReady { get; set; }
-    /// <summary>Both fees actually received or waived (authorize-to-interview gate).</summary>
+    /// <summary>Both fees finance-cleared Paid/Waived (required after ballot, before signatures / membership no.).</summary>
     public bool PaymentsReceived { get; set; }
     public bool MemberDetailsComplete { get; set; }
     public List<ApplicationPaymentLineDto> PaymentLines { get; set; } = [];
@@ -435,7 +438,7 @@ public class ManagerReadinessDto
     public bool ClubVisitsMet { get; set; }
     public bool ClubVisitsOverride { get; set; }
     public string? ClubVisitsOverrideReason { get; set; }
-    /// <summary>Manager may authorize to Interview when docs, payments, sponsors and visits are verified.</summary>
+    /// <summary>Manager may authorize to Interview when docs, fee uploads, sponsors and visits are verified.</summary>
     public bool CanProceedToInterview { get; set; }
     public bool VisibleToManager { get; set; }
 }

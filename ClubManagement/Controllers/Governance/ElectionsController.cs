@@ -16,7 +16,10 @@ public class ElectionsController : ControllerBase
     public ElectionsController(IElectionService elections) => _elections = elections;
 
     private bool CanManage() =>
-        User.HasAnyRole("ADMIN", "GENERAL_MANAGER", "CHAIRMAN", "TREASURER", "COMMITTEE_MEMBER");
+        User.HasAnyRole("ADMIN", "GENERAL_MANAGER", "CHAIRMAN", "TREASURER", "COMMITTEE_MEMBER", "SECRETARY");
+
+    private bool CanSignMinutes() =>
+        User.HasAnyRole("CHAIRMAN", "ADMIN", "GENERAL_MANAGER");
 
     [HttpGet("notices")]
     public async Task<ActionResult<IReadOnlyList<MeetingNoticeDto>>> Notices(CancellationToken cancellationToken) =>
@@ -114,6 +117,23 @@ public class ElectionsController : ControllerBase
         }
     }
 
+    [HttpPut("meetings/{meetingId:long}/notice")]
+    public async Task<ActionResult<ElectionDeskDto>> UpdateNotice(
+        long meetingId,
+        [FromBody] PublishMeetingNoticeRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!CanManage()) return Forbid();
+        try
+        {
+            return Ok(await _elections.UpdateNoticeAsync(meetingId, request, User.UserId(), cancellationToken));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpPost("meetings/{meetingId:long}/agenda")]
     public async Task<ActionResult<ElectionDeskDto>> Agenda(
         long meetingId,
@@ -180,5 +200,92 @@ public class ElectionsController : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
+    }
+
+    [HttpPost("meetings/{meetingId:long}/proxies/{proxyId:long}/review")]
+    public async Task<ActionResult<ElectionDeskDto>> ReviewProxy(
+        long meetingId,
+        long proxyId,
+        [FromBody] ReviewProxyRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!CanManage()) return Forbid();
+        try
+        {
+            var privileged = User.HasAnyRole("ADMIN", "GENERAL_MANAGER", "CHAIRMAN");
+            return Ok(await _elections.ReviewProxyAsync(
+                meetingId,
+                proxyId,
+                request,
+                User.ProfileId(),
+                privileged,
+                User.UserId(),
+                cancellationToken));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpGet("meetings/{meetingId:long}/minutes")]
+    public async Task<ActionResult<MeetingMinutesDto>> Minutes(
+        long meetingId,
+        CancellationToken cancellationToken)
+    {
+        if (!CanManage()) return Forbid();
+        try
+        {
+            return Ok(WithMinutesPermissions(await _elections.GetMinutesAsync(meetingId, cancellationToken)));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPut("meetings/{meetingId:long}/minutes")]
+    public async Task<ActionResult<MeetingMinutesDto>> SaveMinutes(
+        long meetingId,
+        [FromBody] SaveMeetingMinutesRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!CanManage()) return Forbid();
+        try
+        {
+            return Ok(WithMinutesPermissions(
+                await _elections.SaveMinutesDraftAsync(meetingId, request, User.ProfileId(), User.UserId(), cancellationToken)));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("meetings/{meetingId:long}/minutes/sign")]
+    public async Task<ActionResult<MeetingMinutesDto>> SignMinutes(
+        long meetingId,
+        [FromBody] SaveMeetingMinutesRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!CanSignMinutes())
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Only the Chairman, Admin or General Manager may sign the minutes." });
+        try
+        {
+            return Ok(WithMinutesPermissions(
+                await _elections.SignMinutesAsync(meetingId, request, User.ProfileId(), User.UserId(), cancellationToken)));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    private MeetingMinutesDto WithMinutesPermissions(MeetingMinutesDto dto)
+    {
+        var signed = string.Equals(dto.Status, "SIGNED", StringComparison.OrdinalIgnoreCase);
+        dto.CanEdit = CanManage() && !signed;
+        dto.CanSign = CanSignMinutes() && !signed;
+        return dto;
     }
 }

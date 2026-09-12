@@ -5,9 +5,11 @@ import { ChevronDown, LogOut, Menu, Plane } from "lucide-react";
 
 import { AppBreadcrumb } from "@/components/layout/AppBreadcrumb";
 import { isNavActive, navForUser, type AppNavGroup } from "@/components/layout/nav";
+import { PageLoadingPanel } from "@/components/layout/PageLoading";
 import {
   AlertDialog,
   AlertDialogAction,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -130,7 +132,10 @@ function LogoutConfirmDialog({
             Are you sure you want to logout?
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter className="border-t border-border px-6 py-5 sm:justify-center">
+        <AlertDialogFooter className="border-t border-border px-6 py-5 sm:justify-center sm:space-x-3">
+          <AlertDialogCancel className="w-full sm:w-auto sm:min-w-[8rem]">
+            Cancel
+          </AlertDialogCancel>
           <AlertDialogAction className="w-full sm:w-auto sm:min-w-[10rem]" onClick={onConfirm}>
             Logout
           </AlertDialogAction>
@@ -177,6 +182,7 @@ function NavItems({
             key={`${to}-${itemSearch?.tab ?? itemSearch?.view ?? itemSearch?.section ?? ""}`}
             to={to}
             search={(itemSearch ?? {}) as never}
+            activeOptions={item.exact ? { exact: true } : undefined}
             onClick={onNavigate}
             className={className}
           >
@@ -271,6 +277,7 @@ export const SidebarShell = memo(function SidebarShell({
 }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const search = useRouterState({ select: (state) => state.location.search });
+  const isNavigating = useRouterState({ select: (state) => state.isLoading || state.isTransitioning });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -313,7 +320,7 @@ export const SidebarShell = memo(function SidebarShell({
 
   return (
     <div className={cn("min-h-screen", showSidebar ? "bg-background" : "bg-slate-50")}>
-      <div className="mx-auto flex w-full max-w-[1440px]">
+      <div className={cn("mx-auto flex w-full", showSidebar ? "max-w-[1440px]" : "max-w-none")}>
         {showSidebar ? (
           <aside className="sticky top-0 hidden h-screen w-64 shrink-0 overflow-y-auto border-r border-border bg-sidebar px-4 py-6 lg:block">
             <BrandMark homeTo={homeTo} />
@@ -404,9 +411,19 @@ export const SidebarShell = memo(function SidebarShell({
             </div>
           </header>
 
-          <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <main className="relative flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <AppBreadcrumb />
-            {children}
+            {/*
+              During route transitions, swap the body for a fixed-height spinner
+              so chrome stays put and content does not flash half-rendered.
+            */}
+            <div className="min-h-[28rem]">
+              {isNavigating ? (
+                <PageLoadingPanel label="Loading page…" minHeightClassName="min-h-[28rem]" />
+              ) : (
+                children
+              )}
+            </div>
           </main>
         </div>
       </div>

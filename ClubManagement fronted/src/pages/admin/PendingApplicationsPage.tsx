@@ -15,10 +15,11 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { ManagerStagePanel, pickApplicationCheques, type ManagerReadiness, type PaymentRow } from "@/components/admin/ManagerStagePanel";
+import { ManagerStagePanel, type ManagerReadiness, type PaymentRow } from "@/components/admin/ManagerStagePanel";
 import { RejectApplicationDialog } from "@/components/admin/RejectApplicationDialog";
 import { ListPagination } from "@/components/common/ListPagination";
 import { PageBackLink, PageFrame, PageHeader } from "@/components/layout/PageFrame";
+import { PageDataGate } from "@/components/layout/PageLoading";
 import { ApplicantReview, parseApplicationDraft } from "@/components/panels/ApplicantReview";
 import { Button } from "@/components/ui/button";
 import {
@@ -354,7 +355,7 @@ export function PendingApplicationsPage() {
       : "Check sponsors, fees and member details, then authorize to interview."
     : authorize
       ? "View and manage applications that have completed screening and are ready for authorization or credentials."
-      : "Track applicants through screening. Check pre-requisites, payment and sponsor status before processing.";
+      : "Track applicants through screening.";
 
   return (
     <PageFrame width="lg">
@@ -542,20 +543,16 @@ function PendingApplicationsPanel({
     !verifyingReadiness.data?.pilotLicenseRequired ||
     Boolean(verifyingReadiness.data?.pilotLicenseUploaded) ||
     formHasLicenseCopy;
-  const feeChequesOk = (() => {
-    if (verifyingReadiness.data?.feeChequesUploaded) return true;
-    const files = pickApplicationCheques(verifyDetail.data);
-    return Boolean(files.annual && files.joining);
-  })();
+  const paymentsReady = Boolean(verifyingReadiness.data?.paymentsReady);
   const canAuthorizeFromChecklist =
     Boolean(verifyingReadiness.data) &&
     (verifyingRow?.statusCode === "Endorsement" ||
       verifyingRow?.statusCode === "EndorsementReview") &&
-    feeChequesOk &&
+    paymentsReady &&
     Boolean(verifyingReadiness.data?.canProceedToInterview || (
       licenseOk &&
       verifyingReadiness.data?.endorsementsComplete &&
-      (verifyingReadiness.data?.paymentsReceived || feeChequesOk) &&
+      verifyingReadiness.data?.paymentsReady &&
       verifyingReadiness.data?.memberDetailsComplete &&
       verifyingReadiness.data?.cvUploaded &&
       verifyingReadiness.data?.idPassportUploaded &&
@@ -815,6 +812,7 @@ function PendingApplicationsPanel({
         </div>
       </div>
 
+      <PageDataGate loading={isLoading} label="Loading applications…" minHeightClassName="min-h-[22rem]">
       <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
         <table className="w-full min-w-[980px] text-sm">
           <thead className="bg-secondary/40 text-left text-muted-foreground">
@@ -837,13 +835,7 @@ function PendingApplicationsPanel({
             </tr>
           </thead>
           <tbody>
-            {isLoading ? (
-              <tr>
-                <td className="px-4 py-8 text-muted-foreground" colSpan={6}>
-                  Loading applications…
-                </td>
-              </tr>
-            ) : rows.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
                 <td className="px-4 py-8 text-muted-foreground" colSpan={6}>
                   {manager ? (
@@ -1018,6 +1010,7 @@ function PendingApplicationsPanel({
           </tbody>
         </table>
       </div>
+      </PageDataGate>
 
       <ListPagination
         page={page}
@@ -1117,8 +1110,8 @@ function PendingApplicationsPanel({
                 title={
                   canAuthorizeFromChecklist
                     ? undefined
-                    : !feeChequesOk
-                      ? "Upload annual subscription and joining / entrance fee cheques before authorizing."
+                    : !paymentsReady
+                      ? "Entrance and annual fees must be paid or cheque-uploaded before authorizing."
                     : verifyingReadiness.data?.pilotLicenseRequired && !licenseOk
                       ? "Pilot licence copy is missing. Send a document request before authorizing."
                       : verifyingReadiness.data?.pendingItems?.length
@@ -1272,13 +1265,13 @@ function PendingActions({
       )}
       {manager ? null : (
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
+        {/* <DropdownMenuTrigger asChild>
           <Button size="sm" disabled={!processable || busy}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : null}
             Process
             <ChevronDown className="size-4" />
           </Button>
-        </DropdownMenuTrigger>
+        </DropdownMenuTrigger> */}
         <DropdownMenuContent align="end">
           {canStartReview(row.statusCode) ? (
             <DropdownMenuItem

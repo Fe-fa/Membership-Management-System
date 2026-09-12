@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { PageBackLink, PageFrame, PageHeader } from "@/components/layout/PageFrame";
+import { PageBodyLoading } from "@/components/layout/PageLoading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -147,7 +148,7 @@ export function UserDetailPage() {
     return (
       <PageFrame>
         <PageBackLink to="/user-management" label="Back to user management" />
-        <p className="text-sm text-muted-foreground">Loading user…</p>
+        <PageBodyLoading label="Loading user…" />
       </PageFrame>
     );
   }

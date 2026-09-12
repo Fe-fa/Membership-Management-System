@@ -92,6 +92,56 @@ export function CommitteeTermPage() {
       <div className="space-y-8">
         <section className="space-y-3">
           <div>
+            <h2 className="text-lg font-semibold tracking-tight">New committee term</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Creating a new term deactivates the previous active committee of the same type.
+            </p>
+          </div>
+          <Card>
+            <CardContent className="grid gap-3 pt-6">
+              <label className="grid gap-1 text-sm">
+                <Label htmlFor="new-name">Committee name</Label>
+                <Input
+                  id="new-name"
+                  value={termForm.committeeName}
+                  onChange={(e) => setTermForm((f) => ({ ...f, committeeName: e.target.value }))}
+                  placeholder="e.g. Main Committee 2026–2027"
+                />
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="grid gap-1 text-sm">
+                  <Label htmlFor="new-start">Term start</Label>
+                  <Input
+                    id="new-start"
+                    type="date"
+                    value={termForm.termStart}
+                    onChange={(e) => setTermForm((f) => ({ ...f, termStart: e.target.value }))}
+                  />
+                </label>
+                <label className="grid gap-1 text-sm">
+                  <Label htmlFor="new-end">Term end</Label>
+                  <Input
+                    id="new-end"
+                    type="date"
+                    value={termForm.termEnd}
+                    onChange={(e) => setTermForm((f) => ({ ...f, termEnd: e.target.value }))}
+                  />
+                </label>
+              </div>
+              <Button
+                type="button"
+                disabled={busy || termForm.committeeName.trim().length < 3}
+                onClick={() => createTerm.mutate()}
+              >
+                {createTerm.isPending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                Create term
+              </Button>
+            </CardContent>
+          </Card>
+        </section>
+
+                <section className="space-y-3">
+          <div>
             <h2 className="text-lg font-semibold tracking-tight">Current term</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {current.isLoading
@@ -155,56 +205,6 @@ export function CommitteeTermPage() {
                   </Button>
                 </>
               )}
-            </CardContent>
-          </Card>
-        </section>
-
-        <section className="space-y-3">
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight">New committee term</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Creating a new term deactivates the previous active committee of the same type.
-            </p>
-          </div>
-          <Card>
-            <CardContent className="grid gap-3 pt-6">
-              <label className="grid gap-1 text-sm">
-                <Label htmlFor="new-name">Committee name</Label>
-                <Input
-                  id="new-name"
-                  value={termForm.committeeName}
-                  onChange={(e) => setTermForm((f) => ({ ...f, committeeName: e.target.value }))}
-                  placeholder="e.g. Main Committee 2026–2027"
-                />
-              </label>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="grid gap-1 text-sm">
-                  <Label htmlFor="new-start">Term start</Label>
-                  <Input
-                    id="new-start"
-                    type="date"
-                    value={termForm.termStart}
-                    onChange={(e) => setTermForm((f) => ({ ...f, termStart: e.target.value }))}
-                  />
-                </label>
-                <label className="grid gap-1 text-sm">
-                  <Label htmlFor="new-end">Term end</Label>
-                  <Input
-                    id="new-end"
-                    type="date"
-                    value={termForm.termEnd}
-                    onChange={(e) => setTermForm((f) => ({ ...f, termEnd: e.target.value }))}
-                  />
-                </label>
-              </div>
-              <Button
-                type="button"
-                disabled={busy || termForm.committeeName.trim().length < 3}
-                onClick={() => createTerm.mutate()}
-              >
-                {createTerm.isPending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-                Create term
-              </Button>
             </CardContent>
           </Card>
         </section>

@@ -19,6 +19,8 @@ public class MemberDashboardDto
     public string Standing { get; set; } = "InGoodStanding";
     public string StandingDetail { get; set; } = string.Empty;
     public int PendingEndorsements { get; set; }
+    /// <summary>Members who appointed this profile as proxy for an active meeting.</summary>
+    public int PendingProxies { get; set; }
     public int ChildrenRequiringOwnMembership { get; set; }
 }
 
@@ -61,6 +63,29 @@ public class MemberSubscriptionDto
     public DateOnly PostingDeadline { get; set; }
     public DateOnly RemovalDeadline { get; set; }
     public int DiscountPercent { get; set; }
+    public decimal JoiningFeeDue { get; set; }
+    public decimal JoiningPaid { get; set; }
+    public decimal JoiningOutstanding { get; set; }
+    public bool EntranceFeeWaived { get; set; }
+    /// <summary>Joining + annual outstanding (amount still owed).</summary>
+    public decimal Balance { get; set; }
+    public string? MembershipNo { get; set; }
+
+    public string? MembershipTypeCode { get; set; }
+    public string? MembershipTypeName { get; set; }
+    /// <summary>Published full annual rate for the member's tier before discounts/proration.</summary>
+    public decimal FullAnnualRate { get; set; }
+    public bool IsLifeExempt { get; set; }
+    public bool IsSeniorMember { get; set; }
+    /// <summary>True when first-year / mid-year joining uses the post-30 June half-rate indicator.</summary>
+    public bool HalfYearProrated { get; set; }
+    public bool CanVote { get; set; }
+    public bool VotingBlockedByArrears { get; set; }
+    /// <summary>Spendable club-card credit from overpayments (not dues outstanding).</summary>
+    public decimal ClubCreditBalance { get; set; }
+    public int ContinuousMembershipYears { get; set; }
+    public int? AgeYears { get; set; }
+    public string StatusCode { get; set; } = string.Empty;
 }
 
 public class MemberNotificationDto
@@ -88,6 +113,12 @@ public class CompleteEndorsementRequest
     public string? SignatureImageUrl { get; set; }
 }
 
+public class DeclineEndorsementRequest
+{
+    public string EndorserRole { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+}
+
 public class EndorsementInviteDto
 {
     public long ApplicationId { get; set; }
@@ -106,12 +137,35 @@ public class EndorsementInviteDto
 
 public class EndorsementHistoryDto
 {
+    public long? EndorsementId { get; set; }
     public long ApplicationId { get; set; }
     public string ApplicationNo { get; set; } = string.Empty;
     public string ApplicantName { get; set; } = string.Empty;
+    public string? ApplicantPhotoUrl { get; set; }
     public string Role { get; set; } = string.Empty;
     public string Outcome { get; set; } = string.Empty;
+    public string? ApplicationStatusCode { get; set; }
+    public string? MembershipType { get; set; }
     public DateTime CompletedAt { get; set; }
+    public int? YearsKnownCandidate { get; set; }
+    public string? PersonalKnowledge { get; set; }
+    public string? ProfessionalKnowledge { get; set; }
+    public string? ValueAddition { get; set; }
+    public string? DeclineReason { get; set; }
+    public DateTime? DeclinedAt { get; set; }
+    public string? LastRejectionReason { get; set; }
+    public bool CanEdit { get; set; }
+    public bool CanDelete { get; set; }
+    public bool Hidden { get; set; }
+}
+
+public class UpdateEndorsementHistoryRequest
+{
+    public int? YearsKnownCandidate { get; set; }
+    public string? PersonalKnowledge { get; set; }
+    public string? ProfessionalKnowledge { get; set; }
+    public string? ValueAddition { get; set; }
+    public string? DeclineReason { get; set; }
 }
 
 public class MemberDocumentsDto
@@ -176,18 +230,49 @@ public class CreateAccommodationBookingRequest
     public DateOnly CheckInDate { get; set; }
     public DateOnly CheckOutDate { get; set; }
     public string? RoomType { get; set; }
+    public decimal? NightlyRate { get; set; }
 }
 
 public class MemberPayRequest
 {
     public long PaymentMethodId { get; set; }
+    /// <summary>JOINING | ANNUAL | ACCOMMODATION | CORKAGE | OTHER</summary>
+    public string FeeTypeCode { get; set; } = "ANNUAL";
     public decimal Amount { get; set; }
     public DateOnly PaymentDate { get; set; }
     public string? MpesaCode { get; set; }
+    public string? MpesaPhone { get; set; }
     public string? ChequeNo { get; set; }
+    public string? ChequeBankName { get; set; }
+    public string? ChequeBankCode { get; set; }
+    public DateOnly? ChequeDate { get; set; }
+    public string? ChequeFileName { get; set; }
+    public string? ChequeFileUrl { get; set; }
     public string? ReferenceNote { get; set; }
     /// <summary>Optional override (PENDING | PAID | PARTIALLY_PAID). Defaults by method.</summary>
     public string? PaymentStatusCode { get; set; }
+    /// <summary>Optional line description for advance / custom fees.</summary>
+    public string? LineDescription { get; set; }
+    /// <summary>Optional linked non-membership charge id (accommodation / corkage / custom).</summary>
+    public long? NmChargeId { get; set; }
+}
+
+public class MpesaStkPushRequest
+{
+    public string Phone { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public string FeeTypeCode { get; set; } = "ANNUAL";
+    public string? AccountReference { get; set; }
+}
+
+public class MpesaStkPushResultDto
+{
+    public string CheckoutRequestId { get; set; } = string.Empty;
+    public string MerchantRequestId { get; set; } = string.Empty;
+    public string CustomerMessage { get; set; } = string.Empty;
+    public string Status { get; set; } = "PENDING";
+    public string Phone { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
 }
 
 public class ApplicationPayRequest

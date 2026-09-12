@@ -5,6 +5,7 @@ import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { PageFrame, PageHeader } from "@/components/layout/PageFrame";
+import { PageBodyLoading } from "@/components/layout/PageLoading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -89,7 +90,8 @@ function MemberProfileEditor() {
   if (profile.isLoading || !form) {
     return (
       <PageFrame>
-        <p className="text-sm text-muted-foreground">Loading your membership card…</p>
+        <PageHeader title="My profile" description="Membership card and personal details." />
+        <PageBodyLoading label="Loading your membership card…" />
       </PageFrame>
     );
   }

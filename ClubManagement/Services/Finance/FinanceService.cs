@@ -2,8 +2,10 @@ using ClubManagement.Data.MembershipApplication;
 using ClubManagement.DTOs.Common;
 using ClubManagement.Entities;
 using ClubManagement.Entities.Lookups;
+using ClubManagement.Entities.MembershipAccount;
 using ClubManagement.Entities.Settings;
 using ClubManagement.Entities.Subscriptions;
+using ClubManagement.Services.MembershipAccount;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClubManagement.Services.Finance;
@@ -57,29 +59,201 @@ public record PaymentRowDto(
     DateOnly? ChequeDate = null,
     string? ChequeFileName = null,
     string? ChequeFileUrl = null,
-    string? MethodCode = null);
-public record SubscriptionRowDto(long SubscriptionId, long AccountId, string MembershipNo, string MemberName, int Year, decimal AmountDue, decimal AmountPaid, decimal ArrearsAmount, string Status, DateOnly? DueDate, DateOnly? PostedDate, DateOnly? RemovalDate);
+    string? MethodCode = null,
+    string? MembershipNo = null,
+    string? StatusCode = null,
+    string? FeeTypeCode = null,
+    long? ApplicationId = null,
+    string? ApplicationNo = null,
+    DateTime? SubmittedAt = null,
+    long? ProfileId = null,
+    string? MembershipType = null,
+    string? MembershipTypeCode = null);
+public record SubscriptionRowDto(
+    long SubscriptionId,
+    long AccountId,
+    string MembershipNo,
+    string MemberName,
+    int Year,
+    decimal AmountDue,
+    decimal AmountPaid,
+    decimal ArrearsAmount,
+    string Status,
+    DateOnly? DueDate,
+    DateOnly? PostedDate,
+    DateOnly? RemovalDate,
+    string? MembershipType = null,
+    string? MembershipTypeCode = null,
+    string? AccountStatus = null,
+    string? AccountStatusCode = null);
+public record PaymentListFilter(
+    long? AccountId = null,
+    string? Status = null,
+    string? Method = null,
+    string? FeeType = null,
+    string? Search = null,
+    int? Year = null,
+    string? MembershipType = null);
+public record SubscriptionListFilter(
+    int? Year = null,
+    string? Search = null,
+    bool ArrearsOnly = false,
+    string? MembershipType = null);
+public record ApprovePaymentRequest(
+    string? ReceiptNumber = null,
+    string? ChequeNo = null,
+    string? ChequeBankName = null,
+    string? ChequeBankCode = null,
+    string? MpesaCode = null,
+    decimal? AmountCleared = null);
+public record RejectPaymentRequest(string Reason);
+public record FinanceDeskSummaryDto(
+    int PendingClearance,
+    decimal TodaysCollections,
+    int UnreceiptedPayments,
+    int MembersInArrears);
+public record MembershipReceiptDto(
+    long TransactionId,
+    long ReceiptId,
+    string ClubName,
+    string? ClubShortName,
+    string? ClubAddress,
+    string? ClubEmail,
+    string? ClubPhone,
+    string ReceiptNumber,
+    string IssuedDate,
+    string? PaymentDate,
+    string PayerName,
+    string PayerCategory,
+    string? MembershipNo,
+    string? ApplicationNo,
+    string? MembershipType,
+    string FeeType,
+    string? FeeTypeCode,
+    string PaymentMethod,
+    string? PaymentMethodCode,
+    string? ChequeNo,
+    string? ChequeBankName,
+    string? ChequeBankCode,
+    string? MpesaCode,
+    string? ReferenceNote,
+    decimal Amount,
+    string AmountInWords,
+    string Currency,
+    string Status,
+    string? IssuedBy,
+    string Purpose);
+
+/// <summary>
+/// Result of the Aero Club annual subscription lifecycle run
+/// (1 Jan generate → after 28 Feb POSTED → after 30 Apr REMOVED).
+/// </summary>
+public record SubscriptionLifecycleResultDto(
+    int Year,
+    string AsOf,
+    int SubscriptionsGenerated,
+    int MembersPosted,
+    int MembersRemoved,
+    int TotalUpdated);
+
+public record SettlementMemberHitDto(
+    long AccountId,
+    long? SubscriptionId,
+    string MembershipNo,
+    string MemberName,
+    string AccountStatus,
+    string? MembershipType,
+    decimal ArrearsAmount,
+    int Year);
+
+public record SettlementContextDto(
+    long AccountId,
+    long SubscriptionId,
+    string MemberName,
+    string MembershipNo,
+    string AccountStatus,
+    string AccountStatusCode,
+    string? MembershipType,
+    int Year,
+    decimal AmountDue,
+    decimal AmountPaid,
+    decimal ArrearsAmount,
+    bool EligibleForSeniorDiscount,
+    string? SeniorDiscountReason,
+    decimal SuggestedAmountAfterSeniorDiscount,
+    bool CanIncludeReactivationFee,
+    decimal ReactivationFeeAmount);
+
+public record DirectSettlementRequest(
+    long AccountId,
+    long? SubscriptionId,
+    decimal AmountPaid,
+    string PaymentMethodCode,
+    string? ReferenceCode = null,
+    bool ApplySeniorDiscount = false,
+    bool IncludeReactivationFee = false,
+    DateOnly? PaymentDate = null);
+
+public record DirectSettlementResultDto(
+    long AccountId,
+    string MembershipNo,
+    string MemberName,
+    string AccountStatus,
+    bool Reactivated,
+    decimal AnnualAmountApplied,
+    decimal SeniorDiscountApplied,
+    decimal ReactivationFeeCharged,
+    decimal RemainingArrears,
+    string? ReceiptNumber,
+    long TransactionId);
 
 public interface IFinanceService
 {
     Task<FeeQuoteDto> QuoteAsync(long membershipTypeId, DateOnly dateOfBirth, DateOnly asOf, CancellationToken cancellationToken);
+    /// <summary>
+    /// Prices entrance and annual fees. Entrance is waived only for a child of an ACTIVE member
+    /// with five continuous years when the applicant is 21 or older. Annual is always prorated
+    /// for the remaining days of the application year.
+    /// </summary>
+    Task<MembershipFeeCalculation> CalculateMembershipFeesAsync(MembershipFeeInquiry inquiry, CancellationToken cancellationToken);
     Task<ApplicationDuesDto> GetApplicationDuesAsync(long applicationId, CancellationToken cancellationToken);
     Task<PaymentRowDto> RecordPaymentAsync(RecordPaymentRequest request, long? actorUserId, CancellationToken cancellationToken);
-    Task<PaymentRowDto> EnsureReceiptAsync(long transactionId, long? requiredProfileId, long? actorUserId, CancellationToken cancellationToken);
-    Task<PaymentRowDto> ApprovePaymentAsync(long transactionId, long? actorUserId, CancellationToken cancellationToken);
+    Task<PaymentRowDto> EnsureReceiptAsync(long transactionId, long? requiredProfileId, long? actorUserId, CancellationToken cancellationToken, string? receiptNumber = null);
+    Task<MembershipReceiptDto> GetMembershipReceiptAsync(long transactionId, long? requiredProfileId, CancellationToken cancellationToken);
+    Task<PaymentRowDto> ApprovePaymentAsync(long transactionId, long? actorUserId, CancellationToken cancellationToken, ApprovePaymentRequest? request = null);
+    Task<PaymentRowDto> RejectPaymentAsync(long transactionId, RejectPaymentRequest request, long? actorUserId, CancellationToken cancellationToken);
+    Task<PaymentRowDto?> EnsurePendingFromChequeDocumentAsync(long applicationId, long applicationDocumentId, long? actorUserId, CancellationToken cancellationToken);
+    Task<int> SyncPendingChequeDocumentsAsync(CancellationToken cancellationToken);
+    Task<FinanceDeskSummaryDto> GetDeskSummaryAsync(int year, CancellationToken cancellationToken);
+    Task<string> PeekNextReceiptNumberAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<PaymentRowDto>> ListPaymentsAsync(long? accountId, CancellationToken cancellationToken);
     Task<PagedResult<PaymentRowDto>> ListPaymentsAsync(long? accountId, PagedRequest paging, CancellationToken cancellationToken);
+    Task<PagedResult<PaymentRowDto>> ListPaymentsAsync(PaymentListFilter filter, PagedRequest paging, CancellationToken cancellationToken);
     Task<IReadOnlyList<PaymentRowDto>> ListPaymentsByProfileAsync(long profileId, CancellationToken cancellationToken);
     Task<IReadOnlyList<SubscriptionRowDto>> ListSubscriptionsAsync(int? year, CancellationToken cancellationToken);
     Task<PagedResult<SubscriptionRowDto>> ListSubscriptionsAsync(int? year, PagedRequest paging, CancellationToken cancellationToken);
+    Task<PagedResult<SubscriptionRowDto>> ListSubscriptionsAsync(SubscriptionListFilter filter, PagedRequest paging, CancellationToken cancellationToken);
+    Task<IReadOnlyList<SettlementMemberHitDto>> SearchSettlementMembersAsync(string? search, int? year, CancellationToken cancellationToken);
+    Task<SettlementContextDto> GetSettlementContextAsync(long accountId, int? year, long? subscriptionId, CancellationToken cancellationToken);
+    Task<DirectSettlementResultDto> DirectSettleAsync(DirectSettlementRequest request, long? actorUserId, CancellationToken cancellationToken);
     Task<int> RunPostingAsync(int year, long? actorUserId, CancellationToken cancellationToken);
+    /// <summary>
+    /// Background-job entry: enforce Jan 1 generation, Feb 28 posting, and Apr 30 removal for the current year.
+    /// </summary>
+    Task<SubscriptionLifecycleResultDto> EnforceSubscriptionLifecycleAsync(CancellationToken cancellationToken);
     Task EnsureSchemaAsync(CancellationToken cancellationToken);
 }
 
 public class FinanceService : IFinanceService
 {
     private readonly ApplicationModuleDbContext _db;
-    public FinanceService(ApplicationModuleDbContext db) => _db = db;
+    private readonly INonMembershipBillingService _nmBilling;
+
+    public FinanceService(ApplicationModuleDbContext db, INonMembershipBillingService nmBilling)
+    {
+        _db = db;
+        _nmBilling = nmBilling;
+    }
 
     public async Task EnsureSchemaAsync(CancellationToken cancellationToken)
     {
@@ -97,6 +271,18 @@ IF COL_LENGTH(N'dbo.MReceiptMaster', N'cheque_document_id') IS NULL
 IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
     INSERT INTO dbo.Document_type (code, name, sort_order, is_active, created_at)
     VALUES (N'CHEQUE', N'Cheque copy', 10, 1, SYSUTCDATETIME());
+IF NOT EXISTS (SELECT 1 FROM dbo.Fee_type WHERE code = N'ACCOMMODATION')
+    INSERT INTO dbo.Fee_type (code, name, sort_order, is_active, created_at)
+    VALUES (N'ACCOMMODATION', N'Accommodation / room', 50, 1, SYSUTCDATETIME());
+IF NOT EXISTS (SELECT 1 FROM dbo.Fee_type WHERE code = N'CORKAGE')
+    INSERT INTO dbo.Fee_type (code, name, sort_order, is_active, created_at)
+    VALUES (N'CORKAGE', N'Corkage / outside food', 51, 1, SYSUTCDATETIME());
+IF NOT EXISTS (SELECT 1 FROM dbo.Fee_type WHERE code = N'OTHER')
+    INSERT INTO dbo.Fee_type (code, name, sort_order, is_active, created_at)
+    VALUES (N'OTHER', N'Other club charge', 52, 1, SYSUTCDATETIME());
+IF NOT EXISTS (SELECT 1 FROM dbo.Payment_method WHERE code = N'CLUB_CARD')
+    INSERT INTO dbo.Payment_method (code, name, sort_order, is_active, created_at)
+    VALUES (N'CLUB_CARD', N'Club card / account', 60, 1, SYSUTCDATETIME());
 ", cancellationToken);
     }
 
@@ -109,10 +295,78 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new InvalidOperationException("No fee schedule is configured for this membership type.");
 
-        var age = asOf.Year - dateOfBirth.Year - (asOf < dateOfBirth.AddYears(asOf.Year - dateOfBirth.Year) ? 1 : 0);
+        var age = MembershipFeeCalculator.CompletedYears(dateOfBirth, asOf);
         var joining = age < 30 ? schedule.JoiningFeeUnder30 : schedule.JoiningFee;
-        var annual = asOf.Month > 6 ? Math.Round(schedule.AnnualSubscription / 2m, 2) : schedule.AnnualSubscription;
-        return new FeeQuoteDto(type.MembershipTypeId, type.Name, schedule.JoiningFee, schedule.JoiningFeeUnder30, schedule.AnnualSubscription, joining, annual, asOf.Month > 6);
+        var annual = MembershipFeeCalculator.ProrateAnnual(schedule.AnnualSubscription, asOf);
+        return new FeeQuoteDto(
+            type.MembershipTypeId,
+            type.Name,
+            schedule.JoiningFee,
+            schedule.JoiningFeeUnder30,
+            schedule.AnnualSubscription,
+            joining,
+            annual.PayableAnnual,
+            annual.IsProrated);
+    }
+
+    public async Task<MembershipFeeCalculation> CalculateMembershipFeesAsync(
+        MembershipFeeInquiry inquiry,
+        CancellationToken cancellationToken)
+    {
+        var type = await _db.MembershipTypes.AsNoTracking()
+            .FirstAsync(x => x.MembershipTypeId == inquiry.MembershipTypeId, cancellationToken);
+        var schedule = await _db.MembershipFeeSchedules.AsNoTracking()
+            .Where(x => x.IsActive && x.MembershipTypeId == inquiry.MembershipTypeId && x.EffectiveDate <= inquiry.AsOf)
+            .OrderByDescending(x => x.EffectiveDate)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new InvalidOperationException("No fee schedule is configured for this membership type.");
+
+        string? parentStatus = null;
+        int? parentYears = null;
+        if (inquiry.IsChildOfMember)
+            (parentStatus, parentYears) = await ResolveParentStandingAsync(
+                inquiry.ParentAccountId,
+                inquiry.ParentMembershipNo,
+                inquiry.AsOf,
+                cancellationToken);
+
+        return MembershipFeeCalculator.Calculate(new MembershipFeeFacts(
+            type.MembershipTypeId,
+            type.Name,
+            schedule.JoiningFee,
+            schedule.AnnualSubscription,
+            inquiry.DateOfBirth,
+            inquiry.AsOf,
+            inquiry.IsChildOfMember,
+            parentStatus,
+            parentYears));
+    }
+
+    private async Task<(string? StatusCode, int? ContinuousYears)> ResolveParentStandingAsync(
+        long? parentAccountId,
+        string? parentMembershipNo,
+        DateOnly asOf,
+        CancellationToken cancellationToken)
+    {
+        var query = _db.Accounts.AsNoTracking()
+            .Include(a => a.CurrentMemberStatus)
+            .Where(a => !a.IsDeleted);
+
+        MAccount? parent = null;
+        if (parentAccountId is long accountId)
+            parent = await query.FirstOrDefaultAsync(a => a.AccountId == accountId, cancellationToken);
+        else if (!string.IsNullOrWhiteSpace(parentMembershipNo))
+        {
+            var number = parentMembershipNo.Trim();
+            parent = await query.FirstOrDefaultAsync(a => a.MembershipNo == number, cancellationToken);
+        }
+
+        if (parent is null)
+            return (null, 0);
+
+        var joined = parent.JoinedDate ?? parent.StartDate;
+        var years = joined is DateOnly start ? MembershipFeeCalculator.CompletedYears(start, asOf) : 0;
+        return (parent.CurrentMemberStatus?.Code, years);
     }
 
     public async Task<ApplicationDuesDto> GetApplicationDuesAsync(long applicationId, CancellationToken cancellationToken)
@@ -232,6 +486,9 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
         }
     }
 
+    private static string NormalizeMembershipKey(string? value) =>
+        (value ?? "").Trim().ToUpperInvariant().Replace("-", "_").Replace(" ", "_");
+
     public async Task<PaymentRowDto> RecordPaymentAsync(RecordPaymentRequest request, long? actorUserId, CancellationToken cancellationToken)
     {
         if (request.Amount <= 0)
@@ -245,8 +502,12 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
         var requestedStatus = (request.PaymentStatusCode ?? "").Trim().ToUpperInvariant().Replace("-", "_");
         if (string.IsNullOrEmpty(requestedStatus))
         {
-            // Cheques stay pending until cleared; other methods are recorded as paid.
-            requestedStatus = NeedsClearing(methodCode) ? "PENDING" : "PAID";
+            // Cheques/cards always clear through finance. Applicant M-Pesa / bank transfers also await confirmation.
+            if (NeedsClearing(methodCode)
+                || (request.ApplicationId is not null && NeedsApplicantClearance(methodCode)))
+                requestedStatus = "PENDING";
+            else
+                requestedStatus = "PAID";
         }
 
         var paymentStatus = await _db.PaymentStatuses
@@ -292,10 +553,14 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
                 throw new InvalidOperationException("Every cheque row requires a cheque number.");
             if (request.ChequeDate is null)
                 throw new InvalidOperationException("Every cheque row requires the cheque date.");
-            if (string.IsNullOrWhiteSpace(chequeFileName) || string.IsNullOrWhiteSpace(chequeFileUrl))
+            // Applicant cheques require an uploaded copy; member ledger cheques may be recorded with bank details alone.
+            if (request.ApplicationId is not null
+                && (string.IsNullOrWhiteSpace(chequeFileName) || string.IsNullOrWhiteSpace(chequeFileUrl)))
                 throw new InvalidOperationException("Attach a picture, PDF, or Word copy of the cheque.");
 
-            if (request.ApplicationId is long chequeApplicationId)
+            if (request.ApplicationId is long chequeApplicationId
+                && !string.IsNullOrWhiteSpace(chequeFileName)
+                && !string.IsNullOrWhiteSpace(chequeFileUrl))
             {
                 var chequeType = await _db.DocumentTypes
                     .FirstOrDefaultAsync(x => x.Code == "CHEQUE", cancellationToken);
@@ -352,19 +617,29 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
         _db.Transactions.Add(tx);
         await _db.SaveChangesAsync(cancellationToken);
 
-        var receiptNo = $"RCT-{tx.TransactionId:D6}";
-        var receipt = new MReceiptMaster
+        string? receiptNo = null;
+        var isPaidNow = string.Equals(paymentStatus.Code, "PAID", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(paymentStatus.Code, "WAIVED", StringComparison.OrdinalIgnoreCase);
+        if (isPaidNow)
         {
-            TransactionId = tx.TransactionId,
-            ReceiptNumber = receiptNo,
-            Amount = request.Amount,
-            IssuedDate = request.PaymentDate,
-            IssuedByUserId = actorUserId,
-            ChequeDocumentId = chequeDocumentId,
-            CreatedAt = DateTime.UtcNow,
-            CreatedByUserId = actorUserId
-        };
-        _db.Receipts.Add(receipt);
+            receiptNo = $"RCT-{tx.TransactionId:D6}";
+            var receipt = new MReceiptMaster
+            {
+                TransactionId = tx.TransactionId,
+                ReceiptNumber = receiptNo,
+                Amount = request.Amount,
+                IssuedDate = request.PaymentDate,
+                IssuedByUserId = actorUserId,
+                ChequeDocumentId = chequeDocumentId,
+                CreatedAt = DateTime.UtcNow,
+                CreatedByUserId = actorUserId
+            };
+            _db.Receipts.Add(receipt);
+            await _db.SaveChangesAsync(cancellationToken);
+            tx.ReceiptId = receipt.ReceiptId;
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
         _db.AuditLogs.Add(new AuditLog
         {
             TableName = "MTransaction",
@@ -376,17 +651,21 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
         });
         await _db.SaveChangesAsync(cancellationToken);
 
-        // receipt_id is an identity on MReceiptMaster; assigning it before insert was 0 and
-        // broke fk_mtransaction_receipt.
-        tx.ReceiptId = receipt.ReceiptId;
-        await _db.SaveChangesAsync(cancellationToken);
+        if (request.AccountId is long paidAccountId && isPaidNow)
+        {
+            var feeCode = await _db.FeeTypes.AsNoTracking()
+                .Where(f => f.FeeTypeId == request.FeeTypeId)
+                .Select(f => f.Code)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (IsAnnualFee(feeCode))
+                await ApplyPaidAmountToAccountAsync(paidAccountId, request.Amount, request.PaymentDate, tx.TransactionId, actorUserId, cancellationToken);
+            else
+                await TryRestoreActiveMembershipAsync(paidAccountId, actorUserId, cancellationToken);
+        }
 
-        if (request.AccountId is long paidAccountId && string.Equals(paymentStatus.Code, "PAID", StringComparison.OrdinalIgnoreCase))
-            await ApplyPaidAmountToAccountAsync(paidAccountId, request.Amount, request.PaymentDate, tx.TransactionId, actorUserId, cancellationToken);
-
-        var feeName = await _db.FeeTypes.AsNoTracking()
+        var feeMeta = await _db.FeeTypes.AsNoTracking()
             .Where(f => f.FeeTypeId == request.FeeTypeId)
-            .Select(f => f.Name)
+            .Select(f => new { f.Name, f.Code })
             .FirstOrDefaultAsync(cancellationToken);
 
         return new PaymentRowDto(
@@ -399,17 +678,28 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
             tx.PaymentDate,
             tx.MpesaCode,
             tx.ChequeNo,
-            feeName,
+            feeMeta?.Name,
             tx.ReferenceNote,
             tx.ChequeBankName,
             tx.ChequeBankCode,
             tx.ChequeDate,
             chequeFileName,
             chequeFileUrl,
-            method.Code);
+            method.Code,
+            null,
+            paymentStatus.Code,
+            feeMeta?.Code,
+            request.ApplicationId,
+            null,
+            tx.CreatedAt,
+            profileId);
     }
 
-    public async Task<PaymentRowDto> ApprovePaymentAsync(long transactionId, long? actorUserId, CancellationToken cancellationToken)
+    public async Task<PaymentRowDto> ApprovePaymentAsync(
+        long transactionId,
+        long? actorUserId,
+        CancellationToken cancellationToken,
+        ApprovePaymentRequest? request = null)
     {
         var tx = await _db.Transactions
             .Include(t => t.PaymentMethod)
@@ -428,7 +718,18 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
 
         var current = (tx.PaymentStatus?.Code ?? "").Trim().ToUpperInvariant().Replace("-", "_");
         if (current is "PAID" or "WAIVED")
-            return await MapApprovedRow(tx, cancellationToken);
+            return await EnsureReceiptAsync(transactionId, null, actorUserId, cancellationToken, request?.ReceiptNumber);
+
+        if (!string.IsNullOrWhiteSpace(request?.ChequeNo))
+            tx.ChequeNo = request.ChequeNo.Trim();
+        if (!string.IsNullOrWhiteSpace(request?.ChequeBankName))
+            tx.ChequeBankName = request.ChequeBankName.Trim();
+        if (!string.IsNullOrWhiteSpace(request?.ChequeBankCode))
+            tx.ChequeBankCode = request.ChequeBankCode.Trim();
+        if (!string.IsNullOrWhiteSpace(request?.MpesaCode))
+            tx.MpesaCode = request.MpesaCode.Trim();
+        if (request?.AmountCleared is decimal cleared && cleared > 0)
+            tx.Amount = cleared;
 
         var paidStatus = await _db.PaymentStatuses.FirstOrDefaultAsync(x => x.Code == "PAID", cancellationToken)
             ?? throw new InvalidOperationException("Paid payment status was not found.");
@@ -439,14 +740,14 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
             TableName = "MTransaction",
             RecordId = tx.TransactionId,
             Action = "UPDATE",
-            NewValues = $"status=PAID; method={methodCode}; amount={tx.Amount}",
+            NewValues = $"status=PAID; method={methodCode}; amount={tx.Amount}; chequeNo={tx.ChequeNo}; receipt={request?.ReceiptNumber}",
             ChangedByUserId = actorUserId,
             ChangedAt = DateTime.UtcNow
         });
         await _db.SaveChangesAsync(cancellationToken);
         tx.PaymentStatus = paidStatus;
 
-        if (tx.AccountId is long accountId)
+        if (tx.AccountId is long accountId && IsAnnualFee(tx.FeeType?.Code))
             await ApplyPaidAmountToAccountAsync(
                 accountId,
                 tx.Amount,
@@ -455,6 +756,286 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
                 actorUserId,
                 cancellationToken);
 
+        if (tx.AccountId is long nmAccountId
+            && IsNmFee(tx.FeeType?.Code))
+        {
+            try
+            {
+                var (kind, chargeId) = ParseNmTag(tx.ReferenceNote);
+                await _nmBilling.SettleFromMemberPaymentAsync(
+                    nmAccountId,
+                    tx.FeeType!.Code,
+                    tx.Amount,
+                    methodCode,
+                    tx.MpesaCode ?? tx.ChequeNo ?? tx.ReferenceNote,
+                    chargeId,
+                    actorUserId,
+                    cancellationToken);
+                _ = kind;
+            }
+            catch (InvalidOperationException)
+            {
+                // Finance clearance succeeded; NM charge may already be settled.
+            }
+        }
+
+        return await EnsureReceiptAsync(transactionId, null, actorUserId, cancellationToken, request?.ReceiptNumber);
+    }
+
+    public async Task<PaymentRowDto> RejectPaymentAsync(
+        long transactionId,
+        RejectPaymentRequest request,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            throw new InvalidOperationException("A rejection reason is required.");
+
+        var tx = await _db.Transactions
+            .Include(t => t.PaymentMethod)
+            .Include(t => t.PaymentStatus)
+            .Include(t => t.FeeType)
+            .Include(t => t.Receipt)
+            .Include(t => t.Profile)
+            .Include(t => t.Account)
+                .ThenInclude(a => a!.Profile)
+            .FirstOrDefaultAsync(t => t.TransactionId == transactionId, cancellationToken)
+            ?? throw new InvalidOperationException("Payment was not found.");
+
+        var rejected = await _db.PaymentStatuses.FirstOrDefaultAsync(x => x.Code == "REJECTED", cancellationToken);
+        if (rejected is null)
+        {
+            rejected = new PaymentStatus
+            {
+                Code = "REJECTED",
+                Name = "Rejected",
+                SortOrder = 90,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.PaymentStatuses.Add(rejected);
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        var reason = request.Reason.Trim();
+        tx.PaymentStatusId = rejected.PaymentStatusId;
+        tx.ReferenceNote = string.IsNullOrWhiteSpace(tx.ReferenceNote)
+            ? $"REJECTED: {reason}"
+            : $"{tx.ReferenceNote} | REJECTED: {reason}";
+        tx.UpdatedByUserId = actorUserId;
+        _db.AuditLogs.Add(new AuditLog
+        {
+            TableName = "MTransaction",
+            RecordId = tx.TransactionId,
+            Action = "UPDATE",
+            NewValues = $"status=REJECTED; reason={reason}",
+            ChangedByUserId = actorUserId,
+            ChangedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync(cancellationToken);
+        tx.PaymentStatus = rejected;
+        return await MapApprovedRow(tx, cancellationToken);
+    }
+
+    public async Task<PaymentRowDto?> EnsurePendingFromChequeDocumentAsync(
+        long applicationId,
+        long applicationDocumentId,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var doc = await _db.ApplicationDocuments
+            .Include(d => d.DocumentType)
+            .FirstOrDefaultAsync(
+                d => d.ApplicationId == applicationId && d.ApplicationDocumentId == applicationDocumentId,
+                cancellationToken);
+        if (doc?.DocumentType is null) return null;
+
+        var typeCode = (doc.DocumentType.Code ?? "").Trim().ToUpperInvariant().Replace("-", "_");
+        if (typeCode is not ("CHEQUE_ANNUAL" or "CHEQUE_JOINING" or "CHEQUE"))
+            return null;
+
+        var feeCode = typeCode == "CHEQUE_JOINING" ? "JOINING" : "ANNUAL";
+        return await UpsertPendingChequeForApplicationAsync(applicationId, doc, feeCode, actorUserId, cancellationToken);
+    }
+
+    public async Task<int> SyncPendingChequeDocumentsAsync(CancellationToken cancellationToken)
+    {
+        var codes = new[] { "CHEQUE_ANNUAL", "CHEQUE_JOINING" };
+        var docs = await _db.ApplicationDocuments
+            .Include(d => d.DocumentType)
+            .Where(d => d.DocumentType != null && codes.Contains(d.DocumentType.Code))
+            .OrderByDescending(d => d.UploadedAt)
+            .ThenByDescending(d => d.ApplicationDocumentId)
+            .ToListAsync(cancellationToken);
+
+        var created = 0;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var doc in docs)
+        {
+            var typeCode = (doc.DocumentType?.Code ?? "").Trim().ToUpperInvariant().Replace("-", "_");
+            var feeCode = typeCode == "CHEQUE_JOINING" ? "JOINING" : "ANNUAL";
+            var key = $"{doc.ApplicationId}:{feeCode}";
+            if (!seen.Add(key)) continue;
+
+            var alreadyLinked = await _db.Transactions.AsNoTracking()
+                .AnyAsync(t => t.ChequeDocumentId == doc.ApplicationDocumentId, cancellationToken);
+            if (alreadyLinked) continue;
+
+            var row = await UpsertPendingChequeForApplicationAsync(
+                doc.ApplicationId,
+                doc,
+                feeCode,
+                null,
+                cancellationToken);
+            if (row is not null) created++;
+        }
+        return created;
+    }
+
+    public async Task<FinanceDeskSummaryDto> GetDeskSummaryAsync(int year, CancellationToken cancellationToken)
+    {
+        await SyncPendingChequeDocumentsAsync(cancellationToken);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var pendingClearance = await _db.Transactions.AsNoTracking()
+            .CountAsync(t =>
+                (t.PaymentStatus.Code == "PENDING"
+                    || t.PaymentStatus.Code == "INITIATED"
+                    || t.PaymentStatus.Code == "UNCLEARED")
+                && (t.PaymentMethod.Code == "CHEQUE"
+                    || t.PaymentMethod.Code == "CHEQUE_PAYMENT"
+                    || t.PaymentMethod.Code == "CARD"
+                    || t.PaymentMethod.Code == "CREDIT"
+                    || t.PaymentMethod.Code == "CREDIT_CARD"
+                    || t.PaymentMethod.Code == "MPESA"
+                    || t.PaymentMethod.Code == "BANK_TRANSFER"
+                    || t.PaymentMethod.Code == "BANKWIRE"
+                    || t.PaymentMethod.Code == "BANK_WIRE"),
+                cancellationToken);
+
+        var todaysCollections = await _db.Transactions.AsNoTracking()
+            .Where(t =>
+                t.PaymentDate == today
+                && (t.PaymentStatus.Code == "PAID" || t.PaymentStatus.Code == "WAIVED"))
+            .SumAsync(t => (decimal?)t.Amount, cancellationToken) ?? 0m;
+
+        var unreceipted = await _db.Transactions.AsNoTracking()
+            .CountAsync(t =>
+                (t.PaymentStatus.Code == "PAID" || t.PaymentStatus.Code == "WAIVED")
+                && (t.ReceiptId == null)
+                && !_db.Receipts.Any(r => r.TransactionId == t.TransactionId),
+                cancellationToken);
+
+        var membersInArrears = await _db.Subscriptions.AsNoTracking()
+            .CountAsync(s =>
+                s.SubscriptionYear == year
+                && (s.ArrearsAmount > 0 || s.AmountPaid < s.AmountDue),
+                cancellationToken);
+
+        return new FinanceDeskSummaryDto(pendingClearance, todaysCollections, unreceipted, membersInArrears);
+    }
+
+    public async Task<string> PeekNextReceiptNumberAsync(CancellationToken cancellationToken)
+    {
+        var maxTx = await _db.Transactions.AsNoTracking()
+            .Select(t => (long?)t.TransactionId)
+            .MaxAsync(cancellationToken) ?? 0;
+        return $"RCT-{(maxTx + 1):D6}";
+    }
+
+    private async Task<PaymentRowDto?> UpsertPendingChequeForApplicationAsync(
+        long applicationId,
+        AplicationDocument doc,
+        string feeCode,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var app = await _db.Applications.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.ApplicationId == applicationId, cancellationToken);
+        if (app is null) return null;
+
+        var fee = await _db.FeeTypes.FirstOrDefaultAsync(
+            x => x.Code == feeCode || x.Code == feeCode.ToLowerInvariant(),
+            cancellationToken);
+        if (fee is null) return null;
+
+        var chequeMethod = await _db.PaymentMethods.FirstOrDefaultAsync(
+            x => x.Code == "CHEQUE" || x.Code == "CHEQUE_PAYMENT",
+            cancellationToken);
+        if (chequeMethod is null) return null;
+
+        var pendingStatus = await _db.PaymentStatuses.FirstOrDefaultAsync(x => x.Code == "PENDING", cancellationToken)
+            ?? await _db.PaymentStatuses.FirstAsync(x => x.Code == "PAID", cancellationToken);
+
+        var open = await _db.Transactions
+            .Include(t => t.PaymentStatus)
+            .Include(t => t.PaymentMethod)
+            .Include(t => t.FeeType)
+            .Include(t => t.Receipt)
+            .Include(t => t.Profile)
+            .Include(t => t.Account).ThenInclude(a => a!.Profile)
+            .Where(t =>
+                t.ProfileId == app.ApplicantProfileId
+                && t.FeeTypeId == fee.FeeTypeId
+                && t.PaymentStatus.Code == "PENDING")
+            .OrderByDescending(t => t.TransactionId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (open is not null)
+        {
+            if (open.ChequeDocumentId != doc.ApplicationDocumentId)
+            {
+                open.ChequeDocumentId = doc.ApplicationDocumentId;
+                open.UpdatedByUserId = actorUserId;
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+            return await MapApprovedRow(open, cancellationToken);
+        }
+
+        decimal amount = 0;
+        try
+        {
+            var dues = await GetApplicationDuesAsync(applicationId, cancellationToken);
+            amount = feeCode == "JOINING" ? dues.JoiningBalance : dues.AnnualBalance;
+            if (amount <= 0)
+                amount = feeCode == "JOINING" ? dues.JoiningFee : dues.AnnualSubscription;
+        }
+        catch
+        {
+            amount = 0;
+        }
+
+        if (amount <= 0) amount = 0.01m; // keep row visible until finance confirms the cleared amount
+
+        var tx = new MTransaction
+        {
+            ProfileId = app.ApplicantProfileId,
+            FeeTypeId = fee.FeeTypeId,
+            PaymentMethodId = chequeMethod.PaymentMethodId,
+            PaymentStatusId = pendingStatus.PaymentStatusId,
+            Amount = amount,
+            PaymentDate = DateOnly.FromDateTime(doc.UploadedAt ?? (doc.CreatedAt == default ? DateTime.UtcNow : doc.CreatedAt)),
+            ChequeDocumentId = doc.ApplicationDocumentId,
+            ReferenceNote = $"Application cheque upload · {app.ApplicationNo}",
+            CreatedAt = DateTime.UtcNow,
+            CreatedByUserId = actorUserId
+        };
+        _db.Transactions.Add(tx);
+        await _db.SaveChangesAsync(cancellationToken);
+        _db.AuditLogs.Add(new AuditLog
+        {
+            TableName = "MTransaction",
+            RecordId = tx.TransactionId,
+            Action = "INSERT",
+            NewValues = $"fromDocument={doc.ApplicationDocumentId}; application={applicationId}; fee={feeCode}; status=PENDING",
+            ChangedByUserId = actorUserId,
+            ChangedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync(cancellationToken);
+
+        tx.PaymentMethod = chequeMethod;
+        tx.PaymentStatus = pendingStatus;
+        tx.FeeType = fee;
         return await MapApprovedRow(tx, cancellationToken);
     }
 
@@ -503,16 +1084,99 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
             }
         }
         await _db.SaveChangesAsync(cancellationToken);
+        await TryRestoreActiveMembershipAsync(accountId, actorUserId, cancellationToken);
+    }
+
+    /// <summary>
+    /// When annual arrears and joining dues are cleared, restore POSTED/REMOVED accounts to ACTIVE
+    /// so member portal standing matches the paid-up ledger.
+    /// </summary>
+    private async Task TryRestoreActiveMembershipAsync(
+        long accountId,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var account = await _db.Accounts
+            .Include(a => a.CurrentMemberStatus)
+            .FirstOrDefaultAsync(a => a.AccountId == accountId && !a.IsDeleted, cancellationToken);
+        if (account is null) return;
+
+        var statusCode = (account.CurrentMemberStatus?.Code ?? "").Trim().ToUpperInvariant();
+        if (statusCode is not "REMOVED" and not "POSTED") return;
+
+        var year = DateTime.UtcNow.Year;
+        var sub = await _db.Subscriptions.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.AccountId == accountId && s.SubscriptionYear == year, cancellationToken);
+        var subscriptionClear = sub is null || sub.ArrearsAmount <= 0 || sub.AmountPaid >= sub.AmountDue;
+
+        var joiningDue = account.EntranceFeeWaivedFlag ? 0m : (account.EntranceFeeAmount ?? 0m);
+        decimal joiningPaid = 0;
+        if (joiningDue > 0)
+        {
+            joiningPaid = await _db.Transactions.AsNoTracking()
+                .Where(t => t.AccountId == accountId
+                    && t.FeeType != null
+                    && (t.FeeType.Code == "JOINING" || t.FeeType.Code == "ENTRANCE")
+                    && (t.PaymentStatus.Code == "PAID" || t.PaymentStatus.Code == "WAIVED"))
+                .SumAsync(t => (decimal?)t.Amount, cancellationToken) ?? 0m;
+        }
+        var joiningClear = joiningDue <= 0 || joiningPaid >= joiningDue;
+        if (!subscriptionClear || !joiningClear) return;
+
+        var active = await _db.MemberStatuses.FirstOrDefaultAsync(s => s.Code == "ACTIVE", cancellationToken);
+        if (active is null) return;
+
+        account.CurrentMemberStatusId = active.MemberStatusId;
+        account.IsActive = true;
+        account.EndDate = null;
+        account.UpdatedByUserId = actorUserId;
+        _db.AuditLogs.Add(new AuditLog
+        {
+            TableName = "MAccount",
+            RecordId = account.AccountId,
+            Action = "UPDATE",
+            NewValues = $"restored ACTIVE after dues cleared (was {statusCode})",
+            ChangedByUserId = actorUserId,
+            ChangedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
     private static bool NeedsClearing(string methodCode) =>
         methodCode is "CHEQUE" or "CHEQUE_PAYMENT" or "CARD" or "CREDIT" or "CREDIT_CARD" or "CREDITCARD";
 
+    private static bool NeedsApplicantClearance(string methodCode) =>
+        methodCode is "MPESA" or "BANK_TRANSFER" or "BANKWIRE" or "BANK_WIRE" or "BANK";
+
+    private static bool IsAnnualFee(string? feeCode)
+    {
+        var code = (feeCode ?? "").Trim().ToUpperInvariant().Replace("-", "_").Replace(" ", "_");
+        return code is "ANNUAL" or "SUBSCRIPTION" or "ANNUAL_SUBSCRIPTION";
+    }
+
+    private static bool IsNmFee(string? feeCode)
+    {
+        var code = (feeCode ?? "").Trim().ToUpperInvariant().Replace("-", "_").Replace(" ", "_");
+        return code is "ACCOMMODATION" or "CORKAGE" or "OTHER" or "CUSTOM" or "ROOM";
+    }
+
+    private static (string? Kind, long? ChargeId) ParseNmTag(string? note)
+    {
+        if (string.IsNullOrWhiteSpace(note)) return (null, null);
+        var match = System.Text.RegularExpressions.Regex.Match(
+            note,
+            @"nm:(accommodation|corkage|custom):(\d+)",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (!match.Success) return (null, null);
+        return (match.Groups[1].Value.ToLowerInvariant(), long.Parse(match.Groups[2].Value));
+    }
+
     public async Task<PaymentRowDto> EnsureReceiptAsync(
         long transactionId,
         long? requiredProfileId,
         long? actorUserId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? receiptNumber = null)
     {
         var tx = await _db.Transactions
             .Include(t => t.PaymentMethod)
@@ -538,14 +1202,23 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
                 throw new InvalidOperationException("Payment does not belong to this application.");
         }
 
+        var desiredNumber = string.IsNullOrWhiteSpace(receiptNumber)
+            ? $"RCT-{tx.TransactionId:D6}"
+            : receiptNumber.Trim().ToUpperInvariant();
+
         var receipt = await _db.Receipts
             .FirstOrDefaultAsync(r => r.TransactionId == transactionId, cancellationToken);
         if (receipt is null)
         {
+            var taken = await _db.Receipts.AsNoTracking()
+                .AnyAsync(r => r.ReceiptNumber == desiredNumber, cancellationToken);
+            if (taken)
+                throw new InvalidOperationException($"Receipt number {desiredNumber} is already in use.");
+
             receipt = new MReceiptMaster
             {
                 TransactionId = tx.TransactionId,
-                ReceiptNumber = $"RCT-{tx.TransactionId:D6}",
+                ReceiptNumber = desiredNumber,
                 Amount = tx.Amount,
                 IssuedDate = tx.PaymentDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
                 IssuedByUserId = actorUserId,
@@ -555,6 +1228,16 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
             _db.Receipts.Add(receipt);
             await _db.SaveChangesAsync(cancellationToken);
         }
+        else if (!string.IsNullOrWhiteSpace(receiptNumber)
+                 && !string.Equals(receipt.ReceiptNumber, desiredNumber, StringComparison.OrdinalIgnoreCase))
+        {
+            var taken = await _db.Receipts.AsNoTracking()
+                .AnyAsync(r => r.ReceiptNumber == desiredNumber && r.ReceiptId != receipt.ReceiptId, cancellationToken);
+            if (taken)
+                throw new InvalidOperationException($"Receipt number {desiredNumber} is already in use.");
+            receipt.ReceiptNumber = desiredNumber;
+            await _db.SaveChangesAsync(cancellationToken);
+        }
 
         if (tx.ReceiptId != receipt.ReceiptId)
         {
@@ -562,19 +1245,255 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
             await _db.SaveChangesAsync(cancellationToken);
         }
 
-        return ToPaymentRow(tx, receipt.ReceiptNumber);
+        tx.Receipt = receipt;
+        return await MapApprovedRow(tx, cancellationToken);
+    }
+
+    public async Task<MembershipReceiptDto> GetMembershipReceiptAsync(
+        long transactionId,
+        long? requiredProfileId,
+        CancellationToken cancellationToken)
+    {
+        var tx = await _db.Transactions.AsNoTracking()
+            .Include(t => t.PaymentMethod)
+            .Include(t => t.PaymentStatus)
+            .Include(t => t.FeeType)
+            .Include(t => t.Receipt)
+            .Include(t => t.Profile)
+            .Include(t => t.Account!)
+                .ThenInclude(a => a.Profile)
+            .Include(t => t.Account!)
+                .ThenInclude(a => a.MembershipType)
+            .FirstOrDefaultAsync(t => t.TransactionId == transactionId, cancellationToken)
+            ?? throw new InvalidOperationException("Payment was not found.");
+
+        if (requiredProfileId is long profileId)
+        {
+            var accountIds = await _db.Accounts.AsNoTracking()
+                .Where(a => a.ProfileId == profileId && !a.IsDeleted)
+                .Select(a => a.AccountId)
+                .ToListAsync(cancellationToken);
+            var belongs =
+                tx.ProfileId == profileId
+                || (tx.AccountId is long accountId && accountIds.Contains(accountId));
+            if (!belongs)
+                throw new InvalidOperationException("Receipt does not belong to this member.");
+        }
+
+        var statusCode = (tx.PaymentStatus?.Code ?? "").Trim().ToUpperInvariant().Replace("-", "_");
+        if (statusCode is not ("PAID" or "WAIVED" or "SETTLED"))
+            throw new InvalidOperationException("Receipt is available only after the payment is cleared / paid.");
+
+        var receipt = tx.Receipt
+            ?? await _db.Receipts.AsNoTracking().FirstOrDefaultAsync(r => r.TransactionId == transactionId, cancellationToken);
+        if (receipt is null)
+            throw new InvalidOperationException("No receipt has been issued for this payment yet. Clear the payment first.");
+
+        var tenant = await _db.Tenants.AsNoTracking().IgnoreQueryFilters()
+            .OrderByDescending(t => t.IsActive)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        string? issuedBy = null;
+        if (receipt.IssuedByUserId is long issuerId)
+        {
+            var user = await _db.UserAccounts.AsNoTracking()
+                .Include(u => u.Profile)
+                .FirstOrDefaultAsync(u => u.UserAccountId == issuerId, cancellationToken);
+            if (user?.Profile is { } issuerProfile)
+            {
+                var name = $"{issuerProfile.FirstName} {issuerProfile.LastName}".Trim();
+                issuedBy = string.IsNullOrWhiteSpace(name) ? user.Username : name;
+            }
+            else
+            {
+                issuedBy = user?.Username;
+            }
+        }
+
+        var profile = tx.Account?.Profile ?? tx.Profile;
+        var payerName = profile is null
+            ? "Member / Applicant"
+            : $"{profile.FirstName} {profile.LastName}".Trim();
+        if (string.IsNullOrWhiteSpace(payerName))
+            payerName = "Member / Applicant";
+
+        string? applicationNo = null;
+        // Membership type is member-account only (not applicants / election type).
+        string? membershipTypeName = tx.Account?.MembershipType?.Name;
+        var profileKey = tx.ProfileId ?? tx.Account?.ProfileId;
+        if (profileKey is long pid)
+        {
+            var app = await _db.Applications.AsNoTracking()
+                .Where(a => a.ApplicantProfileId == pid)
+                .OrderByDescending(a => a.ApplicationId)
+                .FirstOrDefaultAsync(cancellationToken);
+            applicationNo = app?.ApplicationNo;
+        }
+
+        var feeName = tx.FeeType?.Name ?? tx.FeeType?.Code ?? "Membership fee";
+        var clubName = string.IsNullOrWhiteSpace(tenant?.Name) ? "Aero Club of East Africa" : tenant!.Name;
+        var purpose = $"Being payment of {feeName} towards membership of {clubName}.";
+
+        return new MembershipReceiptDto(
+            tx.TransactionId,
+            receipt.ReceiptId,
+            clubName,
+            tenant?.ShortName,
+            tenant?.AddressLine,
+            tenant?.ContactEmail,
+            tenant?.ContactPhone,
+            receipt.ReceiptNumber,
+            receipt.IssuedDate.ToString("yyyy-MM-dd"),
+            tx.PaymentDate?.ToString("yyyy-MM-dd"),
+            payerName,
+            tx.AccountId is long ? "Member" : "Applicant",
+            tx.Account?.MembershipNo,
+            applicationNo,
+            membershipTypeName,
+            feeName,
+            tx.FeeType?.Code,
+            tx.PaymentMethod?.Name ?? tx.PaymentMethod?.Code ?? "—",
+            tx.PaymentMethod?.Code,
+            tx.ChequeNo,
+            tx.ChequeBankName,
+            tx.ChequeBankCode,
+            tx.MpesaCode,
+            tx.ReferenceNote,
+            receipt.Amount > 0 ? receipt.Amount : tx.Amount,
+            AmountToWordsKes(receipt.Amount > 0 ? receipt.Amount : tx.Amount),
+            "KES",
+            tx.PaymentStatus?.Name ?? statusCode,
+            issuedBy,
+            purpose);
+    }
+
+    private static string AmountToWordsKes(decimal amount)
+    {
+        var whole = (long)Math.Floor(Math.Abs(amount));
+        var cents = (int)Math.Round((Math.Abs(amount) - whole) * 100m, MidpointRounding.AwayFromZero);
+        if (cents == 100)
+        {
+            whole += 1;
+            cents = 0;
+        }
+
+        var words = $"{NumberToWords(whole)} shilling{(whole == 1 ? "" : "s")}";
+        if (cents > 0)
+            words += $" and {NumberToWords(cents)} cent{(cents == 1 ? "" : "s")}";
+        return char.ToUpperInvariant(words[0]) + words[1..] + " only";
+    }
+
+    private static string NumberToWords(long number)
+    {
+        if (number == 0) return "zero";
+        if (number < 0) return "minus " + NumberToWords(Math.Abs(number));
+
+        string[] units =
+        [
+            "", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+            "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"
+        ];
+        string[] tens = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
+
+        if (number < 20) return units[number];
+        if (number < 100)
+            return tens[number / 10] + (number % 10 == 0 ? "" : "-" + units[number % 10]);
+        if (number < 1000)
+            return units[number / 100] + " hundred" + (number % 100 == 0 ? "" : " and " + NumberToWords(number % 100));
+        if (number < 1_000_000)
+            return NumberToWords(number / 1000) + " thousand" + (number % 1000 == 0 ? "" : " " + NumberToWords(number % 1000));
+        if (number < 1_000_000_000)
+            return NumberToWords(number / 1_000_000) + " million" + (number % 1_000_000 == 0 ? "" : " " + NumberToWords(number % 1_000_000));
+        return NumberToWords(number / 1_000_000_000) + " billion" + (number % 1_000_000_000 == 0 ? "" : " " + NumberToWords(number % 1_000_000_000));
     }
 
     public async Task<IReadOnlyList<PaymentRowDto>> ListPaymentsAsync(long? accountId, CancellationToken cancellationToken)
     {
-        var paged = await ListPaymentsAsync(accountId, new PagedRequest { Page = 1, PageSize = 100 }, cancellationToken);
+        var paged = await ListPaymentsAsync(new PaymentListFilter(AccountId: accountId), new PagedRequest { Page = 1, PageSize = 100 }, cancellationToken);
         return paged.Items;
     }
 
-    public async Task<PagedResult<PaymentRowDto>> ListPaymentsAsync(long? accountId, PagedRequest paging, CancellationToken cancellationToken)
+    public async Task<PagedResult<PaymentRowDto>> ListPaymentsAsync(long? accountId, PagedRequest paging, CancellationToken cancellationToken) =>
+        await ListPaymentsAsync(new PaymentListFilter(AccountId: accountId), paging, cancellationToken);
+
+    public async Task<PagedResult<PaymentRowDto>> ListPaymentsAsync(
+        PaymentListFilter filter,
+        PagedRequest paging,
+        CancellationToken cancellationToken)
     {
+        var status = (filter.Status ?? "").Trim().ToUpperInvariant().Replace("-", "_").Replace(" ", "_");
+        if (status is "PENDING" or "UNCLEARED" or "CLEARANCE")
+            await SyncPendingChequeDocumentsAsync(cancellationToken);
+
         var query = _db.Transactions.AsNoTracking().AsQueryable();
-        if (accountId is not null) query = query.Where(t => t.AccountId == accountId);
+        if (filter.AccountId is not null)
+            query = query.Where(t => t.AccountId == filter.AccountId);
+        if (filter.Year is int year)
+            query = query.Where(t => t.PaymentDate != null && t.PaymentDate.Value.Year == year);
+        if (!string.IsNullOrWhiteSpace(filter.Status))
+        {
+            if (status is "SETTLED" or "PAID")
+                query = query.Where(t => t.PaymentStatus.Code == "PAID" || t.PaymentStatus.Code == "WAIVED");
+            else if (status is "PENDING" or "UNCLEARED" or "CLEARANCE")
+                query = query.Where(t =>
+                    t.PaymentStatus.Code == "PENDING"
+                    || t.PaymentStatus.Code == "INITIATED"
+                    || t.PaymentStatus.Code == "UNCLEARED");
+            else if (status is "UNRECEIPTED")
+                query = query.Where(t =>
+                    (t.PaymentStatus.Code == "PAID" || t.PaymentStatus.Code == "WAIVED")
+                    && t.ReceiptId == null
+                    && !_db.Receipts.Any(r => r.TransactionId == t.TransactionId));
+            else
+                query = query.Where(t => t.PaymentStatus.Code == status || t.PaymentStatus.Name == filter.Status);
+        }
+        if (!string.IsNullOrWhiteSpace(filter.Method))
+        {
+            var method = filter.Method.Trim().ToUpperInvariant().Replace("-", "_").Replace(" ", "_");
+            query = query.Where(t =>
+                t.PaymentMethod.Code == method
+                || t.PaymentMethod.Name.ToUpper().Contains(method));
+        }
+        if (!string.IsNullOrWhiteSpace(filter.FeeType))
+        {
+            var fee = filter.FeeType.Trim().ToUpperInvariant();
+            query = query.Where(t =>
+                t.FeeType != null
+                && (t.FeeType.Code == fee || t.FeeType.Name.ToUpper().Contains(fee)));
+        }
+        if (!string.IsNullOrWhiteSpace(filter.MembershipType))
+        {
+            // Membership type applies to members (accounts) only — never applicants.
+            var mtRaw = filter.MembershipType.Trim();
+            var mt = NormalizeMembershipKey(mtRaw);
+            var matchingTypeIds = await _db.MembershipTypes.AsNoTracking()
+                .Where(x =>
+                    x.Code.ToUpper().Replace("-", "_").Replace(" ", "_") == mt
+                    || x.Name.ToUpper().Contains(mtRaw.ToUpper())
+                    || x.Code.ToUpper().Contains(mt))
+                .Select(x => x.MembershipTypeId)
+                .ToListAsync(cancellationToken);
+
+            query = query.Where(t =>
+                t.AccountId != null
+                && t.Account != null
+                && matchingTypeIds.Contains(t.Account.MembershipTypeId));
+        }
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            var term = filter.Search.Trim().ToLowerInvariant();
+            query = query.Where(t =>
+                (t.Account != null && t.Account.MembershipNo != null && t.Account.MembershipNo.ToLower().Contains(term))
+                || (t.Account != null && t.Account.Profile != null && (
+                    (t.Account.Profile.FirstName + " " + t.Account.Profile.LastName).ToLower().Contains(term)
+                    || (t.Account.Profile.LastName + " " + t.Account.Profile.FirstName).ToLower().Contains(term)))
+                || (t.Profile != null && (
+                    (t.Profile.FirstName + " " + t.Profile.LastName).ToLower().Contains(term)))
+                || (t.Receipt != null && t.Receipt.ReceiptNumber != null && t.Receipt.ReceiptNumber.ToLower().Contains(term))
+                || (t.MpesaCode != null && t.MpesaCode.ToLower().Contains(term))
+                || (t.ChequeNo != null && t.ChequeNo.ToLower().Contains(term))
+                || (t.ReferenceNote != null && t.ReferenceNote.ToLower().Contains(term)));
+        }
 
         return await MapPaymentRows(query, paging, cancellationToken);
     }
@@ -613,6 +1532,8 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
             .Include(t => t.Profile)
             .Include(t => t.Account)
                 .ThenInclude(a => a!.Profile)
+            .Include(t => t.Account)
+                .ThenInclude(a => a!.MembershipType)
             .OrderByDescending(t => t.PaymentDate)
             .ThenByDescending(t => t.TransactionId)
             .Skip(paging.Skip)
@@ -641,6 +1562,51 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
                 .Where(d => docIds.Contains(d.ApplicationDocumentId))
                 .ToDictionaryAsync(d => d.ApplicationDocumentId, cancellationToken);
 
+        var profileIds = rows
+            .Select(t => t.ProfileId ?? t.Account?.ProfileId)
+            .Where(id => id is > 0)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+        var applications = profileIds.Count == 0
+            ? new Dictionary<long, (long ApplicationId, string ApplicationNo)>()
+            : (await _db.Applications.AsNoTracking()
+                .Where(a => profileIds.Contains(a.ApplicantProfileId))
+                .Select(a => new { a.ApplicantProfileId, a.ApplicationId, a.ApplicationNo })
+                .ToListAsync(cancellationToken))
+                .GroupBy(a => a.ApplicantProfileId)
+                .ToDictionary(
+                    g => g.Key,
+                    g =>
+                    {
+                        var latest = g.OrderByDescending(x => x.ApplicationId).First();
+                        return (latest.ApplicationId, latest.ApplicationNo);
+                    });
+
+        // Resolve membership types for members only, via account id → membership_type_id.
+        // Do not rely on Account.MembershipType Include (tenant query filters often leave it null).
+        var accountIds = rows
+            .Select(t => t.AccountId ?? t.Account?.AccountId)
+            .Where(id => id is > 0)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+        var accountTypeIds = accountIds.Count == 0
+            ? new Dictionary<long, long>()
+            : await _db.Accounts.AsNoTracking()
+                .IgnoreQueryFilters()
+                .Where(a => accountIds.Contains(a.AccountId) && !a.IsDeleted)
+                .ToDictionaryAsync(a => a.AccountId, a => a.MembershipTypeId, cancellationToken);
+        var membershipTypeIds = accountTypeIds.Values.Where(id => id > 0).Distinct().ToList();
+        var membershipTypes = membershipTypeIds.Count == 0
+            ? new Dictionary<long, (string Name, string Code)>()
+            : (await _db.MembershipTypes.AsNoTracking()
+                .IgnoreQueryFilters()
+                .Where(mt => membershipTypeIds.Contains(mt.MembershipTypeId))
+                .Select(mt => new { mt.MembershipTypeId, mt.Name, mt.Code })
+                .ToListAsync(cancellationToken))
+                .ToDictionary(mt => mt.MembershipTypeId, mt => (mt.Name, mt.Code));
+
         var items = rows.Select(t =>
         {
             var receiptNo = t.Receipt?.ReceiptNumber;
@@ -649,7 +1615,36 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
             AplicationDocument? chequeDoc = null;
             if (t.ChequeDocumentId is long docId)
                 chequeDocs.TryGetValue(docId, out chequeDoc);
-            return ToPaymentRow(t, receiptNo, chequeDoc?.FileName, chequeDoc?.FileUrl);
+            long? applicationId = null;
+            string? applicationNo = null;
+            var profileKey = t.ProfileId ?? t.Account?.ProfileId;
+            if (profileKey is long pid && applications.TryGetValue(pid, out var app))
+            {
+                applicationId = app.ApplicationId;
+                applicationNo = app.ApplicationNo;
+            }
+
+            // Membership type for members (accounts) only — never applicants.
+            string? membershipType = null;
+            string? membershipTypeCode = null;
+            var accountId = t.AccountId ?? t.Account?.AccountId;
+            if (accountId is long aid
+                && accountTypeIds.TryGetValue(aid, out var typeId)
+                && membershipTypes.TryGetValue(typeId, out var memberType))
+            {
+                membershipType = memberType.Name;
+                membershipTypeCode = memberType.Code;
+            }
+
+            return ToPaymentRow(
+                t,
+                receiptNo,
+                chequeDoc?.FileName,
+                chequeDoc?.FileUrl,
+                applicationId,
+                applicationNo,
+                membershipType,
+                membershipTypeCode);
         }).ToList();
         return Paging.Create(items, paging, total);
     }
@@ -658,7 +1653,11 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
         MTransaction t,
         string? receiptNumber,
         string? chequeFileName = null,
-        string? chequeFileUrl = null)
+        string? chequeFileUrl = null,
+        long? applicationId = null,
+        string? applicationNo = null,
+        string? membershipType = null,
+        string? membershipTypeCode = null)
     {
         var memberName = t.Account?.Profile is { } accountProfile
             ? $"{accountProfile.FirstName} {accountProfile.LastName}".Trim()
@@ -682,57 +1681,702 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
             t.ChequeDate,
             chequeFileName,
             chequeFileUrl,
-            t.PaymentMethod?.Code);
+            t.PaymentMethod?.Code,
+            t.Account?.MembershipNo,
+            t.PaymentStatus?.Code,
+            t.FeeType?.Code,
+            applicationId,
+            applicationNo,
+            t.CreatedAt,
+            t.ProfileId ?? t.Account?.ProfileId,
+            membershipType,
+            membershipTypeCode);
     }
 
     public async Task<IReadOnlyList<SubscriptionRowDto>> ListSubscriptionsAsync(int? year, CancellationToken cancellationToken)
     {
-        var paged = await ListSubscriptionsAsync(year, new PagedRequest { Page = 1, PageSize = 100 }, cancellationToken);
+        var paged = await ListSubscriptionsAsync(new SubscriptionListFilter(Year: year), new PagedRequest { Page = 1, PageSize = 100 }, cancellationToken);
         return paged.Items;
     }
 
-    public async Task<PagedResult<SubscriptionRowDto>> ListSubscriptionsAsync(int? year, PagedRequest paging, CancellationToken cancellationToken)
+    public async Task<PagedResult<SubscriptionRowDto>> ListSubscriptionsAsync(int? year, PagedRequest paging, CancellationToken cancellationToken) =>
+        await ListSubscriptionsAsync(new SubscriptionListFilter(Year: year), paging, cancellationToken);
+
+    public async Task<PagedResult<SubscriptionRowDto>> ListSubscriptionsAsync(
+        SubscriptionListFilter filter,
+        PagedRequest paging,
+        CancellationToken cancellationToken)
+    {
+        var y = filter.Year ?? DateTime.UtcNow.Year;
+        var query = _db.Subscriptions.AsNoTracking().Where(s => s.SubscriptionYear == y);
+        if (filter.ArrearsOnly)
+            query = query.Where(s => s.ArrearsAmount > 0 || s.AmountPaid < s.AmountDue);
+        if (!string.IsNullOrWhiteSpace(filter.MembershipType))
+        {
+            var mtRaw = filter.MembershipType.Trim();
+            var mt = NormalizeMembershipKey(mtRaw);
+            query = query.Where(s =>
+                s.Account.MembershipType.Code.ToUpper().Replace("-", "_").Replace(" ", "_") == mt
+                || s.Account.MembershipType.Name.ToUpper().Contains(mtRaw.ToUpper())
+                || s.Account.MembershipType.Code.ToUpper().Contains(mt));
+        }
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            var term = filter.Search.Trim().ToLowerInvariant();
+            query = query.Where(s =>
+                (s.Account.MembershipNo != null && s.Account.MembershipNo.ToLower().Contains(term))
+                || (s.Account.Profile.FirstName + " " + s.Account.Profile.LastName).ToLower().Contains(term));
+        }
+
+        var total = await query.CountAsync(cancellationToken);
+        var rows = await query
+            .Include(s => s.Account)
+                .ThenInclude(a => a.Profile)
+            .Include(s => s.Account)
+                .ThenInclude(a => a.CurrentMemberStatus)
+            .Include(s => s.Status)
+            .OrderByDescending(s => s.ArrearsAmount)
+            .ThenBy(s => s.Account.MembershipNo)
+            .Skip(paging.Skip)
+            .Take(paging.PageSize)
+            .ToListAsync(cancellationToken);
+
+        var typeIds = rows.Select(s => s.Account.MembershipTypeId).Where(id => id > 0).Distinct().ToList();
+        // Prefer account ids from this page in case Include left MembershipTypeId stale.
+        var accountIdsForTypes = rows.Select(s => s.AccountId).Distinct().ToList();
+        var accountTypeMap = await _db.Accounts.AsNoTracking()
+            .IgnoreQueryFilters()
+            .Where(a => accountIdsForTypes.Contains(a.AccountId))
+            .Select(a => new { a.AccountId, a.MembershipTypeId })
+            .ToListAsync(cancellationToken);
+        foreach (var row in accountTypeMap)
+        {
+            if (row.MembershipTypeId > 0)
+                typeIds.Add(row.MembershipTypeId);
+        }
+        typeIds = typeIds.Distinct().ToList();
+
+        var types = typeIds.Count == 0
+            ? new Dictionary<long, (string Name, string Code)>()
+            : (await _db.MembershipTypes.AsNoTracking()
+                .IgnoreQueryFilters()
+                .Where(mt => typeIds.Contains(mt.MembershipTypeId))
+                .Select(mt => new { mt.MembershipTypeId, mt.Name, mt.Code })
+                .ToListAsync(cancellationToken))
+                .ToDictionary(mt => mt.MembershipTypeId, mt => (mt.Name, mt.Code));
+
+        var accountToTypeId = accountTypeMap.ToDictionary(a => a.AccountId, a => a.MembershipTypeId);
+
+        var items = rows.Select(s =>
+        {
+            string? typeName = null;
+            string? typeCode = null;
+            var typeId = accountToTypeId.TryGetValue(s.AccountId, out var tid) ? tid : s.Account.MembershipTypeId;
+            if (types.TryGetValue(typeId, out var mt))
+            {
+                typeName = mt.Name;
+                typeCode = mt.Code;
+            }
+            return new SubscriptionRowDto(
+                s.SubscriptionId,
+                s.AccountId,
+                s.Account.MembershipNo ?? "",
+                (s.Account.Profile.FirstName + " " + s.Account.Profile.LastName).Trim(),
+                s.SubscriptionYear,
+                s.AmountDue,
+                s.AmountPaid,
+                s.ArrearsAmount,
+                s.Status.Name,
+                s.DueDate,
+                s.PostedDate,
+                s.RemovalDate,
+                typeName,
+                typeCode,
+                s.Account.CurrentMemberStatus?.Name,
+                s.Account.CurrentMemberStatus?.Code);
+        }).ToList();
+
+        return Paging.Create(items, paging, total);
+    }
+
+    public async Task<IReadOnlyList<SettlementMemberHitDto>> SearchSettlementMembersAsync(
+        string? search,
+        int? year,
+        CancellationToken cancellationToken)
+    {
+        var term = (search ?? "").Trim();
+        if (term.Length < 2) return [];
+        var y = year ?? DateTime.UtcNow.Year;
+        var lower = term.ToLowerInvariant();
+
+        var accounts = await _db.Accounts.AsNoTracking()
+            .Include(a => a.Profile)
+            .Include(a => a.MembershipType)
+            .Include(a => a.CurrentMemberStatus)
+            .Include(a => a.Application)
+            .Where(a => !a.IsDeleted)
+            .Where(a =>
+                (a.MembershipNo != null && a.MembershipNo.ToLower().Contains(lower))
+                || (a.Profile.FirstName + " " + a.Profile.LastName).ToLower().Contains(lower)
+                || (a.ApplicationId != null && a.ApplicationId.ToString().Contains(term))
+                || (a.Application != null && a.Application.ApplicationNo.ToLower().Contains(lower)))
+            .OrderBy(a => a.MembershipNo)
+            .Take(25)
+            .ToListAsync(cancellationToken);
+
+        if (accounts.Count == 0)
+        {
+            // Fallback: application no / APP-#### search without requiring Application nav filter translation.
+            accounts = await _db.Accounts.AsNoTracking()
+                .Include(a => a.Profile)
+                .Include(a => a.MembershipType)
+                .Include(a => a.CurrentMemberStatus)
+                .Where(a => !a.IsDeleted)
+                .Take(300)
+                .ToListAsync(cancellationToken);
+            accounts = accounts
+                .Where(a =>
+                    $"{a.MembershipNo} {a.Profile.FirstName} {a.Profile.LastName} APP-{a.ApplicationId} {a.ApplicationId}"
+                        .Contains(term, StringComparison.OrdinalIgnoreCase))
+                .Take(25)
+                .ToList();
+        }
+
+        var accountIds = accounts.Select(a => a.AccountId).ToList();
+        var subs = await _db.Subscriptions.AsNoTracking()
+            .Where(s => accountIds.Contains(s.AccountId) && s.SubscriptionYear == y)
+            .Select(s => new { s.AccountId, s.SubscriptionId, s.ArrearsAmount })
+            .ToListAsync(cancellationToken);
+        var subByAccount = subs
+            .GroupBy(s => s.AccountId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.ArrearsAmount).First());
+
+        return accounts.Select(a =>
+        {
+            subByAccount.TryGetValue(a.AccountId, out var sub);
+            return new SettlementMemberHitDto(
+                a.AccountId,
+                sub?.SubscriptionId,
+                a.MembershipNo ?? "",
+                $"{a.Profile.FirstName} {a.Profile.LastName}".Trim(),
+                a.CurrentMemberStatus?.Name ?? "—",
+                a.MembershipType?.Name,
+                sub?.ArrearsAmount ?? 0,
+                y);
+        }).ToList();
+    }
+
+    public async Task<SettlementContextDto> GetSettlementContextAsync(
+        long accountId,
+        int? year,
+        long? subscriptionId,
+        CancellationToken cancellationToken)
     {
         var y = year ?? DateTime.UtcNow.Year;
-        return await _db.Subscriptions.AsNoTracking()
-            .Where(s => s.SubscriptionYear == y)
-            .OrderBy(s => s.Account.MembershipNo)
-            .Select(s => new SubscriptionRowDto(
-                s.SubscriptionId, s.AccountId, s.Account.MembershipNo,
-                s.Account.Profile.FirstName + " " + s.Account.Profile.LastName,
-                s.SubscriptionYear, s.AmountDue, s.AmountPaid, s.ArrearsAmount,
-                s.Status.Name, s.DueDate, s.PostedDate, s.RemovalDate))
-            .ToPagedResultAsync(paging, cancellationToken);
+        var account = await _db.Accounts
+            .Include(a => a.Profile)
+            .Include(a => a.MembershipType)
+            .Include(a => a.CurrentMemberStatus)
+            .FirstOrDefaultAsync(a => a.AccountId == accountId && !a.IsDeleted, cancellationToken)
+            ?? throw new InvalidOperationException("Member account was not found.");
+
+        var subQuery = _db.Subscriptions.AsQueryable().Where(s => s.AccountId == accountId);
+        var sub = subscriptionId is long sid
+            ? await subQuery.Include(s => s.Status).FirstOrDefaultAsync(s => s.SubscriptionId == sid, cancellationToken)
+            : await subQuery.Include(s => s.Status)
+                .Where(s => s.SubscriptionYear == y)
+                .OrderByDescending(s => s.ArrearsAmount)
+                .FirstOrDefaultAsync(cancellationToken);
+        if (sub is null)
+            throw new InvalidOperationException($"No subscription was found for this member in {y}.");
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var (eligibleSenior, seniorReason) = EvaluateSeniorEligibility(account, today);
+        var suggestedAfterSenior = eligibleSenior
+            ? Math.Round(Math.Max(0, (sub.AmountDue * 0.5m) - sub.AmountPaid), 2)
+            : sub.ArrearsAmount;
+        if (suggestedAfterSenior < 0) suggestedAfterSenior = 0;
+
+        var statusCode = (account.CurrentMemberStatus?.Code ?? "").ToUpperInvariant();
+        var canReactivate = statusCode is "REMOVED" or "POSTED";
+        decimal reactivationFee = 0;
+        if (canReactivate && statusCode == "REMOVED")
+        {
+            var schedule = await _db.MembershipFeeSchedules.AsNoTracking()
+                .Where(x => x.IsActive && x.MembershipTypeId == account.MembershipTypeId && x.EffectiveDate <= today)
+                .OrderByDescending(x => x.EffectiveDate)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (schedule is not null)
+            {
+                var dob = account.Profile.DateOfBirth;
+                var age = dob is DateOnly d
+                    ? today.Year - d.Year - (today < d.AddYears(today.Year - d.Year) ? 1 : 0)
+                    : 30;
+                reactivationFee = age < 30 ? schedule.JoiningFeeUnder30 : schedule.JoiningFee;
+            }
+        }
+
+        return new SettlementContextDto(
+            account.AccountId,
+            sub.SubscriptionId,
+            $"{account.Profile.FirstName} {account.Profile.LastName}".Trim(),
+            account.MembershipNo ?? "",
+            account.CurrentMemberStatus?.Name ?? sub.Status.Name,
+            statusCode,
+            account.MembershipType?.Name,
+            sub.SubscriptionYear,
+            sub.AmountDue,
+            sub.AmountPaid,
+            sub.ArrearsAmount,
+            eligibleSenior,
+            seniorReason,
+            suggestedAfterSenior,
+            canReactivate && statusCode == "REMOVED",
+            reactivationFee);
     }
+
+    public async Task<DirectSettlementResultDto> DirectSettleAsync(
+        DirectSettlementRequest request,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        if (request.AmountPaid <= 0)
+            throw new InvalidOperationException("Amount paid must be greater than zero.");
+
+        var paymentDate = request.PaymentDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var methodCode = NormalizeSettlementMethodCode(request.PaymentMethodCode);
+        if (methodCode is not "CASH" && string.IsNullOrWhiteSpace(request.ReferenceCode))
+            throw new InvalidOperationException("Transaction / reference code is required for this payment method.");
+
+        var account = await _db.Accounts
+            .Include(a => a.Profile)
+            .Include(a => a.MembershipType)
+            .Include(a => a.CurrentMemberStatus)
+            .FirstOrDefaultAsync(a => a.AccountId == request.AccountId && !a.IsDeleted, cancellationToken)
+            ?? throw new InvalidOperationException("Member account was not found.");
+
+        var sub = request.SubscriptionId is long sid
+            ? await _db.Subscriptions.Include(s => s.Status).FirstOrDefaultAsync(s => s.SubscriptionId == sid && s.AccountId == account.AccountId, cancellationToken)
+            : await _db.Subscriptions.Include(s => s.Status)
+                .Where(s => s.AccountId == account.AccountId && s.SubscriptionYear == paymentDate.Year)
+                .OrderByDescending(s => s.ArrearsAmount)
+                .FirstOrDefaultAsync(cancellationToken);
+        if (sub is null)
+            throw new InvalidOperationException("Subscription was not found for settlement.");
+
+        // Align payment date year with the subscription being cleared.
+        if (paymentDate.Year != sub.SubscriptionYear)
+            paymentDate = new DateOnly(sub.SubscriptionYear, Math.Min(12, paymentDate.Month), Math.Min(28, paymentDate.Day));
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var (eligibleSenior, _) = EvaluateSeniorEligibility(account, today);
+        decimal seniorDiscountApplied = 0;
+        if (request.ApplySeniorDiscount && !eligibleSenior)
+            throw new InvalidOperationException("This member is not eligible for the senior discount (age 55+ with 25+ years membership).");
+
+        // Preview arrears after optional senior discount (applied inside the DB transaction).
+        var typeCode = (account.MembershipType?.Code ?? "").Trim().ToUpperInvariant();
+        var previewDue = sub.AmountDue;
+        var previewPaid = sub.AmountPaid;
+        if (request.ApplySeniorDiscount && typeCode is not "SENIOR" and not "SENIOR_LIFE")
+            previewDue = Math.Round(sub.AmountDue * 0.5m, 2);
+        var previewArrears = Math.Max(0, previewDue - previewPaid);
+        if (request.AmountPaid > previewArrears + 0.01m)
+            throw new InvalidOperationException($"Amount paid cannot exceed outstanding arrears ({previewArrears:0.00}).");
+
+        var paymentMethod = await ResolveSettlementPaymentMethodAsync(methodCode, cancellationToken);
+        var annualFee = await _db.FeeTypes.FirstOrDefaultAsync(f => f.Code == "ANNUAL", cancellationToken)
+            ?? throw new InvalidOperationException("ANNUAL fee type is not configured.");
+
+        await using var dbTx = await _db.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            if (request.ApplySeniorDiscount && typeCode is not "SENIOR" and not "SENIOR_LIFE")
+            {
+                var discountedDue = Math.Round(sub.AmountDue * 0.5m, 2);
+                if (discountedDue < sub.AmountDue)
+                {
+                    seniorDiscountApplied = sub.AmountDue - discountedDue;
+                    sub.AmountDue = discountedDue;
+                    sub.ArrearsAmount = Math.Max(0, sub.AmountDue - sub.AmountPaid);
+                    await _db.SaveChangesAsync(cancellationToken);
+                }
+            }
+
+            var annualRow = await RecordPaymentAsync(new RecordPaymentRequest(
+                account.AccountId,
+                null,
+                annualFee.FeeTypeId,
+                paymentMethod.PaymentMethodId,
+                request.AmountPaid,
+                paymentDate,
+                methodCode == "CHEQUE" ? request.ReferenceCode?.Trim() : null,
+                methodCode is "MPESA" or "MPESA_STK" ? request.ReferenceCode?.Trim() : null,
+                BuildSettlementReferenceNote(methodCode, request.ReferenceCode, request.ApplySeniorDiscount, request.IncludeReactivationFee),
+                "PAID",
+                methodCode == "CHEQUE" ? "Finance desk" : null,
+                null,
+                methodCode == "CHEQUE" ? paymentDate : null,
+                null,
+                null), actorUserId, cancellationToken);
+
+            decimal reactivationCharged = 0;
+            PaymentRowDto? reactivationRow = null;
+            var statusCode = (account.CurrentMemberStatus?.Code ?? "").ToUpperInvariant();
+            if (request.IncludeReactivationFee)
+            {
+                if (statusCode != "REMOVED")
+                    throw new InvalidOperationException("Re-activation fee applies only when the member status is Removed.");
+                var schedule = await _db.MembershipFeeSchedules.AsNoTracking()
+                    .Where(x => x.IsActive && x.MembershipTypeId == account.MembershipTypeId && x.EffectiveDate <= today)
+                    .OrderByDescending(x => x.EffectiveDate)
+                    .FirstOrDefaultAsync(cancellationToken)
+                    ?? throw new InvalidOperationException("No fee schedule found for reactivation fee.");
+                var dob = account.Profile.DateOfBirth;
+                var age = dob is DateOnly d
+                    ? today.Year - d.Year - (today < d.AddYears(today.Year - d.Year) ? 1 : 0)
+                    : 30;
+                reactivationCharged = age < 30 ? schedule.JoiningFeeUnder30 : schedule.JoiningFee;
+                if (reactivationCharged > 0)
+                {
+                    var joiningFee = await _db.FeeTypes.FirstOrDefaultAsync(f => f.Code == "JOINING", cancellationToken)
+                        ?? throw new InvalidOperationException("JOINING fee type is not configured.");
+                    reactivationRow = await RecordPaymentAsync(new RecordPaymentRequest(
+                        account.AccountId,
+                        null,
+                        joiningFee.FeeTypeId,
+                        paymentMethod.PaymentMethodId,
+                        reactivationCharged,
+                        paymentDate,
+                        methodCode == "CHEQUE" ? request.ReferenceCode?.Trim() : null,
+                        methodCode is "MPESA" or "MPESA_STK" ? request.ReferenceCode?.Trim() : null,
+                        "Re-activation / entrance fee on direct settlement",
+                        "PAID",
+                        methodCode == "CHEQUE" ? "Finance desk" : null,
+                        null,
+                        methodCode == "CHEQUE" ? paymentDate : null,
+                        null,
+                        null), actorUserId, cancellationToken);
+                }
+            }
+
+            // Reload subscription after ApplyPaidAmountToAccountAsync inside RecordPayment.
+            await _db.Entry(sub).ReloadAsync(cancellationToken);
+            var remaining = sub.ArrearsAmount;
+            var reactivated = false;
+            if (remaining <= 0 && statusCode is "REMOVED" or "POSTED")
+            {
+                var active = await _db.MemberStatuses.FirstOrDefaultAsync(s => s.Code == "ACTIVE", cancellationToken)
+                    ?? throw new InvalidOperationException("ACTIVE member status is not configured.");
+                account.CurrentMemberStatusId = active.MemberStatusId;
+                account.IsActive = true;
+                account.EndDate = null;
+                account.UpdatedByUserId = actorUserId;
+                _db.AuditLogs.Add(new AuditLog
+                {
+                    TableName = "MAccount",
+                    RecordId = account.AccountId,
+                    Action = "UPDATE",
+                    NewValues = $"direct-settlement:reactivated from {statusCode}; annualTx={annualRow.TransactionId}",
+                    ChangedByUserId = actorUserId,
+                    ChangedAt = DateTime.UtcNow
+                });
+                await _db.SaveChangesAsync(cancellationToken);
+                reactivated = true;
+                statusCode = "ACTIVE";
+            }
+
+            await dbTx.CommitAsync(cancellationToken);
+
+            var statusName = reactivated
+                ? "Active"
+                : (account.CurrentMemberStatus?.Name ?? statusCode);
+            if (reactivated)
+            {
+                var activeName = await _db.MemberStatuses.AsNoTracking()
+                    .Where(s => s.Code == "ACTIVE")
+                    .Select(s => s.Name)
+                    .FirstOrDefaultAsync(cancellationToken);
+                statusName = activeName ?? "Active";
+            }
+
+            return new DirectSettlementResultDto(
+                account.AccountId,
+                account.MembershipNo ?? "",
+                $"{account.Profile.FirstName} {account.Profile.LastName}".Trim(),
+                statusName,
+                reactivated,
+                request.AmountPaid,
+                seniorDiscountApplied,
+                reactivationCharged,
+                remaining,
+                annualRow.ReceiptNumber ?? reactivationRow?.ReceiptNumber,
+                annualRow.TransactionId);
+        }
+        catch
+        {
+            await dbTx.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    private static (bool Eligible, string? Reason) EvaluateSeniorEligibility(MAccount account, DateOnly today)
+    {
+        var typeCode = (account.MembershipType?.Code ?? "").Trim().ToUpperInvariant();
+        if (typeCode is "SENIOR" or "SENIOR_LIFE")
+            return (true, "Membership class already includes senior privileges.");
+
+        var dob = account.Profile.DateOfBirth;
+        if (dob is null) return (false, null);
+        var age = today.Year - dob.Value.Year - (today < dob.Value.AddYears(today.Year - dob.Value.Year) ? 1 : 0);
+        var joined = account.JoinedDate ?? account.StartDate;
+        var years = joined is null ? 0 : today.Year - joined.Value.Year - (today < joined.Value.AddYears(today.Year - joined.Value.Year) ? 1 : 0);
+        if (age >= 55 && years >= 25)
+            return (true, "Age 55+ with 25+ years continuous membership — 50% annual subscription.");
+        return (false, null);
+    }
+
+    private static string NormalizeSettlementMethodCode(string? raw)
+    {
+        var code = (raw ?? "").Trim().ToUpperInvariant().Replace("-", "_").Replace(" ", "_");
+        return code switch
+        {
+            "MPESA_EXPRESS" or "MPESA_STK" or "STK" or "STK_PUSH" => "MPESA",
+            "MPESA_MANUAL" or "MPESA_REFERENCE" or "MPESA_REF" => "MPESA",
+            "CREDIT" or "DEBIT" or "CREDIT_CARD" or "DEBIT_CARD" => "CARD",
+            _ => code
+        };
+    }
+
+    private async Task<PaymentMethod> ResolveSettlementPaymentMethodAsync(string methodCode, CancellationToken cancellationToken)
+    {
+        var method = await _db.PaymentMethods.FirstOrDefaultAsync(
+            m => m.IsActive && (m.Code == methodCode || m.Code.ToUpper() == methodCode),
+            cancellationToken);
+        if (method is not null) return method;
+        // STK / manual both map to MPESA seed row.
+        if (methodCode == "MPESA")
+        {
+            method = await _db.PaymentMethods.FirstOrDefaultAsync(m => m.Code == "MPESA", cancellationToken);
+            if (method is not null) return method;
+        }
+        throw new InvalidOperationException($"Payment method '{methodCode}' was not found.");
+    }
+
+    private static string BuildSettlementReferenceNote(
+        string methodCode,
+        string? reference,
+        bool senior,
+        bool reactivation)
+    {
+        var parts = new List<string> { "Direct settlement (finance desk)" };
+        if (methodCode is "MPESA" && !string.IsNullOrWhiteSpace(reference))
+            parts.Add($"ref={reference.Trim()}");
+        if (methodCode is "CARD" && !string.IsNullOrWhiteSpace(reference))
+            parts.Add($"card-ref={reference.Trim()}");
+        if (senior) parts.Add("senior-discount");
+        if (reactivation) parts.Add("with-reactivation-fee");
+        return string.Join("; ", parts);
+    }
+
+    public async Task<SubscriptionLifecycleResultDto> EnforceSubscriptionLifecycleAsync(CancellationToken cancellationToken) =>
+        await RunSubscriptionLifecycleCoreAsync(DateTime.UtcNow.Year, actorUserId: null, cancellationToken);
 
     public async Task<int> RunPostingAsync(int year, long? actorUserId, CancellationToken cancellationToken)
     {
+        var result = await RunSubscriptionLifecycleCoreAsync(year, actorUserId, cancellationToken);
+        return result.TotalUpdated;
+    }
+
+    /// <summary>
+    /// Aero Club annual subscription lifecycle:
+    /// 1 Jan — generate unpaid annual subscriptions;
+    /// after 28 Feb — POSTED + restrict access;
+    /// after 30 Apr — REMOVED.
+    /// </summary>
+    private async Task<SubscriptionLifecycleResultDto> RunSubscriptionLifecycleCoreAsync(
+        int year,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var postedStatus = await _db.MemberStatuses.FirstOrDefaultAsync(x => x.Code == "POSTED", cancellationToken);
-        var removedStatus = await _db.MemberStatuses.FirstOrDefaultAsync(x => x.Code == "REMOVED", cancellationToken);
-        var due = await _db.Subscriptions.Include(s => s.Account)
+
+        var generated = await GenerateAnnualSubscriptionsForYearAsync(year, actorUserId, cancellationToken);
+
+        var posted = 0;
+        var removed = 0;
+        if (today >= new DateOnly(year, 4, 30))
+            removed = await ApplyUnpaidStatusAsync(year, today, "REMOVED", actorUserId, cancellationToken);
+        else if (today >= new DateOnly(year, 2, 28))
+            posted = await ApplyUnpaidStatusAsync(year, today, "POSTED", actorUserId, cancellationToken);
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            TableName = "Subscription",
+            RecordId = year,
+            Action = "UPDATE",
+            NewValues = $"lifecycle:generated={generated};posted={posted};removed={removed}",
+            ChangedByUserId = actorUserId,
+            ChangedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return new SubscriptionLifecycleResultDto(
+            year,
+            today.ToString("yyyy-MM-dd"),
+            generated,
+            posted,
+            removed,
+            generated + posted + removed);
+    }
+
+    /// <summary>
+    /// Creates DUE subscription rows for the year (amount from fee schedule, senior discount when applicable).
+    /// Idempotent: skips accounts that already have a row for <paramref name="year"/>.
+    /// </summary>
+    private async Task<int> GenerateAnnualSubscriptionsForYearAsync(
+        int year,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var dueStatus = await _db.MemberStatuses.FirstOrDefaultAsync(x => x.Code == "DUE", cancellationToken)
+            ?? await _db.MemberStatuses.FirstAsync(cancellationToken);
+        var asOf = new DateOnly(year, 1, 1);
+
+        var existingAccountIds = await _db.Subscriptions.AsNoTracking()
+            .Where(s => s.SubscriptionYear == year)
+            .Select(s => s.AccountId)
+            .ToListAsync(cancellationToken);
+        var existing = existingAccountIds.ToHashSet();
+
+        var accounts = await _db.Accounts
+            .AsNoTracking()
+            .Include(a => a.MembershipType)
+            .Include(a => a.CurrentMemberStatus)
+            .Where(a =>
+                !a.IsDeleted
+                && a.MembershipType.CanAccessSubscriptions
+                && a.CurrentMemberStatus.Code != "REMOVED")
+            .ToListAsync(cancellationToken);
+
+        var schedules = await _db.MembershipFeeSchedules.AsNoTracking()
+            .Where(x => x.IsActive && x.EffectiveDate <= asOf)
+            .ToListAsync(cancellationToken);
+
+        var created = 0;
+        var now = DateTime.UtcNow;
+        foreach (var account in accounts)
+        {
+            if (existing.Contains(account.AccountId))
+                continue;
+
+            var priv = MemberClassPrivileges.ForCode(account.MembershipType.Code);
+            if (!priv.PaysSubscription)
+                continue;
+
+            var schedule = schedules
+                .Where(x => x.MembershipTypeId == account.MembershipTypeId)
+                .OrderByDescending(x => x.EffectiveDate)
+                .FirstOrDefault();
+            var amount = schedule?.AnnualSubscription ?? 0m;
+            var discount = string.Equals(account.MembershipType.Code, "SENIOR", StringComparison.OrdinalIgnoreCase)
+                ? 50
+                : priv.SubscriptionDiscountPercent;
+            if (discount > 0)
+                amount = Math.Round(amount * (100 - discount) / 100m, 2, MidpointRounding.AwayFromZero);
+
+            _db.Subscriptions.Add(new Subscription
+            {
+                AccountId = account.AccountId,
+                SubscriptionYear = year,
+                AmountDue = amount,
+                AmountPaid = 0,
+                ArrearsAmount = amount,
+                DueDate = asOf,
+                SubscriptionStatusId = dueStatus.MemberStatusId,
+                WaivedFlag = false,
+                CreatedAt = now,
+                CreatedByUserId = actorUserId
+            });
+            created++;
+        }
+
+        if (created > 0)
+            await _db.SaveChangesAsync(cancellationToken);
+        return created;
+    }
+
+    /// <summary>
+    /// Marks unpaid (non-waived) subscriptions for the year as POSTED or REMOVED,
+    /// mirrors status onto the member account, opens arrears, and restricts access.
+    /// </summary>
+    private async Task<int> ApplyUnpaidStatusAsync(
+        int year,
+        DateOnly today,
+        string targetStatusCode,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var targetStatus = await _db.MemberStatuses.FirstOrDefaultAsync(x => x.Code == targetStatusCode, cancellationToken);
+        if (targetStatus is null)
+            return 0;
+
+        var isRemoval = string.Equals(targetStatusCode, "REMOVED", StringComparison.OrdinalIgnoreCase);
+        var unpaid = await _db.Subscriptions
+            .Include(s => s.Account)
+                .ThenInclude(a => a.CurrentMemberStatus)
             .Where(s => s.SubscriptionYear == year && !s.WaivedFlag && s.AmountPaid < s.AmountDue)
             .ToListAsync(cancellationToken);
 
         var count = 0;
-        foreach (var sub in due)
+        var now = DateTime.UtcNow;
+        foreach (var sub in unpaid)
         {
-            if (today >= new DateOnly(year, 4, 30) && removedStatus is not null)
-            {
+            var accountCode = (sub.Account.CurrentMemberStatus?.Code ?? "").Trim().ToUpperInvariant();
+            if (accountCode == "REMOVED" && !isRemoval)
+                continue;
+
+            sub.ArrearsAmount = Math.Max(0, sub.AmountDue - sub.AmountPaid);
+            sub.SubscriptionStatusId = targetStatus.MemberStatusId;
+            sub.UpdatedByUserId = actorUserId;
+
+            if (isRemoval)
                 sub.RemovalDate ??= today;
-                sub.Account.CurrentMemberStatusId = removedStatus.MemberStatusId;
-                sub.Account.IsActive = false;
-                count++;
-            }
-            else if (today >= new DateOnly(year, 2, 28) && postedStatus is not null)
-            {
+            else
                 sub.PostedDate ??= today;
-                sub.Account.CurrentMemberStatusId = postedStatus.MemberStatusId;
+
+            var alreadyAtTarget = string.Equals(accountCode, targetStatusCode, StringComparison.OrdinalIgnoreCase);
+            if (!alreadyAtTarget)
+            {
+                var fromStatusId = sub.Account.CurrentMemberStatusId;
+                sub.Account.CurrentMemberStatusId = targetStatus.MemberStatusId;
+                // POSTED and REMOVED are not active-status — restrict portal / privilege access.
+                sub.Account.IsActive = targetStatus.IsActiveStatus && !targetStatus.IsTerminal;
+                if (isRemoval)
+                    sub.Account.EndDate ??= today;
+                sub.Account.UpdatedByUserId = actorUserId;
+
+                _db.MemberStatusHistories.Add(new MemberStatusHistory
+                {
+                    AccountId = sub.AccountId,
+                    FromStatusId = fromStatusId,
+                    ToStatusId = targetStatus.MemberStatusId,
+                    EffectiveDate = today,
+                    Reason = isRemoval
+                        ? $"Unpaid annual subscription removed after 30 April {year}."
+                        : $"Unpaid annual subscription posted after 28 February {year}.",
+                    ReferenceType = "SUBSCRIPTION",
+                    ReferenceId = sub.SubscriptionId,
+                    ChangedByUserId = actorUserId,
+                    CreatedAt = now,
+                    CreatedByUserId = actorUserId
+                });
                 count++;
             }
 
-            if (sub.ArrearsAmount <= 0) sub.ArrearsAmount = sub.AmountDue - sub.AmountPaid;
-            if (!await _db.Arrearses.AnyAsync(a => a.SubscriptionId == sub.SubscriptionId && a.Status == "OPEN", cancellationToken))
+            if (!await _db.Arrearses.AnyAsync(
+                    a => a.SubscriptionId == sub.SubscriptionId && a.Status == "OPEN",
+                    cancellationToken))
             {
                 _db.Arrearses.Add(new Arrears
                 {
@@ -741,22 +2385,14 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Document_type WHERE code = N'CHEQUE')
                     OpenedDate = today,
                     Amount = sub.ArrearsAmount,
                     Status = "OPEN",
-                    CreatedAt = DateTime.UtcNow,
+                    CreatedAt = now,
                     CreatedByUserId = actorUserId
                 });
             }
         }
 
-        _db.AuditLogs.Add(new AuditLog
-        {
-            TableName = "Subscription",
-            RecordId = year,
-            Action = "UPDATE",
-            NewValues = $"posting-run:{count}",
-            ChangedByUserId = actorUserId,
-            ChangedAt = DateTime.UtcNow
-        });
-        await _db.SaveChangesAsync(cancellationToken);
+        if (unpaid.Count > 0)
+            await _db.SaveChangesAsync(cancellationToken);
         return count;
     }
 }

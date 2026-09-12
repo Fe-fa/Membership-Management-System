@@ -3,12 +3,15 @@ import { useEffect } from "react";
 
 import heroImage from "@/assets/acea-hero.jpg";
 import { AdminPortalCard } from "@/components/card/AdminPortalCard";
+import { PageDataGate } from "@/components/layout/PageLoading";
 import { ADMIN_MODULES } from "@/services/admin/modules";
+import { canViewModule, useMyOfficePermissions } from "@/services/admin/officePermissions";
 import { hasAnyRole, isReceptionistOnly, isStaff, readUser } from "@/lib/auth";
 
 export function AdminDashboardPage() {
   const navigate = useNavigate();
   const user = readUser();
+  const permissions = useMyOfficePermissions(Boolean(user && isStaff(user)));
 
   useEffect(() => {
     if (!user) {
@@ -26,6 +29,14 @@ export function AdminDashboardPage() {
 
   if (!user || !isStaff(user) || isReceptionistOnly(user)) return null;
 
+  const visibleModules = ADMIN_MODULES.filter((module) => {
+    if (permissions.data) {
+      return canViewModule(permissions.data, module.id, user.roles);
+    }
+    // Fallback if API unavailable after load.
+    return !module.roles || hasAnyRole(user, module.roles);
+  });
+
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
       <section className="relative overflow-hidden rounded-2xl">
@@ -42,20 +53,26 @@ export function AdminDashboardPage() {
         </h1>
       </section>
 
-      <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-        {ADMIN_MODULES.filter((module) => !module.roles || hasAnyRole(user, module.roles)).map((module) => (
-          <AdminPortalCard
-            key={module.id}
-            title={module.title}
-            description={module.description}
-            icon={module.icon}
-            to={module.to}
-            search={module.search}
-            tone={module.tone}
-            locked={module.locked}
-          />
-        ))}
-      </section>
+      <PageDataGate
+        loading={permissions.isLoading}
+        label="Loading modules…"
+        minHeightClassName="min-h-[16rem]"
+      >
+        <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {visibleModules.map((module) => (
+            <AdminPortalCard
+              key={module.id}
+              title={module.title}
+              description={module.description}
+              icon={module.icon}
+              to={module.to}
+              search={module.search}
+              tone={module.tone}
+              locked={module.locked}
+            />
+          ))}
+        </section>
+      </PageDataGate>
     </div>
   );
 }

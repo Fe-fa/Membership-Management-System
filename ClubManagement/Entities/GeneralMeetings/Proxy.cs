@@ -51,6 +51,12 @@ namespace ClubManagement.Entities.GeneralMeetings
         [Column("is_poll")]
         public bool IsPoll { get; set; }
 
+        [Column("proxy_notes")]
+        public string? ProxyNotes { get; set; }
+
+        [Column("signed_form_url")]
+        public string? SignedFormUrl { get; set; }
+
         [Column("instrument_received_at")]
         public DateTime? InstrumentReceivedAt { get; set; }
 
@@ -59,6 +65,21 @@ namespace ClubManagement.Entities.GeneralMeetings
 
         [Column("is_valid_flag")]
         public bool IsValidFlag { get; set; }
+
+        /// <summary>PENDING | APPROVED | REJECTED | LATE</summary>
+        [Column("review_status")]
+        [MaxLength(20)]
+        public string ReviewStatus { get; set; } = "PENDING";
+
+        [Column("review_reason")]
+        [MaxLength(500)]
+        public string? ReviewReason { get; set; }
+
+        [Column("reviewed_at")]
+        public DateTime? ReviewedAt { get; set; }
+
+        [Column("reviewed_by_profile_id")]
+        public long? ReviewedByProfileId { get; set; }
 
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }

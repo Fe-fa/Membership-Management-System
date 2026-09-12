@@ -1,20 +1,45 @@
 import { Outlet } from "@tanstack/react-router";
-import { Loader2 } from "lucide-react";
-import type { ReactNode } from "react";
+import {
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Loader2,
+  PenLine,
+} from "lucide-react";
+import { useState, type ReactNode } from "react";
 
-import { PageFrame, PageHeader } from "@/components/layout/PageFrame";
+import { PageFrame } from "@/components/layout/PageFrame";
+import { PageBodyLoading } from "@/components/layout/PageLoading";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { hasAnyRole, readUser } from "@/lib/auth";
+import { cn } from "@/utils/cn";
 
 import {
+  canToggleVoting,
+  isFinanceFeesCleared,
+  isVotingOpen,
   peopleList,
   signaturesUnlocked,
   useAdmissionBallot,
   type AdmissionDesk,
   type BallotItem,
+  type BallotPerson,
+  type Seat,
 } from "./committeeBallotDesk";
 
 function BallotMeetingBanner({ data }: { data: AdmissionDesk }) {
@@ -22,7 +47,7 @@ function BallotMeetingBanner({ data }: { data: AdmissionDesk }) {
     <p className="text-sm text-muted-foreground">
       {data.meetingName} · {data.meetingDate}
       {data.meetingTime ? ` · ${data.meetingTime}` : ""} · Meeting quorum: {data.presentCount} present of{" "}
-      {data.quorumRequired} required (Article 6a). {data.meetingQuorumMet ? "Quorum met." : "Quorum not met."}
+      {data.quorumRequired} required. {data.meetingQuorumMet ? "Quorum met." : "Quorum not met."}
     </p>
   );
 }
@@ -35,13 +60,21 @@ function BallotLoadGate({
   const ballot = useAdmissionBallot();
   const { desk, data, meetingId } = ballot;
   if (desk.isLoading) {
-    return <p className="text-sm text-muted-foreground">Loading admission ballot…</p>;
+    return <PageBodyLoading label="Loading admission ballot…" />;
   }
   if (data?.deskMessage && !meetingId) {
-    return <p className="text-sm text-muted-foreground">{data.deskMessage}</p>;
+    return (
+      <div className="flex min-h-[28rem] items-center justify-center rounded-xl border border-dashed bg-muted/20 px-4 py-12 text-sm text-muted-foreground">
+        {data.deskMessage}
+      </div>
+    );
   }
   if (!data) {
-    return <p className="text-sm text-muted-foreground">Unable to load the Committee Ballot.</p>;
+    return (
+      <div className="flex min-h-[28rem] items-center justify-center rounded-xl border border-dashed bg-muted/20 px-4 py-12 text-sm text-muted-foreground">
+        Unable to load the Committee Ballot.
+      </div>
+    );
   }
   return <>{children(ballot)}</>;
 }
@@ -49,10 +82,6 @@ function BallotLoadGate({
 export function CommitteeBallotLayout() {
   return (
     <PageFrame width="lg">
-      <PageHeader
-        title="Committee Ballot"
-        description="Confidential membership admission ballot (Article 6). Quorum is 7 Committee members present. Two adverse votes exclude the applicant for one year — this is not a majority vote."
-      />
       <Outlet />
     </PageFrame>
   );
@@ -112,9 +141,6 @@ export function BallotPendingPage() {
           <Card>
             <CardHeader>
               <CardTitle>Pending applicants ready for ballot</CardTitle>
-              <CardDescription>
-                Already screened and interviewed, now on temporary-member / waitlist status.
-              </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
               <BallotMeetingBanner data={data!} />
@@ -149,181 +175,752 @@ export function BallotPendingPage() {
   );
 }
 
-function CandidateSignatures({
+function voteTrace(row: BallotItem, seats: Seat[]) {
+  const voted = peopleList(row.voted, row.Voted);
+  const votedIds = new Set(voted.map((v) => v.profileId));
+  const presentWaiting = seats.filter((s) => s.present && !votedIds.has(s.profileId));
+  const notYetPresent = seats.filter((s) => !s.present);
+  return { voted, presentWaiting, notYetPresent };
+}
+
+function InterviewDetailsCard({ data }: { data: AdmissionDesk }) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0 pb-3">
+        <div>
+          <CardTitle className="text-base">Interview Details</CardTitle>
+          <CardDescription className="mt-0.5">{data.meetingName}</CardDescription>
+        </div>
+        <span
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold",
+            data.meetingQuorumMet ? "bg-emerald-600 text-white" : "bg-amber-600 text-white",
+          )}
+        >
+          {data.meetingQuorumMet ? <Check className="size-3.5" strokeWidth={2.5} /> : null}
+          {data.meetingQuorumMet ? "Quorum Met" : "Quorum Not Met"}
+        </span>
+      </CardHeader>
+      <CardContent>
+        <dl className="grid gap-4 sm:grid-cols-3">
+          <div>
+            <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Date</dt>
+            <dd className="mt-1 text-sm font-semibold">{data.meetingDate}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Time</dt>
+            <dd className="mt-1 text-sm font-semibold">{data.meetingTime || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Quorum</dt>
+            <dd className="mt-1 text-sm font-semibold">
+              ({data.presentCount} of {data.quorumRequired} required)
+            </dd>
+          </div>
+        </dl>
+      </CardContent>
+    </Card>
+  );
+}
+
+function VotingStatusBadge({ row }: { row: BallotItem }) {
+  if (row.autoRejected || row.itemStatus === "REJECTED") {
+    return (
+      <Badge className="border-transparent bg-destructive text-destructive-foreground hover:bg-destructive">
+        REJECTED
+      </Badge>
+    );
+  }
+  if (row.itemStatus === "PASSED") {
+    return (
+      <Badge className="border-transparent bg-emerald-600 text-white hover:bg-emerald-600">PASSED</Badge>
+    );
+  }
+  if (isVotingOpen(row)) {
+    return (
+      <Badge className="border-transparent bg-orange-500 text-white hover:bg-orange-500">
+        VOTING OPEN
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="secondary" className="border-transparent">
+      VOTING CLOSED
+    </Badge>
+  );
+}
+
+function BallotCandidateRow({
+  row,
+  seats,
+  busy,
+  onVote,
+  onSetVoting,
+}: {
+  row: BallotItem;
+  seats: Seat[];
+  busy: boolean;
+  onVote: (voteValue: "FOR" | "AGAINST") => void;
+  onSetVoting: (open: boolean) => void;
+}) {
+  const [traceOpen, setTraceOpen] = useState(false);
+  const { voted, presentWaiting, notYetPresent } = voteTrace(row, seats);
+  const votingOpen = isVotingOpen(row);
+  const nonVoters = presentWaiting.length + notYetPresent.length;
+
+  return (
+    <tr className="border-t align-top">
+      <td className="px-4 py-4">
+        <p className="font-semibold text-foreground">{row.applicantName}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {row.applicationNo}
+          {row.itemStatus ? ` · ${row.itemStatus}` : ""}
+        </p>
+        {row.autoRejected ? (
+          <p className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive">
+            2 adverse votes — excluded until {row.excludedUntil ?? "one year from today"}
+          </p>
+        ) : null}
+      </td>
+      <td className="px-4 py-4">
+        <VotingStatusBadge row={row} />
+      </td>
+      <td className="px-4 py-4">
+        <p className="whitespace-nowrap text-sm font-semibold tabular-nums">
+          {row.forCount} FOR / {row.againstCount} AGAINST / {row.votesCast} VOTED
+        </p>
+        {traceOpen ? (
+          <div className="mt-3 grid max-w-sm gap-3 text-xs">
+            <div>
+              <p className="font-semibold text-foreground">Voted</p>
+              {voted.length === 0 ? (
+                <p className="mt-1 text-muted-foreground">No votes yet.</p>
+              ) : (
+                <ul className="mt-1 space-y-1 text-muted-foreground">
+                  {voted.map((v) => (
+                    <li key={`${row.committeeBallotItemId}-v-${v.profileId}`}>
+                      <span className="text-foreground">{v.name}</span>
+                      {v.roleName ? `: ${v.roleName}` : ""} — {v.voteValue ?? "—"}
+                      {v.castAt ? ` · ${v.castAt}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div>
+              <p className="font-semibold text-foreground">Present, not voted</p>
+              {presentWaiting.length === 0 ? (
+                <p className="mt-1 text-muted-foreground">
+                  {voted.length > 0
+                    ? "Everyone present has voted."
+                    : seats.some((s) => s.present)
+                      ? "Waiting for the first vote."
+                      : "Mark members present first."}
+                </p>
+              ) : (
+                <ul className="mt-1 space-y-1 text-muted-foreground">
+                  {presentWaiting.map((s) => (
+                    <li key={`${row.committeeBallotItemId}-w-${s.profileId}`}>
+                      <span className="text-foreground">{s.name}</span>
+                      {s.roleName ? `: ${s.roleName}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            {notYetPresent.length > 0 ? (
+              <div>
+                <p className="font-semibold text-foreground">Will vote after marked present</p>
+                <ul className="mt-1 space-y-1 text-muted-foreground">
+                  {notYetPresent.map((s) => (
+                    <li key={`${row.committeeBallotItemId}-a-${s.profileId}`}>
+                      <span className="text-foreground">{s.name}</span>
+                      {s.roleName ? `: ${s.roleName}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </td>
+      <td className="px-4 py-4">
+        <div className="grid gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="w-fit"
+            onClick={() => setTraceOpen((v) => !v)}
+          >
+            View Trace
+            {traceOpen ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Voters: {voted.length} / Non-Voters: {nonVoters}
+          </p>
+          {row.myVoteCast ? (
+            <p className="text-sm font-medium">Your vote: {row.myVoteValue}</p>
+          ) : votingOpen && !row.autoRejected ? (
+            <div className="grid gap-1.5">
+              <p className="text-xs font-medium text-muted-foreground">Your Vote</p>
+              <div className="flex flex-wrap gap-1.5">
+                <Button type="button" size="sm" disabled={busy} onClick={() => onVote("FOR")}>
+                  FOR
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => onVote("AGAINST")}
+                >
+                  AGAINST
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </td>
+      <td className="px-4 py-4">
+        <div className="flex flex-col items-stretch gap-1.5 sm:min-w-[9.5rem]">
+          <Button type="button" size="sm" variant="secondary" disabled>
+            Moved to Signatures
+          </Button>
+          {canToggleVoting(row) ? (
+            votingOpen ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => onSetVoting(false)}
+              >
+                Close Voting
+              </Button>
+            ) : (
+              <Button type="button" size="sm" disabled={busy} onClick={() => onSetVoting(true)}>
+                Open Voting
+              </Button>
+            )
+          ) : (
+            <Button type="button" size="sm" variant="outline" disabled>
+              Close Voting
+            </Button>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+export function BallotCandidatesPage() {
+  return (
+    <BallotLoadGate>
+      {(ballot) => {
+        const { data, seats, busy, vote, setVoting } = ballot;
+        const items = data?.items ?? [];
+        return (
+          <div className="grid gap-4">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">Ballot</h1>
+            </div>
+
+            <InterviewDetailsCard data={data!} />
+
+            {seats.filter((s) => s.present).length === 0 ? (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                No members are marked present yet. Mark attendance first so the vote list shows who
+                may cast a ballot.
+              </p>
+            ) : null}
+
+            <Card>
+              <CardContent className="p-0">
+                {items.length === 0 ? (
+                  <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+                    No applicants on this meeting ballot yet. Add them from Pending applicants.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[980px] text-sm">
+                      <thead className="border-b bg-muted/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                        <tr>
+                          <th className="px-4 py-3 font-medium">Applicant</th>
+                          <th className="px-4 py-3 font-medium">Voting Status</th>
+                          <th className="px-4 py-3 font-medium">Summary</th>
+                          <th className="px-4 py-3 font-medium">Vote Trace &amp; Actions</th>
+                          <th className="px-4 py-3 font-medium">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((row) => (
+                          <BallotCandidateRow
+                            key={row.committeeBallotItemId}
+                            row={row}
+                            seats={seats}
+                            busy={busy}
+                            onVote={(voteValue) =>
+                              vote.mutate({ itemId: row.committeeBallotItemId, voteValue })
+                            }
+                            onSetVoting={(open) =>
+                              setVoting.mutate({ itemId: row.committeeBallotItemId, open })
+                            }
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        );
+      }}
+    </BallotLoadGate>
+  );
+}
+
+function applicantInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+}
+
+function kindLabel(kind?: string) {
+  if (kind === "GENERAL_MANAGER") return "GM";
+  if (kind === "CHAIRMAN") return "Chairman";
+  return "Committee";
+}
+
+function QuorumBanner({ data }: { data: AdmissionDesk }) {
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3",
+        data.meetingQuorumMet
+          ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+          : "border-amber-200 bg-amber-50 text-amber-950",
+      )}
+    >
+      <p className="text-sm">
+        <span className="font-medium">{data.meetingName}</span>
+        {": "}
+        {data.meetingDate}
+        {data.meetingTime ? ` ${data.meetingTime}` : ""}. Quorum Status:{" "}
+        {data.meetingQuorumMet ? "Met" : "Not met"} ({data.presentCount}/{data.quorumRequired} Required)
+      </p>
+      <span
+        className={cn(
+          "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
+          data.meetingQuorumMet ? "bg-emerald-600 text-white" : "bg-amber-600 text-white",
+        )}
+      >
+        {data.meetingQuorumMet ? "Quorum Met" : "Quorum Not Met"}
+      </span>
+    </div>
+  );
+}
+
+function AssignMembershipModal({
+  open,
+  onOpenChange,
   row,
   busy,
-  canChair,
-  canGm,
-  proceed,
-  sign,
   dateElected,
   setDateElected,
   membershipNumber,
   setMembershipNumber,
   electedType,
   setElectedType,
+  onConfirm,
 }: {
-  row: BallotItem;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  row: BallotItem | null;
   busy: boolean;
-  canChair: boolean;
-  canGm: boolean;
-  proceed: ReturnType<typeof useAdmissionBallot>["proceed"];
-  sign: ReturnType<typeof useAdmissionBallot>["sign"];
   dateElected: string;
   setDateElected: (v: string) => void;
   membershipNumber: string;
   setMembershipNumber: (v: string) => void;
   electedType: "FULL" | "COUNTRY" | "OVERSEAS" | "";
   setElectedType: (v: "FULL" | "COUNTRY" | "OVERSEAS" | "") => void;
+  onConfirm: () => void;
 }) {
-  if (!signaturesUnlocked(row)) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        Signatures open after more than 4 members have voted (currently {row.votesCast}).
-      </p>
-    );
-  }
-
-  const signatures = peopleList(row.signatures, row.Signatures);
-  const awaiting = peopleList(row.awaitingSignatures, row.AwaitingSignatures);
-
+  if (!row) return null;
+  const ready =
+    isFinanceFeesCleared(row) && membershipNumber.trim() && dateElected && electedType && !busy;
   return (
-    <>
-      <p className="text-xs text-muted-foreground">
-        Committee {row.committeeSignatures}/4 · GM {row.gmSignatures}/1
-        {row.chairmanSigned ? " · Date Elected signed" : ""}
-      </p>
-      {signatures.length > 0 ? (
-        <div className="mt-2">
-          <p className="text-xs font-medium">Signed</p>
-          <ul className="mt-1 space-y-0.5 text-xs">
-            {signatures.map((s) => (
-              <li key={`${row.committeeBallotItemId}-s-${s.profileId}-${s.kind}`}>
-                {s.name} · {s.roleName}
-                {s.kind === "GENERAL_MANAGER"
-                  ? " (GM)"
-                  : s.kind === "CHAIRMAN"
-                    ? ` (Chairman${s.dateElected ? ` · Date Elected ${s.dateElected}` : ""})`
-                    : " (Committee)"}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : (
-        <p className="mt-2 text-xs text-muted-foreground">No signatures yet.</p>
-      )}
-      {awaiting.length > 0 ? (
-        <div className="mt-2">
-          <p className="text-xs font-medium">Still needed</p>
-          <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
-            {awaiting.map((s) => (
-              <li key={`${row.committeeBallotItemId}-a-${s.profileId}-${s.kind}`}>
-                {s.name} · {s.roleName}
-                {s.kind === "GENERAL_MANAGER"
-                  ? " (GM)"
-                  : s.kind === "CHAIRMAN"
-                    ? " (Chairman Date Elected)"
-                    : " (Committee)"}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      <div className="mt-2 flex flex-wrap gap-1">
-        {row.canProceedToSignatures ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={busy}
-            onClick={() => proceed.mutate(row.committeeBallotItemId)}
-          >
-            Pass to signatures
-          </Button>
-        ) : null}
-        {row.itemStatus === "PASSED" && row.committeeSignatures < 4 ? (
-          <Button
-            type="button"
-            size="sm"
-            disabled={busy}
-            onClick={() => sign.mutate({ itemId: row.committeeBallotItemId, kind: "COMMITTEE" })}
-          >
-            Committee sign
-          </Button>
-        ) : null}
-        {row.itemStatus === "PASSED" && canGm && row.gmSignatures < 1 ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={busy}
-            onClick={() =>
-              sign.mutate({
-                itemId: row.committeeBallotItemId,
-                kind: "GENERAL_MANAGER",
-              })
-            }
-          >
-            GM sign
-          </Button>
-        ) : null}
-        {row.readyForChairman && canChair ? (
-          <div className="mt-2 grid max-w-xs gap-2">
-            {row.appliedMembershipType ? (
-              <p className="text-xs text-muted-foreground">
-                Applied as {row.appliedMembershipType}. Chairman may elect a different category.
-              </p>
-            ) : null}
-            <label className="grid gap-1 text-xs">
-              <Label>Membership number</Label>
-              <Input
-                className="h-8"
-                value={membershipNumber}
-                onChange={(e) => setMembershipNumber(e.target.value)}
-                placeholder="Assigned by Chairman"
-              />
-            </label>
-            <label className="grid gap-1 text-xs">
-              <Label>Date Elected</Label>
-              <Input
-                type="date"
-                className="h-8"
-                value={dateElected}
-                onChange={(e) => setDateElected(e.target.value)}
-              />
-            </label>
-            <label className="grid gap-1 text-xs">
-              <Label>Elected membership type</Label>
-              <select
-                className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-                value={electedType}
-                onChange={(e) => setElectedType(e.target.value as "FULL" | "COUNTRY" | "OVERSEAS" | "")}
-              >
-                <option value="">Select…</option>
-                <option value="FULL">Full</option>
-                <option value="COUNTRY">Country</option>
-                <option value="OVERSEAS">Overseas</option>
-              </select>
-            </label>
-            <Button
-              type="button"
-              size="sm"
-              disabled={busy || !membershipNumber.trim() || !dateElected || !electedType}
-              onClick={() => sign.mutate({ itemId: row.committeeBallotItemId, kind: "CHAIRMAN" })}
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Assign membership</DialogTitle>
+          <DialogDescription>
+            Record the Chairman election for {row.applicantName} ({row.applicationNo}).
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3 py-1">
+          {row.appliedMembershipType ? (
+            <p className="text-sm text-muted-foreground">
+              Applied as {row.appliedMembershipType}. Chairman may elect a different category.
+            </p>
+          ) : null}
+          {!isFinanceFeesCleared(row) ? (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              Finance must mark entrance and annual fees Paid before assigning a membership number.
+            </p>
+          ) : null}
+          <label className="grid gap-1 text-sm">
+            <Label>Membership number</Label>
+            <Input
+              value={membershipNumber}
+              onChange={(e) => setMembershipNumber(e.target.value)}
+              placeholder="Assigned by Chairman"
+            />
+          </label>
+          <label className="grid gap-1 text-sm">
+            <Label>Date Elected</Label>
+            <Input type="date" value={dateElected} onChange={(e) => setDateElected(e.target.value)} />
+          </label>
+          <label className="grid gap-1 text-sm">
+            <Label>Elected membership type</Label>
+            <select
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              value={electedType}
+              onChange={(e) => setElectedType(e.target.value as "FULL" | "COUNTRY" | "OVERSEAS" | "")}
             >
-              Record Chairman election
-            </Button>
-          </div>
-        ) : null}
-      </div>
-    </>
+              <option value="">Select…</option>
+              <option value="FULL">Full</option>
+              <option value="COUNTRY">Country</option>
+              <option value="OVERSEAS">Overseas</option>
+            </select>
+          </label>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="button" disabled={!ready} onClick={onConfirm}>
+            {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+            Record Chairman election
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-export function BallotCandidatesPage() {
+function ConfirmSignModal({
+  open,
+  onOpenChange,
+  row,
+  kind,
+  busy,
+  signerName,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  row: BallotItem | null;
+  kind: "COMMITTEE" | "GENERAL_MANAGER" | null;
+  busy: boolean;
+  signerName: string;
+  onConfirm: () => void;
+}) {
+  if (!row || !kind) return null;
+  const title = kind === "GENERAL_MANAGER" ? "Sign as General Manager" : "Sign as Committee Member";
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>
+            Confirm your signature for {row.applicantName} ({row.applicationNo}). The time of signing
+            will be recorded on this ballot.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="rounded-lg border bg-muted/40 px-3 py-3 text-sm">
+          <p>
+            <span className="text-muted-foreground">Signing as</span>{" "}
+            <span className="font-medium">{signerName || "Current user"}</span>
+          </p>
+          <p className="mt-1">
+            <span className="text-muted-foreground">Role</span>{" "}
+            <span className="font-medium">{kindLabel(kind)}</span>
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            Progress after this signature: Committee {row.committeeSignatures}
+            {kind === "COMMITTEE" ? "+1" : ""}/4 · GM {row.gmSignatures}
+            {kind === "GENERAL_MANAGER" ? "+1" : ""}/1
+          </p>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="button" disabled={busy} onClick={onConfirm}>
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <PenLine className="size-4" />}
+            Confirm signature
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SignaturePersonRow({
+  person,
+  mode,
+}: {
+  person: BallotPerson;
+  mode: "signed" | "pending";
+}) {
+  return (
+    <li className="flex items-start gap-2 text-sm">
+      <span
+        className={cn(
+          "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full",
+          mode === "signed" ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground",
+        )}
+      >
+        {mode === "signed" ? <Check className="size-3.5" strokeWidth={2.5} /> : <Clock className="size-3.5" />}
+      </span>
+      <span className="min-w-0">
+        <span className="font-medium text-foreground">{person.name || "Pending"}</span>
+        {person.roleName ? (
+          <span className="text-muted-foreground"> · {person.roleName}</span>
+        ) : null}
+        <span className="text-muted-foreground"> ({kindLabel(person.kind)})</span>
+        {mode === "signed" && person.signedAt ? (
+          <span className="mt-0.5 block text-xs text-muted-foreground">{person.signedAt}</span>
+        ) : null}
+        {mode === "signed" && person.dateElected ? (
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            Date Elected {person.dateElected}
+          </span>
+        ) : null}
+      </span>
+    </li>
+  );
+}
+
+function SignatureApplicantCard({
+  row,
+  busy,
+  canChair,
+  canGm,
+  onPass,
+  onRequestSign,
+  onAssign,
+}: {
+  row: BallotItem;
+  busy: boolean;
+  canChair: boolean;
+  canGm: boolean;
+  onPass: () => void;
+  onRequestSign: (kind: "COMMITTEE" | "GENERAL_MANAGER") => void;
+  onAssign: () => void;
+}) {
+  const signatures = peopleList(row.signatures, row.Signatures);
+  const awaiting = peopleList(row.awaitingSignatures, row.AwaitingSignatures);
+  const complete = row.chairmanSigned && awaiting.length === 0;
+  const feesOk = isFinanceFeesCleared(row);
+  const canCommitteeSign = row.itemStatus === "PASSED" && row.committeeSignatures < 4;
+  const canGmSign = row.itemStatus === "PASSED" && canGm && row.gmSignatures < 1;
+  const chairmanDate =
+    signatures.find((s) => s.kind === "CHAIRMAN" && s.dateElected)?.dateElected ?? null;
+
+  return (
+    <article className="rounded-2xl border bg-card p-4 shadow-sm sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+            {applicantInitials(row.applicantName) || "—"}
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="truncate text-base font-semibold tracking-tight">{row.applicantName}</h3>
+              {row.itemStatus === "PASSED" ? (
+                <Badge className="border-transparent bg-emerald-600 text-white hover:bg-emerald-600">
+                  PASSED
+                </Badge>
+              ) : (
+                <Badge variant="secondary">{row.itemStatus}</Badge>
+              )}
+            </div>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {row.applicationNo}
+              {chairmanDate ? ` · Date Elected ${chairmanDate}` : ""}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Committee {row.committeeSignatures}/4 · GM {row.gmSignatures}/1
+              {row.chairmanSigned ? " · Chairman recorded" : ""}
+            </p>
+          </div>
+        </div>
+        {complete ? (
+          <Badge variant="secondary" className="rounded-full px-3">
+            Complete
+          </Badge>
+        ) : null}
+      </div>
+
+      {!feesOk && (row.canProceedToSignatures || row.itemStatus === "PASSED") ? (
+        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+          Ask Finance to mark entrance and annual fees as Paid before signatures and membership number.
+        </p>
+      ) : null}
+
+      {!signaturesUnlocked(row) && row.itemStatus !== "PASSED" ? (
+        <p className="mt-3 text-sm text-muted-foreground">
+          Signatures open after more than 4 members have voted (currently {row.votesCast}).
+        </p>
+      ) : (
+        <div className="mt-4 grid gap-4 border-t pt-4 sm:grid-cols-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Signed ({signatures.length})
+            </p>
+            {signatures.length === 0 ? (
+              <p className="mt-2 text-sm text-muted-foreground">No signatures yet.</p>
+            ) : (
+              <ul className="mt-2 space-y-2.5">
+                {signatures.map((s) => (
+                  <SignaturePersonRow
+                    key={`${row.committeeBallotItemId}-s-${s.profileId}-${s.kind}`}
+                    person={s}
+                    mode="signed"
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {complete ? "Still needed" : `Pending (${awaiting.length})`}
+            </p>
+            {complete ? (
+              <p className="mt-2 flex items-center gap-2 text-sm font-medium text-emerald-700">
+                <span className="flex size-5 items-center justify-center rounded-full bg-emerald-100">
+                  <Check className="size-3.5" strokeWidth={2.5} />
+                </span>
+                Fully Signed
+              </p>
+            ) : awaiting.length === 0 ? (
+              <p className="mt-2 text-sm text-muted-foreground">
+                Pass to signatures to open the signatory list.
+              </p>
+            ) : (
+              <ul className="mt-2 space-y-2.5">
+                {awaiting.map((s) => (
+                  <SignaturePersonRow
+                    key={`${row.committeeBallotItemId}-a-${s.profileId}-${s.kind}`}
+                    person={s}
+                    mode="pending"
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!complete ? (
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t pt-4">
+          {row.canProceedToSignatures ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy || !feesOk}
+              onClick={onPass}
+            >
+              Pass to signatures
+            </Button>
+          ) : null}
+          {canCommitteeSign ? (
+            <Button
+              type="button"
+              disabled={busy || !feesOk}
+              onClick={() => onRequestSign("COMMITTEE")}
+            >
+              <PenLine className="size-4" />
+              Sign Ballot as Committee Member
+            </Button>
+          ) : null}
+          {canGmSign ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy || !feesOk}
+              onClick={() => onRequestSign("GENERAL_MANAGER")}
+            >
+              <PenLine className="size-4" />
+              Sign as General Manager
+            </Button>
+          ) : null}
+          {row.readyForChairman && canChair ? (
+            <Button type="button" disabled={busy || !feesOk} onClick={onAssign}>
+              Assign membership
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function isBallotFullySigned(row: BallotItem) {
+  if (!row.chairmanSigned) return false;
+  const awaiting = peopleList(row.awaitingSignatures, row.AwaitingSignatures);
+  return awaiting.length === 0;
+}
+
+function SignaturesEmptyState({
+  title,
+  description,
+  icon = "caught-up",
+}: {
+  title: string;
+  description: string;
+  icon?: "caught-up" | "idle";
+}) {
+  return (
+    <Card>
+      <CardContent className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
+        <span
+          className={cn(
+            "flex size-14 items-center justify-center rounded-full",
+            icon === "caught-up" ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground",
+          )}
+        >
+          {icon === "caught-up" ? (
+            <CheckCircle2 className="size-7" strokeWidth={1.75} />
+          ) : (
+            <PenLine className="size-7" strokeWidth={1.75} />
+          )}
+        </span>
+        <div className="max-w-md space-y-1">
+          <p className="text-base font-semibold tracking-tight">{title}</p>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function BallotSignaturesPage() {
   const user = readUser();
   const canChair = hasAnyRole(user, ["CHAIRMAN", "ADMIN"]);
   const canGm = hasAnyRole(user, ["GENERAL_MANAGER", "ADMIN"]);
+  const [assignItemId, setAssignItemId] = useState<number | null>(null);
+  const [signRequest, setSignRequest] = useState<{
+    itemId: number;
+    kind: "COMMITTEE" | "GENERAL_MANAGER";
+  } | null>(null);
 
   return (
     <BallotLoadGate>
@@ -331,7 +928,6 @@ export function BallotCandidatesPage() {
         const {
           data,
           busy,
-          vote,
           proceed,
           sign,
           dateElected,
@@ -341,137 +937,141 @@ export function BallotCandidatesPage() {
           electedType,
           setElectedType,
         } = ballot;
-        const items = data?.items ?? [];
+        const items = (data?.items ?? []).filter(
+          (row) =>
+            signaturesUnlocked(row) ||
+            row.itemStatus === "PASSED" ||
+            row.canProceedToSignatures ||
+            row.committeeSignatures > 0 ||
+            row.gmSignatures > 0,
+        );
+        const pending = items.filter((row) => !isBallotFullySigned(row));
+        const completed = items.filter((row) => isBallotFullySigned(row));
+        const assignRow = items.find((r) => r.committeeBallotItemId === assignItemId) ?? null;
+        const signRow = items.find((r) => r.committeeBallotItemId === signRequest?.itemId) ?? null;
+        const signerName = user?.fullName?.trim() || user?.email || "Current user";
+
+        const renderCards = (rows: BallotItem[]) => (
+          <div className="grid gap-4">
+            {rows.map((row) => (
+              <SignatureApplicantCard
+                key={row.committeeBallotItemId}
+                row={row}
+                busy={busy}
+                canChair={canChair}
+                canGm={canGm}
+                onPass={() => proceed.mutate(row.committeeBallotItemId)}
+                onRequestSign={(kind) =>
+                  setSignRequest({ itemId: row.committeeBallotItemId, kind })
+                }
+                onAssign={() => setAssignItemId(row.committeeBallotItemId)}
+              />
+            ))}
+          </div>
+        );
+
         return (
-          <Card>
-            <CardHeader>
-              <CardTitle>Ballot per candidate</CardTitle>
-              <CardDescription>
-                One FOR or AGAINST per sitting member present. Two AGAINST votes auto-exclude (Article 6b).
-                Signatures appear after more than 4 members have voted.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              <BallotMeetingBanner data={data!} />
-              {items.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No applicants on this meeting ballot yet.</p>
-              ) : (
-                <div className="overflow-x-auto rounded-lg border">
-                  <table className="w-full min-w-[960px] text-sm">
-                    <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <tr>
-                        <th className="px-3 py-2">Applicant</th>
-                        <th className="px-3 py-2">Votes</th>
-                        <th className="px-3 py-2">Your vote</th>
-                        <th className="px-3 py-2">Signatures</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((row) => {
-                        const voted = peopleList(row.voted, row.Voted);
-                        const notVoted = peopleList(row.notVoted, row.NotVoted);
-                        return (
-                          <tr key={row.committeeBallotItemId} className="border-t align-top">
-                            <td className="px-3 py-2">
-                              <p className="font-medium">{row.applicantName}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {row.applicationNo} · {row.itemStatus}
-                              </p>
-                              {row.autoRejected ? (
-                                <p className="mt-1 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive">
-                                  2 adverse votes — excluded until {row.excludedUntil ?? "one year from today"}
-                                </p>
-                              ) : null}
-                            </td>
-                            <td className="px-3 py-2">
-                              <p className="whitespace-nowrap">
-                                FOR {row.forCount} · AGAINST {row.againstCount}
-                              </p>
-                              <p className="mt-2 text-xs font-medium">Voted</p>
-                              {voted.length === 0 ? (
-                                <p className="text-xs text-muted-foreground">No votes yet.</p>
-                              ) : (
-                                <ul className="mt-1 space-y-0.5 text-xs">
-                                  {voted.map((v) => (
-                                    <li key={`${row.committeeBallotItemId}-v-${v.profileId}`}>
-                                      {v.name}
-                                      {v.roleName ? ` · ${v.roleName}` : ""} — {v.voteValue ?? "—"}
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                              <p className="mt-2 text-xs font-medium">Not voted</p>
-                              {notVoted.length === 0 ? (
-                                <p className="text-xs text-muted-foreground">
-                                  {voted.length > 0 ? "Everyone present has voted." : "No sitting members listed."}
-                                </p>
-                              ) : (
-                                <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
-                                  {notVoted.map((v) => (
-                                    <li key={`${row.committeeBallotItemId}-nv-${v.profileId}`}>
-                                      {v.name}
-                                      {v.roleName ? ` · ${v.roleName}` : ""}
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                            </td>
-                            <td className="px-3 py-2">
-                              {row.myVoteCast ? (
-                                <span className="text-xs font-medium">{row.myVoteValue}</span>
-                              ) : row.itemStatus === "OPEN" && !row.autoRejected ? (
-                                <div className="flex gap-1">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    disabled={busy}
-                                    onClick={() =>
-                                      vote.mutate({ itemId: row.committeeBallotItemId, voteValue: "FOR" })
-                                    }
-                                  >
-                                    FOR
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={busy}
-                                    onClick={() =>
-                                      vote.mutate({ itemId: row.committeeBallotItemId, voteValue: "AGAINST" })
-                                    }
-                                  >
-                                    AGAINST
-                                  </Button>
-                                </div>
-                              ) : (
-                                "—"
-                              )}
-                            </td>
-                            <td className="px-3 py-2">
-                              <CandidateSignatures
-                                row={row}
-                                busy={busy}
-                                canChair={canChair}
-                                canGm={canGm}
-                                proceed={proceed}
-                                sign={sign}
-                                dateElected={dateElected}
-                                setDateElected={setDateElected}
-                                membershipNumber={membershipNumber}
-                                setMembershipNumber={setMembershipNumber}
-                                electedType={electedType}
-                                setElectedType={setElectedType}
-                              />
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <div className="grid gap-4">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">Signatures</h1>
+            </div>
+
+            <QuorumBanner data={data!} />
+
+            {items.length === 0 ? (
+              <SignaturesEmptyState
+                icon="idle"
+                title="No signature work yet"
+                description="Complete voting on Ballot per candidate first (more than 4 votes), then return here to collect signatures."
+              />
+            ) : (
+              <Tabs defaultValue="pending" className="gap-0">
+                <TabsList className="h-auto w-full justify-start gap-1 rounded-xl bg-muted/80 p-1 sm:w-auto">
+                  <TabsTrigger
+                    value="pending"
+                    className="rounded-lg px-3 py-2 data-[state=active]:shadow-sm"
+                  >
+                    Pending signatures
+                    <span className="ml-2 rounded-full bg-background/80 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-foreground">
+                      {pending.length}
+                    </span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="history"
+                    className="rounded-lg px-3 py-2 data-[state=active]:shadow-sm"
+                  >
+                    Completed / History
+                    <span className="ml-2 rounded-full bg-background/80 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-foreground">
+                      {completed.length}
+                    </span>
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="pending" className="mt-4">
+                  {pending.length === 0 ? (
+                    <SignaturesEmptyState
+                      title="You're all caught up."
+                      description=""
+                    />
+                  ) : (
+                    renderCards(pending)
+                  )}
+                </TabsContent>
+
+                <TabsContent value="history" className="mt-4">
+                  {completed.length === 0 ? (
+                    <SignaturesEmptyState
+                      icon="idle"
+                      title="No completed ballots yet"
+                      description="When a candidate is fully signed and membership is assigned, the record moves here for audit."
+                    />
+                  ) : (
+                    renderCards(completed)
+                  )}
+                </TabsContent>
+              </Tabs>
+            )}
+
+            <ConfirmSignModal
+              open={signRequest != null}
+              onOpenChange={(next) => {
+                if (!next) setSignRequest(null);
+              }}
+              row={signRow}
+              kind={signRequest?.kind ?? null}
+              busy={busy}
+              signerName={signerName}
+              onConfirm={() => {
+                if (!signRequest) return;
+                sign.mutate(
+                  { itemId: signRequest.itemId, kind: signRequest.kind },
+                  { onSuccess: () => setSignRequest(null) },
+                );
+              }}
+            />
+
+            <AssignMembershipModal
+              open={assignItemId != null}
+              onOpenChange={(next) => {
+                if (!next) setAssignItemId(null);
+              }}
+              row={assignRow}
+              busy={busy}
+              dateElected={dateElected}
+              setDateElected={setDateElected}
+              membershipNumber={membershipNumber}
+              setMembershipNumber={setMembershipNumber}
+              electedType={electedType}
+              setElectedType={setElectedType}
+              onConfirm={() => {
+                if (!assignRow) return;
+                sign.mutate(
+                  { itemId: assignRow.committeeBallotItemId, kind: "CHAIRMAN" },
+                  { onSuccess: () => setAssignItemId(null) },
+                );
+              }}
+            />
+          </div>
         );
       }}
     </BallotLoadGate>

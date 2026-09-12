@@ -237,6 +237,8 @@ export type ApplicationDetailAdmin = {
   completedSteps?: string[] | null;
   documents?: ApplicationDocumentRow[];
   endorsements?: {
+    endorsementId?: number | null;
+    endorserProfileId?: number | null;
     endorserRole?: string | null;
     endorserName?: string | null;
     endorserMembershipNo?: string | null;
@@ -244,8 +246,12 @@ export type ApplicationDetailAdmin = {
     professionalKnowledge?: string | null;
     valueAddition?: string | null;
     yearsKnownCandidate?: number | null;
+    status?: string | null;
+    declineReason?: string | null;
   }[];
+  proposerProfileId?: number | null;
   proposerName?: string | null;
+  seconderProfileId?: number | null;
   seconderName?: string | null;
   submittedAt?: string | null;
   updatedAt?: string | null;

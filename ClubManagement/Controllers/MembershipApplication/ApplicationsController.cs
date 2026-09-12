@@ -388,6 +388,21 @@ public class ApplicationsController : ControllerBase
         var existing = await _applicationService.GetByIdAsync(applicationId, cancellationToken);
         if (existing is null || !CanAccessApplication(existing.ApplicantProfileId)) return NotFound();
         var result = await _applicationService.AddDocumentAsync(applicationId, request, cancellationToken);
+        if (result is not null)
+        {
+            try
+            {
+                await _finance.EnsurePendingFromChequeDocumentAsync(
+                    applicationId,
+                    result.ApplicationDocumentId,
+                    User.UserId(),
+                    cancellationToken);
+            }
+            catch
+            {
+                /* cheque → finance sync must not block document uploads */
+            }
+        }
         return result is null ? NotFound() : Ok(result);
     }
 

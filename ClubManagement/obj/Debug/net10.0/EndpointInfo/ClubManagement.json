@@ -78,10 +78,10 @@
         }
       }
     },
-    "/api/applications/manager-queue": {
+    "/api/settings/office-permissions": {
       "get": {
         "tags": [
-          "Applications"
+          "OfficePermissions"
         ],
         "responses": {
           "200": {
@@ -89,26 +89,160 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ApplicationListItemDto"
-                  }
+                  "$ref": "#/components/schemas/OfficePermissionMatrixDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ApplicationListItemDto"
-                  }
+                  "$ref": "#/components/schemas/OfficePermissionMatrixDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ApplicationListItemDto"
-                  }
+                  "$ref": "#/components/schemas/OfficePermissionMatrixDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "OfficePermissions"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveOfficePermissionMatrixRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveOfficePermissionMatrixRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveOfficePermissionMatrixRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfficePermissionMatrixDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfficePermissionMatrixDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfficePermissionMatrixDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/office-permissions/me": {
+      "get": {
+        "tags": [
+          "OfficePermissions"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfficePermissionMatrixDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfficePermissionMatrixDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfficePermissionMatrixDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/applications/manager-queue": {
+      "get": {
+        "tags": [
+          "Applications"
+        ],
+        "parameters": [
+          {
+            "name": "Page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Skip",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfApplicationListItemDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfApplicationListItemDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfApplicationListItemDto"
                 }
               }
             }
@@ -121,32 +255,61 @@
         "tags": [
           "Applications"
         ],
+        "parameters": [
+          {
+            "name": "Page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Skip",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ApplicationListItemDto"
-                  }
+                  "$ref": "#/components/schemas/PagedResultOfApplicationListItemDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ApplicationListItemDto"
-                  }
+                  "$ref": "#/components/schemas/PagedResultOfApplicationListItemDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ApplicationListItemDto"
-                  }
+                  "$ref": "#/components/schemas/PagedResultOfApplicationListItemDto"
                 }
               }
             }
@@ -495,32 +658,68 @@
         "tags": [
           "Applications"
         ],
+        "parameters": [
+          {
+            "name": "Page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Skip",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ApplicationListItemDto"
-                  }
+                  "$ref": "#/components/schemas/PagedResultOfApplicationListItemDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ApplicationListItemDto"
-                  }
+                  "$ref": "#/components/schemas/PagedResultOfApplicationListItemDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ApplicationListItemDto"
-                  }
+                  "$ref": "#/components/schemas/PagedResultOfApplicationListItemDto"
                 }
               }
             }
@@ -1888,6 +2087,227 @@
         }
       }
     },
+    "/api/lookup-admin/catalogs": {
+      "get": {
+        "tags": [
+          "LookupAdmin"
+        ],
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LookupCatalogDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LookupCatalogDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LookupCatalogDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lookup-admin/{key}/rows": {
+      "get": {
+        "tags": [
+          "LookupAdmin"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LookupRowDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LookupRowDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LookupRowDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "LookupAdmin"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookupUpsertRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookupUpsertRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookupUpsertRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LookupRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LookupRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LookupRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lookup-admin/{key}/rows/{id}": {
+      "put": {
+        "tags": [
+          "LookupAdmin"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookupUpsertRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookupUpsertRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookupUpsertRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LookupRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LookupRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LookupRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lookups/{table}": {
       "get": {
         "tags": [
@@ -1960,6 +2380,18 @@
               ],
               "format": "int32",
               "default": 3
+            }
+          },
+          {
+            "name": "applicationId",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
             }
           }
         ],
@@ -2623,6 +3055,42 @@
         ],
         "parameters": [
           {
+            "name": "Page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Skip",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
             "name": "search",
             "in": "query",
             "schema": {
@@ -2650,26 +3118,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/MemberListItemDto"
-                  }
+                  "$ref": "#/components/schemas/PagedResultOfMemberListItemDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/MemberListItemDto"
-                  }
+                  "$ref": "#/components/schemas/PagedResultOfMemberListItemDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/MemberListItemDto"
-                  }
+                  "$ref": "#/components/schemas/PagedResultOfMemberListItemDto"
                 }
               }
             }
@@ -3210,10 +3669,252 @@
         }
       }
     },
+    "/api/members/me/payments/mpesa-stk": {
+      "post": {
+        "tags": [
+          "MembersMe"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MpesaStkPushRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MpesaStkPushRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/MpesaStkPushRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MpesaStkPushResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MpesaStkPushResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MpesaStkPushResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/members/me/endorsements": {
       "get": {
         "tags": [
           "MembersMe"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/members/me/endorsements/history/search": {
+      "get": {
+        "tags": [
+          "MembersMe"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EndorsementHistoryDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EndorsementHistoryDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EndorsementHistoryDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/members/me/endorsements/history/{endorsementId}": {
+      "get": {
+        "tags": [
+          "MembersMe"
+        ],
+        "parameters": [
+          {
+            "name": "endorsementId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/EndorsementHistoryDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EndorsementHistoryDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EndorsementHistoryDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "MembersMe"
+        ],
+        "parameters": [
+          {
+            "name": "endorsementId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEndorsementHistoryRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEndorsementHistoryRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEndorsementHistoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/EndorsementHistoryDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EndorsementHistoryDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EndorsementHistoryDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "MembersMe"
+        ],
+        "parameters": [
+          {
+            "name": "endorsementId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/members/me/endorsements/history/{endorsementId}/restore": {
+      "post": {
+        "tags": [
+          "MembersMe"
+        ],
+        "parameters": [
+          {
+            "name": "endorsementId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -3292,6 +3993,50 @@
             "application/*+json": {
               "schema": {
                 "$ref": "#/components/schemas/CompleteEndorsementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/members/me/endorsements/{applicationId}/reject": {
+      "post": {
+        "tags": [
+          "MembersMe"
+        ],
+        "parameters": [
+          {
+            "name": "applicationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclineEndorsementRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclineEndorsementRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclineEndorsementRequest"
               }
             }
           },
@@ -3483,6 +4228,297 @@
         }
       }
     },
+    "/api/members/me/billing/accommodation": {
+      "get": {
+        "tags": [
+          "MembersMe"
+        ],
+        "parameters": [
+          {
+            "name": "Page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Skip",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "MembersMe"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberNmAccommodationRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberNmAccommodationRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberNmAccommodationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmAccommodationRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmAccommodationRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmAccommodationRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/members/me/billing/corkage": {
+      "get": {
+        "tags": [
+          "MembersMe"
+        ],
+        "parameters": [
+          {
+            "name": "Page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Skip",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "MembersMe"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberNmCorkageRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberNmCorkageRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberNmCorkageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmCorkageRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmCorkageRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmCorkageRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/members/me/billing/custom": {
+      "get": {
+        "tags": [
+          "MembersMe"
+        ],
+        "parameters": [
+          {
+            "name": "Page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Skip",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "MembersMe"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberNmCustomRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberNmCustomRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberNmCustomRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmCustomRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmCustomRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmCustomRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/register": {
       "post": {
         "tags": [
@@ -3608,6 +4644,85 @@
             }
           }
         }
+      },
+      "put": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMeRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMeRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthUserDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthUserDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthUserDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me/password": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeMyPasswordRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeMyPasswordRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeMyPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
       }
     },
     "/api/auth/set-password": {
@@ -3649,6 +4764,42 @@
         ],
         "parameters": [
           {
+            "name": "Page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Skip",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
             "name": "search",
             "in": "query",
             "schema": {
@@ -3668,32 +4819,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "schema": {
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ],
-              "format": "int32",
-              "default": 1
-            }
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "schema": {
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ],
-              "format": "int32",
-              "default": 10
-            }
           }
         ],
         "responses": {
@@ -3702,17 +4827,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserListResponse"
+                  "$ref": "#/components/schemas/PagedResultOfUserListItemDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserListResponse"
+                  "$ref": "#/components/schemas/PagedResultOfUserListItemDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserListResponse"
+                  "$ref": "#/components/schemas/PagedResultOfUserListItemDto"
                 }
               }
             }
@@ -4378,6 +5503,15 @@
         "tags": [
           "Reception"
         ],
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -4404,6 +5538,105 @@
                   "items": {
                     "$ref": "#/components/schemas/ReceptionMemberDto"
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reception/members/{profileId}/visits": {
+      "get": {
+        "tags": [
+          "Reception"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceptionVisitDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceptionVisitDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceptionVisitDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reception/register": {
+      "post": {
+        "tags": [
+          "Reception"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterGuestVisitRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterGuestVisitRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterGuestVisitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceptionVisitDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceptionVisitDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceptionVisitDto"
                 }
               }
             }
@@ -4519,10 +5752,19 @@
         }
       }
     },
-    "/api/reception/visits": {
+    "/api/reception/visits/lookup": {
       "get": {
         "tags": [
           "Reception"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -4550,6 +5792,121 @@
                   "items": {
                     "$ref": "#/components/schemas/ReceptionVisitDto"
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reception/visits/{visitId}": {
+      "get": {
+        "tags": [
+          "Reception"
+        ],
+        "parameters": [
+          {
+            "name": "visitId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceptionVisitDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceptionVisitDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceptionVisitDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reception/visits": {
+      "get": {
+        "tags": [
+          "Reception"
+        ],
+        "parameters": [
+          {
+            "name": "Page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Skip",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "currentOnly",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfReceptionVisitDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfReceptionVisitDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfReceptionVisitDto"
                 }
               }
             }
@@ -4687,6 +6044,55 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GuestEligibilityDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/guests/parent-eligibility": {
+      "post": {
+        "tags": [
+          "GuestRegistration"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParentApplicantRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParentApplicantRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParentApplicantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParentApplicantEligibilityDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParentApplicantEligibilityDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParentApplicantEligibilityDto"
                 }
               }
             }
@@ -5042,6 +6448,67 @@
         }
       }
     },
+    "/api/elections/meetings/{meetingId}/notice": {
+      "put": {
+        "tags": [
+          "Elections"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishMeetingNoticeRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishMeetingNoticeRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishMeetingNoticeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/elections/meetings/{meetingId}/agenda": {
       "post": {
         "tags": [
@@ -5266,6 +6733,238 @@
         }
       }
     },
+    "/api/elections/meetings/{meetingId}/proxies/{proxyId}/review": {
+      "post": {
+        "tags": [
+          "Elections"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "proxyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewProxyRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewProxyRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewProxyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ElectionDeskDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/elections/meetings/{meetingId}/minutes": {
+      "get": {
+        "tags": [
+          "Elections"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingMinutesDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingMinutesDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingMinutesDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Elections"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveMeetingMinutesRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveMeetingMinutesRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveMeetingMinutesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingMinutesDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingMinutesDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingMinutesDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/elections/meetings/{meetingId}/minutes/sign": {
+      "post": {
+        "tags": [
+          "Elections"
+        ],
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveMeetingMinutesRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveMeetingMinutesRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveMeetingMinutesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingMinutesDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingMinutesDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingMinutesDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/finance/quote": {
       "get": {
         "tags": [
@@ -5325,12 +7024,103 @@
         }
       }
     },
+    "/api/finance/summary": {
+      "get": {
+        "tags": [
+          "Finance"
+        ],
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceDeskSummaryDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceDeskSummaryDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceDeskSummaryDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/finance/next-receipt": {
+      "get": {
+        "tags": [
+          "Finance"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/finance/payments": {
       "get": {
         "tags": [
           "Finance"
         ],
         "parameters": [
+          {
+            "name": "Page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Skip",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
           {
             "name": "accountId",
             "in": "query",
@@ -5342,6 +7132,53 @@
               ],
               "format": "int64"
             }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "method",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "feeType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "membershipType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -5350,26 +7187,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/PaymentRowDto"
-                  }
+                  "$ref": "#/components/schemas/PagedResultOfPaymentRowDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/PaymentRowDto"
-                  }
+                  "$ref": "#/components/schemas/PagedResultOfPaymentRowDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/PaymentRowDto"
-                  }
+                  "$ref": "#/components/schemas/PagedResultOfPaymentRowDto"
                 }
               }
             }
@@ -5441,6 +7269,107 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ApprovePaymentRequest"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ApprovePaymentRequest"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ApprovePaymentRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/finance/payments/{transactionId}/reject": {
+      "post": {
+        "tags": [
+          "Finance"
+        ],
+        "parameters": [
+          {
+            "name": "transactionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectPaymentRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectPaymentRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectPaymentRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "OK",
@@ -5504,6 +7433,45 @@
             }
           }
         }
+      },
+      "get": {
+        "tags": [
+          "Finance"
+        ],
+        "parameters": [
+          {
+            "name": "transactionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipReceiptDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipReceiptDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipReceiptDto"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/finance/subscriptions": {
@@ -5512,6 +7480,113 @@
           "Finance"
         ],
         "parameters": [
+          {
+            "name": "Page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Skip",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "arrearsOnly",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "membershipType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfSubscriptionRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfSubscriptionRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfSubscriptionRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/finance/settlement/members": {
+      "get": {
+        "tags": [
+          "Finance"
+        ],
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
           {
             "name": "year",
             "in": "query",
@@ -5533,7 +7608,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/SubscriptionRowDto"
+                    "$ref": "#/components/schemas/SettlementMemberHitDto"
                   }
                 }
               },
@@ -5541,7 +7616,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/SubscriptionRowDto"
+                    "$ref": "#/components/schemas/SettlementMemberHitDto"
                   }
                 }
               },
@@ -5549,8 +7624,122 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/SubscriptionRowDto"
+                    "$ref": "#/components/schemas/SettlementMemberHitDto"
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/finance/settlement/context/{accountId}": {
+      "get": {
+        "tags": [
+          "Finance"
+        ],
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "subscriptionId",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementContextDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementContextDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementContextDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/finance/settlement": {
+      "post": {
+        "tags": [
+          "Finance"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectSettlementRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectSettlementRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectSettlementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectSettlementResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectSettlementResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectSettlementResultDto"
                 }
               }
             }
@@ -5578,6 +7767,815 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/finance/subscription-lifecycle": {
+      "post": {
+        "tags": [
+          "Finance"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionLifecycleResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionLifecycleResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionLifecycleResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/finance/non-membership/summary": {
+      "get": {
+        "tags": [
+          "NonMembershipBilling"
+        ],
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmRevenueSummaryDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmRevenueSummaryDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmRevenueSummaryDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/finance/non-membership/accommodation": {
+      "get": {
+        "tags": [
+          "NonMembershipBilling"
+        ],
+        "parameters": [
+          {
+            "name": "Page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Skip",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "paymentMethod",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfNmAccommodationRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfNmAccommodationRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfNmAccommodationRowDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "NonMembershipBilling"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NmAccommodationCreateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NmAccommodationCreateRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/NmAccommodationCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmAccommodationRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmAccommodationRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmAccommodationRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/finance/non-membership/accommodation/{id}/pay": {
+      "post": {
+        "tags": [
+          "NonMembershipBilling"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NmPayRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NmPayRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/NmPayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmAccommodationRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmAccommodationRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmAccommodationRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/finance/non-membership/accommodation/{id}/cancel": {
+      "post": {
+        "tags": [
+          "NonMembershipBilling"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmAccommodationRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmAccommodationRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmAccommodationRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/finance/non-membership/corkage": {
+      "get": {
+        "tags": [
+          "NonMembershipBilling"
+        ],
+        "parameters": [
+          {
+            "name": "Page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Skip",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "paymentMethod",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfNmCorkageRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfNmCorkageRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfNmCorkageRowDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "NonMembershipBilling"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NmCorkageCreateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NmCorkageCreateRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/NmCorkageCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmCorkageRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmCorkageRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmCorkageRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/finance/non-membership/corkage/{id}/pay": {
+      "post": {
+        "tags": [
+          "NonMembershipBilling"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NmPayRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NmPayRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/NmPayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmCorkageRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmCorkageRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmCorkageRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/finance/non-membership/custom": {
+      "get": {
+        "tags": [
+          "NonMembershipBilling"
+        ],
+        "parameters": [
+          {
+            "name": "Page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Skip",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "paymentMethod",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfNmCustomRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfNmCustomRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfNmCustomRowDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "NonMembershipBilling"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NmCustomCreateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NmCustomCreateRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/NmCustomCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmCustomRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmCustomRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmCustomRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/finance/non-membership/custom/{id}/pay": {
+      "post": {
+        "tags": [
+          "NonMembershipBilling"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NmPayRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NmPayRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/NmPayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmCustomRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmCustomRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmCustomRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/finance/non-membership/receipt/{kind}/{id}": {
+      "get": {
+        "tags": [
+          "NonMembershipBilling"
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmReceiptDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmReceiptDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NmReceiptDto"
+                }
+              }
+            }
           }
         }
       }
@@ -6888,6 +9886,67 @@
             "application/*+json": {
               "schema": {
                 "$ref": "#/components/schemas/CastCommitteeBallotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotItemDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotItemDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitteeBallotItemDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/committees/ballot/{itemId}/voting": {
+      "post": {
+        "tags": [
+          "Committees"
+        ],
+        "parameters": [
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetBallotVotingRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetBallotVotingRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetBallotVotingRequest"
               }
             }
           },
@@ -8919,6 +11978,15 @@
       "AppointProxyRequest": {
         "type": "object",
         "properties": {
+          "proxyProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
           "proxyTitle": {
             "type": "string"
           },
@@ -8958,6 +12026,24 @@
               "string"
             ]
           },
+          "proxyMembershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "signedFormUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "isPoll": {
             "type": "boolean"
           },
@@ -8966,6 +12052,50 @@
             "items": {
               "$ref": "#/components/schemas/ProxyInstructionDto"
             }
+          }
+        }
+      },
+      "ApprovePaymentRequest": {
+        "type": "object",
+        "properties": {
+          "receiptNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeBankName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeBankCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "mpesaCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "amountCleared": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -9131,6 +12261,12 @@
           },
           "tenantName": {
             "type": "string"
+          },
+          "photoUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -9307,6 +12443,12 @@
               "null",
               "string"
             ]
+          },
+          "signedAt": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -9335,6 +12477,12 @@
           },
           "present": {
             "type": "boolean"
+          },
+          "castAt": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -9447,6 +12595,21 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "ChangeMyPasswordRequest": {
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ],
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string"
+          },
+          "newPassword": {
+            "type": "string"
           }
         }
       },
@@ -9623,7 +12786,13 @@
               "string"
             ]
           },
+          "votingOpen": {
+            "type": "boolean"
+          },
           "canProceedToSignatures": {
+            "type": "boolean"
+          },
+          "financeFeesCleared": {
             "type": "boolean"
           },
           "committeeSignatures": {
@@ -10158,6 +13327,15 @@
               "null",
               "string"
             ]
+          },
+          "nightlyRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -11070,6 +14248,17 @@
           }
         }
       },
+      "DeclineEndorsementRequest": {
+        "type": "object",
+        "properties": {
+          "endorserRole": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
       "DependantDto": {
         "type": "object",
         "properties": {
@@ -11111,6 +14300,227 @@
           }
         }
       },
+      "DeskProxyDto": {
+        "type": "object",
+        "properties": {
+          "proxyId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "appointingName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "proxyName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "proxyMembershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "proxyProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "linkedMember": {
+            "type": "boolean"
+          },
+          "manualContactRequired": {
+            "type": "boolean"
+          },
+          "voteInstruction": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "leaveToDiscretion": {
+            "type": "boolean"
+          },
+          "instrumentReceivedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "depositedOnTime": {
+            "type": "boolean"
+          },
+          "isValid": {
+            "type": "boolean"
+          },
+          "reviewStatus": {
+            "type": "string"
+          },
+          "reviewReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "DirectSettlementRequest": {
+        "required": [
+          "accountId",
+          "subscriptionId",
+          "amountPaid",
+          "paymentMethodCode"
+        ],
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "subscriptionId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "amountPaid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "paymentMethodCode": {
+            "type": "string"
+          },
+          "referenceCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "applySeniorDiscount": {
+            "type": "boolean",
+            "default": false
+          },
+          "includeReactivationFee": {
+            "type": "boolean",
+            "default": false
+          },
+          "paymentDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          }
+        }
+      },
+      "DirectSettlementResultDto": {
+        "required": [
+          "accountId",
+          "membershipNo",
+          "memberName",
+          "accountStatus",
+          "reactivated",
+          "annualAmountApplied",
+          "seniorDiscountApplied",
+          "reactivationFeeCharged",
+          "remainingArrears",
+          "receiptNumber",
+          "transactionId"
+        ],
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "membershipNo": {
+            "type": "string"
+          },
+          "memberName": {
+            "type": "string"
+          },
+          "accountStatus": {
+            "type": "string"
+          },
+          "reactivated": {
+            "type": "boolean"
+          },
+          "annualAmountApplied": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "seniorDiscountApplied": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "reactivationFeeCharged": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "remainingArrears": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "receiptNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "transactionId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
       "DocumentRow": {
         "required": [
           "name",
@@ -11145,6 +14555,13 @@
           },
           "ballotWindowOpen": {
             "type": "boolean"
+          },
+          "ballotOpensAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
           },
           "ballotClosesAt": {
             "type": [
@@ -11249,6 +14666,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/NominationDto"
+            }
+          },
+          "proxies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeskProxyDto"
             }
           }
         }
@@ -11451,6 +14874,25 @@
               "string"
             ]
           },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "declinedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "declineReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -11472,6 +14914,117 @@
               "string"
             ],
             "format": "int64"
+          }
+        }
+      },
+      "EndorsementHistoryDto": {
+        "type": "object",
+        "properties": {
+          "endorsementId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "applicationId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "applicationNo": {
+            "type": "string"
+          },
+          "applicantName": {
+            "type": "string"
+          },
+          "applicantPhotoUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "role": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "applicationStatusCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "membershipType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "yearsKnownCandidate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "personalKnowledge": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "professionalKnowledge": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "valueAddition": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "declineReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "declinedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lastRejectionReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "canEdit": {
+            "type": "boolean"
+          },
+          "canDelete": {
+            "type": "boolean"
+          },
+          "hidden": {
+            "type": "boolean"
           }
         }
       },
@@ -11669,6 +15222,49 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "FinanceDeskSummaryDto": {
+        "required": [
+          "pendingClearance",
+          "todaysCollections",
+          "unreceiptedPayments",
+          "membersInArrears"
+        ],
+        "type": "object",
+        "properties": {
+          "pendingClearance": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "todaysCollections": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "unreceiptedPayments": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "membersInArrears": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -12395,6 +15991,33 @@
           }
         }
       },
+      "LookupCatalogDto": {
+        "required": [
+          "key",
+          "label",
+          "tableName",
+          "kind",
+          "description"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "tableName": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      },
       "LookupOptionDto": {
         "required": [
           "code",
@@ -12425,6 +16048,190 @@
             ],
             "format": "int64",
             "default": 0
+          }
+        }
+      },
+      "LookupRowDto": {
+        "required": [
+          "id",
+          "code",
+          "name",
+          "description",
+          "sortOrder",
+          "isActive"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sortOrder": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "membershipTypeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "membershipTypeName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "joiningFee": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "joiningFeeUnder30": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "annualSubscription": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "effectiveDate": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "LookupUpsertRequest": {
+        "required": [
+          "code",
+          "name",
+          "description",
+          "sortOrder",
+          "isActive",
+          "membershipTypeId",
+          "joiningFee",
+          "joiningFeeUnder30",
+          "annualSubscription",
+          "effectiveDate"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sortOrder": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "isActive": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "membershipTypeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "joiningFee": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "joiningFeeUnder30": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "annualSubscription": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "effectiveDate": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -12765,6 +16572,82 @@
           }
         }
       },
+      "MeetingMinutesDto": {
+        "type": "object",
+        "properties": {
+          "generalMeetingId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "meeting": {
+            "$ref": "#/components/schemas/MeetingNoticeDto"
+          },
+          "proceedings": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "recordedByName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "recordedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "signedByName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "signedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "resultDeclaredAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "resultSummary": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "agenda": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgendaItemTallyDto"
+            }
+          },
+          "canEdit": {
+            "type": "boolean"
+          },
+          "canSign": {
+            "type": "boolean"
+          }
+        }
+      },
       "MeetingNoticeDto": {
         "type": "object",
         "properties": {
@@ -13018,6 +16901,12 @@
           },
           "subject": {
             "type": "string"
+          },
+          "resolutionText": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "isSpecialBusiness": {
             "type": "boolean"
@@ -13338,6 +17227,14 @@
             ],
             "format": "int32"
           },
+          "pendingProxies": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
           "childrenRequiringOwnMembership": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
@@ -13495,10 +17392,56 @@
               }
             ]
           },
+          "proxiesHeld": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProxyHeldDto"
+            }
+          },
           "nominations": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/NominationDto"
+            }
+          },
+          "resultDeclaredAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "quorumMet": {
+            "type": "boolean"
+          },
+          "uniqueVoters": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "eligibleVoters": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "quorumRequired": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "publishedResults": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgendaItemTallyDto"
             }
           }
         }
@@ -13935,6 +17878,143 @@
           }
         }
       },
+      "MemberNmAccommodationRequest": {
+        "required": [
+          "checkInDate",
+          "checkOutDate",
+          "roomNumber",
+          "nightlyRate"
+        ],
+        "type": "object",
+        "properties": {
+          "checkInDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "checkOutDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "roomNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nightlyRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "extraCharges": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double",
+            "default": 0
+          },
+          "phone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "roomType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "MemberNmCorkageRequest": {
+        "required": [
+          "itemDescription",
+          "feeAmount"
+        ],
+        "type": "object",
+        "properties": {
+          "itemDescription": {
+            "type": "string"
+          },
+          "feeAmount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "authorizedByManager": {
+            "type": "boolean",
+            "default": false
+          },
+          "managerName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "MemberNmCustomLineRequest": {
+        "required": [
+          "description",
+          "unitPrice",
+          "quantity"
+        ],
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "unitPrice": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "quantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "MemberNmCustomRequest": {
+        "required": [
+          "category",
+          "lineItems"
+        ],
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "lineItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemberNmCustomLineRequest"
+            }
+          }
+        }
+      },
       "MemberNotificationDto": {
         "type": "object",
         "properties": {
@@ -14003,6 +18083,9 @@
             ],
             "format": "int64"
           },
+          "feeTypeCode": {
+            "type": "string"
+          },
           "amount": {
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
             "type": [
@@ -14021,7 +18104,44 @@
               "string"
             ]
           },
+          "mpesaPhone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "chequeNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeBankName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeBankCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "chequeFileName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeFileUrl": {
             "type": [
               "null",
               "string"
@@ -14038,6 +18158,21 @@
               "null",
               "string"
             ]
+          },
+          "lineDescription": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nmChargeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
           }
         }
       },
@@ -14183,6 +18318,18 @@
             ],
             "format": "int64"
           },
+          "proxyProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "linkedMember": {
+            "type": "boolean"
+          },
           "proxyTitle": {
             "type": [
               "null",
@@ -14228,8 +18375,45 @@
               "string"
             ]
           },
+          "proxyMembershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "signedFormUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instrumentReceivedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
           "depositedOnTime": {
             "type": "boolean"
+          },
+          "reviewStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reviewReason": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -14266,6 +18450,196 @@
           },
           "eligibleToNominate": {
             "type": "boolean"
+          }
+        }
+      },
+      "MembershipReceiptDto": {
+        "required": [
+          "transactionId",
+          "receiptId",
+          "clubName",
+          "clubShortName",
+          "clubAddress",
+          "clubEmail",
+          "clubPhone",
+          "receiptNumber",
+          "issuedDate",
+          "paymentDate",
+          "payerName",
+          "payerCategory",
+          "membershipNo",
+          "applicationNo",
+          "membershipType",
+          "feeType",
+          "feeTypeCode",
+          "paymentMethod",
+          "paymentMethodCode",
+          "chequeNo",
+          "chequeBankName",
+          "chequeBankCode",
+          "mpesaCode",
+          "referenceNote",
+          "amount",
+          "amountInWords",
+          "currency",
+          "status",
+          "issuedBy",
+          "purpose"
+        ],
+        "type": "object",
+        "properties": {
+          "transactionId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "receiptId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "clubName": {
+            "type": "string"
+          },
+          "clubShortName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "clubAddress": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "clubEmail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "clubPhone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "receiptNumber": {
+            "type": "string"
+          },
+          "issuedDate": {
+            "type": "string"
+          },
+          "paymentDate": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "payerName": {
+            "type": "string"
+          },
+          "payerCategory": {
+            "type": "string"
+          },
+          "membershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "applicationNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "membershipType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "feeType": {
+            "type": "string"
+          },
+          "feeTypeCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paymentMethod": {
+            "type": "string"
+          },
+          "paymentMethodCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeBankName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chequeBankCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "mpesaCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "referenceNote": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "amount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "amountInWords": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "issuedBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "purpose": {
+            "type": "string"
           }
         }
       },
@@ -14453,6 +18827,921 @@
               "string"
             ],
             "format": "int32"
+          },
+          "joiningFeeDue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "joiningPaid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "joiningOutstanding": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "entranceFeeWaived": {
+            "type": "boolean"
+          },
+          "balance": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "membershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "membershipTypeCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "membershipTypeName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fullAnnualRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "isLifeExempt": {
+            "type": "boolean"
+          },
+          "isSeniorMember": {
+            "type": "boolean"
+          },
+          "halfYearProrated": {
+            "type": "boolean"
+          },
+          "canVote": {
+            "type": "boolean"
+          },
+          "votingBlockedByArrears": {
+            "type": "boolean"
+          },
+          "clubCreditBalance": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "continuousMembershipYears": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "ageYears": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "statusCode": {
+            "type": "string"
+          }
+        }
+      },
+      "MpesaStkPushRequest": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          },
+          "amount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "feeTypeCode": {
+            "type": "string"
+          },
+          "accountReference": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "MpesaStkPushResultDto": {
+        "type": "object",
+        "properties": {
+          "checkoutRequestId": {
+            "type": "string"
+          },
+          "merchantRequestId": {
+            "type": "string"
+          },
+          "customerMessage": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "amount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "NmAccommodationCreateRequest": {
+        "required": [
+          "guestName",
+          "phone",
+          "email",
+          "accountId",
+          "isGuest",
+          "checkInDate",
+          "checkOutDate",
+          "roomNumber",
+          "nightlyRate",
+          "extraCharges",
+          "isPaidInAdvance"
+        ],
+        "type": "object",
+        "properties": {
+          "guestName": {
+            "type": "string"
+          },
+          "phone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "accountId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "isGuest": {
+            "type": "boolean"
+          },
+          "checkInDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "checkOutDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "roomNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nightlyRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "extraCharges": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "isPaidInAdvance": {
+            "type": "boolean"
+          },
+          "accommodationBookingId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "NmAccommodationRowDto": {
+        "required": [
+          "id",
+          "guestName",
+          "phone",
+          "email",
+          "accountId",
+          "membershipNo",
+          "isGuest",
+          "checkInDate",
+          "checkOutDate",
+          "numberOfNights",
+          "roomNumber",
+          "nightlyRate",
+          "extraCharges",
+          "totalAmount",
+          "isPaidInAdvance",
+          "status",
+          "receiptNo",
+          "paidAt",
+          "paymentMethod",
+          "referenceCode",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "guestName": {
+            "type": "string"
+          },
+          "phone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "accountId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "membershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isGuest": {
+            "type": "boolean"
+          },
+          "checkInDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "checkOutDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "numberOfNights": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "roomNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nightlyRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "extraCharges": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "totalAmount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "isPaidInAdvance": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
+          },
+          "receiptNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paidAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "paymentMethod": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "referenceCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "accommodationBookingId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "stayStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "roomType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "NmCorkageCreateRequest": {
+        "required": [
+          "payerName",
+          "accountId",
+          "isGuest",
+          "itemDescription",
+          "feeAmount",
+          "authorizedByManager",
+          "managerName"
+        ],
+        "type": "object",
+        "properties": {
+          "payerName": {
+            "type": "string"
+          },
+          "accountId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "isGuest": {
+            "type": "boolean"
+          },
+          "itemDescription": {
+            "type": "string"
+          },
+          "feeAmount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "authorizedByManager": {
+            "type": "boolean"
+          },
+          "managerName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "NmCorkageRowDto": {
+        "required": [
+          "id",
+          "payerName",
+          "accountId",
+          "membershipNo",
+          "isGuest",
+          "itemDescription",
+          "feeAmount",
+          "authorizedByManager",
+          "managerName",
+          "status",
+          "receiptNo",
+          "paidAt",
+          "paymentMethod",
+          "referenceCode",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "payerName": {
+            "type": "string"
+          },
+          "accountId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "membershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isGuest": {
+            "type": "boolean"
+          },
+          "itemDescription": {
+            "type": "string"
+          },
+          "feeAmount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "authorizedByManager": {
+            "type": "boolean"
+          },
+          "managerName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "receiptNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paidAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "paymentMethod": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "referenceCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "NmCustomCreateRequest": {
+        "required": [
+          "payerName",
+          "accountId",
+          "category",
+          "lineItems"
+        ],
+        "type": "object",
+        "properties": {
+          "payerName": {
+            "type": "string"
+          },
+          "accountId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "category": {
+            "type": "string"
+          },
+          "lineItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NmCustomLineRequest"
+            }
+          }
+        }
+      },
+      "NmCustomLineDto": {
+        "required": [
+          "id",
+          "description",
+          "unitPrice",
+          "quantity",
+          "subtotal"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "description": {
+            "type": "string"
+          },
+          "unitPrice": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "quantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "subtotal": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "NmCustomLineRequest": {
+        "required": [
+          "description",
+          "unitPrice",
+          "quantity"
+        ],
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "unitPrice": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "quantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "NmCustomRowDto": {
+        "required": [
+          "id",
+          "payerName",
+          "accountId",
+          "membershipNo",
+          "category",
+          "totalAmount",
+          "status",
+          "receiptNo",
+          "paidAt",
+          "paymentMethod",
+          "referenceCode",
+          "createdByUsername",
+          "createdAt",
+          "lineItems"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "payerName": {
+            "type": "string"
+          },
+          "accountId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "membershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "category": {
+            "type": "string"
+          },
+          "totalAmount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "status": {
+            "type": "string"
+          },
+          "receiptNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paidAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "paymentMethod": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "referenceCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdByUsername": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lineItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NmCustomLineDto"
+            }
+          }
+        }
+      },
+      "NmPayRequest": {
+        "required": [
+          "paymentMethod"
+        ],
+        "type": "object",
+        "properties": {
+          "paymentMethod": {
+            "type": "string"
+          },
+          "referenceCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "NmReceiptDto": {
+        "required": [
+          "kind",
+          "id",
+          "payerName",
+          "membershipNo",
+          "description",
+          "amount",
+          "status",
+          "receiptNo",
+          "paidAt",
+          "paymentMethod",
+          "referenceCode",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "payerName": {
+            "type": "string"
+          },
+          "membershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "amount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "status": {
+            "type": "string"
+          },
+          "receiptNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paidAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "paymentMethod": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "referenceCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "NmRevenueSummaryDto": {
+        "required": [
+          "collectionTotal",
+          "openItems",
+          "period",
+          "from",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "collectionTotal": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "openItems": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "period": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date"
           }
         }
       },
@@ -14485,9 +19774,75 @@
           "roleStandingFor": {
             "type": "string"
           },
+          "photoUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "occupation": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "company": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "OfficeAccessDto": {
+        "type": "object",
+        "properties": {
+          "view": {
+            "type": "boolean"
+          },
+          "write": {
+            "type": "boolean"
+          }
+        }
+      },
+      "OfficeModulePermissionDto": {
+        "type": "object",
+        "properties": {
+          "moduleId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "access": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/OfficeAccessDto"
+            }
+          }
+        }
+      },
+      "OfficePermissionMatrixDto": {
+        "type": "object",
+        "properties": {
+          "roleCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "modules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OfficeModulePermissionDto"
+            }
           }
         }
       },
@@ -14496,6 +19851,559 @@
         "properties": {
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "PagedResultOfApplicationListItemDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApplicationListItemDto"
+            }
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResultOfMemberListItemDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemberListItemDto"
+            }
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResultOfNmAccommodationRowDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NmAccommodationRowDto"
+            }
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResultOfNmCorkageRowDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NmCorkageRowDto"
+            }
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResultOfNmCustomRowDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NmCustomRowDto"
+            }
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResultOfPaymentRowDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaymentRowDto"
+            }
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResultOfReceptionVisitDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReceptionVisitDto"
+            }
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResultOfSubscriptionRowDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionRowDto"
+            }
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResultOfUserListItemDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserListItemDto"
+            }
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "ParentApplicantEligibilityDto": {
+        "required": [
+          "found",
+          "nameMatches",
+          "canContinue",
+          "entranceFeeWaived",
+          "parentAccountId",
+          "parentProfileId",
+          "parentMembershipNo",
+          "parentName",
+          "parentStatus",
+          "parentContinuousYears",
+          "parentEmail",
+          "parentPhone",
+          "yearOfJoining",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "found": {
+            "type": "boolean"
+          },
+          "nameMatches": {
+            "type": "boolean"
+          },
+          "canContinue": {
+            "type": "boolean"
+          },
+          "entranceFeeWaived": {
+            "type": "boolean"
+          },
+          "parentAccountId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "parentProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "parentMembershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parentName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parentStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parentContinuousYears": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "parentEmail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parentPhone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "yearOfJoining": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          },
+          "recordedDateOfBirth": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "applicantAgeYears": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "ParentApplicantRequest": {
+        "required": [
+          "applicantFullName",
+          "email",
+          "phone",
+          "parentMembershipNo",
+          "parentFullName"
+        ],
+        "type": "object",
+        "properties": {
+          "applicantFullName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "phone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parentMembershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parentFullName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "applicantDateOfBirth": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
           }
         }
       },
@@ -14636,6 +20544,67 @@
             ]
           },
           "methodCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "membershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "statusCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "feeTypeCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "applicationId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "applicationNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "submittedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "profileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "membershipType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "membershipTypeCode": {
             "type": [
               "null",
               "string"
@@ -15014,6 +20983,86 @@
           }
         }
       },
+      "ProxyHeldDto": {
+        "type": "object",
+        "properties": {
+          "proxyId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "generalMeetingId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "meetingType": {
+            "type": "string"
+          },
+          "meetingDate": {
+            "type": "string"
+          },
+          "venue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "appointingName": {
+            "type": "string"
+          },
+          "appointingMembershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "voteInstruction": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "leaveToDiscretion": {
+            "type": "boolean"
+          },
+          "instructionLabel": {
+            "type": "string"
+          },
+          "reviewStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "proxyDeadlineAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "instrumentReceivedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "resolutions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "ProxyInstructionDto": {
         "type": "object",
         "properties": {
@@ -15086,6 +21135,36 @@
           },
           "fullName": {
             "type": "string"
+          },
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "phone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "firstName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastName": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -15200,6 +21279,34 @@
             ]
           },
           "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "purpose": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hasSignature": {
+            "type": "boolean",
+            "default": false
+          },
+          "signature": {
             "type": [
               "null",
               "string"
@@ -15570,6 +21677,73 @@
           }
         }
       },
+      "RegisterGuestVisitRequest": {
+        "required": [
+          "firstName",
+          "surname",
+          "email",
+          "hostProfileId",
+          "visitDate",
+          "purpose",
+          "signature",
+          "status",
+          "phone"
+        ],
+        "type": "object",
+        "properties": {
+          "firstName": {
+            "type": "string"
+          },
+          "surname": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hostProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "visitDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "purpose": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "signature": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "phone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "RegisterRequest": {
         "required": [
           "password",
@@ -15620,6 +21794,65 @@
             ]
           },
           "visitSlipCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "applicationCategory": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parentAccountId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "parentMembershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parentFullName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dateOfBirth": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          }
+        }
+      },
+      "RejectPaymentRequest": {
+        "required": [
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "ReviewProxyRequest": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string"
+          },
+          "reason": {
             "type": [
               "null",
               "string"
@@ -15871,6 +22104,28 @@
           }
         }
       },
+      "SaveMeetingMinutesRequest": {
+        "type": "object",
+        "properties": {
+          "proceedings": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "SaveOfficePermissionMatrixRequest": {
+        "type": "object",
+        "properties": {
+          "modules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OfficeModulePermissionDto"
+            }
+          }
+        }
+      },
       "SetAttendanceRequest": {
         "type": "object",
         "properties": {
@@ -15884,6 +22139,14 @@
               ],
               "format": "int64"
             }
+          }
+        }
+      },
+      "SetBallotVotingRequest": {
+        "type": "object",
+        "properties": {
+          "open": {
+            "type": "boolean"
           }
         }
       },
@@ -15901,6 +22164,13 @@
               "string"
             ],
             "format": "int64"
+          },
+          "opensAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
           },
           "closesAt": {
             "type": [
@@ -15935,6 +22205,186 @@
           },
           "present": {
             "type": "boolean"
+          }
+        }
+      },
+      "SettlementContextDto": {
+        "required": [
+          "accountId",
+          "subscriptionId",
+          "memberName",
+          "membershipNo",
+          "accountStatus",
+          "accountStatusCode",
+          "membershipType",
+          "year",
+          "amountDue",
+          "amountPaid",
+          "arrearsAmount",
+          "eligibleForSeniorDiscount",
+          "seniorDiscountReason",
+          "suggestedAmountAfterSeniorDiscount",
+          "canIncludeReactivationFee",
+          "reactivationFeeAmount"
+        ],
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "subscriptionId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "memberName": {
+            "type": "string"
+          },
+          "membershipNo": {
+            "type": "string"
+          },
+          "accountStatus": {
+            "type": "string"
+          },
+          "accountStatusCode": {
+            "type": "string"
+          },
+          "membershipType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "year": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "amountDue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "amountPaid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "arrearsAmount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "eligibleForSeniorDiscount": {
+            "type": "boolean"
+          },
+          "seniorDiscountReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "suggestedAmountAfterSeniorDiscount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "canIncludeReactivationFee": {
+            "type": "boolean"
+          },
+          "reactivationFeeAmount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "SettlementMemberHitDto": {
+        "required": [
+          "accountId",
+          "subscriptionId",
+          "membershipNo",
+          "memberName",
+          "accountStatus",
+          "membershipType",
+          "arrearsAmount",
+          "year"
+        ],
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "subscriptionId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "membershipNo": {
+            "type": "string"
+          },
+          "memberName": {
+            "type": "string"
+          },
+          "accountStatus": {
+            "type": "string"
+          },
+          "membershipType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "arrearsAmount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "year": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -16142,6 +22592,62 @@
           }
         }
       },
+      "SubscriptionLifecycleResultDto": {
+        "required": [
+          "year",
+          "asOf",
+          "subscriptionsGenerated",
+          "membersPosted",
+          "membersRemoved",
+          "totalUpdated"
+        ],
+        "type": "object",
+        "properties": {
+          "year": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "asOf": {
+            "type": "string"
+          },
+          "subscriptionsGenerated": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "membersPosted": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "membersRemoved": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalUpdated": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "SubscriptionRowDto": {
         "required": [
           "subscriptionId",
@@ -16236,6 +22742,30 @@
               "string"
             ],
             "format": "date"
+          },
+          "membershipType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "membershipTypeCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "accountStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "accountStatusCode": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -16463,6 +22993,44 @@
           }
         }
       },
+      "UpdateEndorsementHistoryRequest": {
+        "type": "object",
+        "properties": {
+          "yearsKnownCandidate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "personalKnowledge": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "professionalKnowledge": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "valueAddition": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "declineReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "UpdateMeetingMinutesRequest": {
         "type": "object",
         "properties": {
@@ -16554,6 +23122,32 @@
             "format": "int64"
           },
           "changeReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "UpdateMeRequest": {
+        "required": [
+          "firstName",
+          "lastName",
+          "email",
+          "photoUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "photoUrl": {
             "type": [
               "null",
               "string"
@@ -17021,41 +23615,6 @@
           }
         }
       },
-      "UserListResponse": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/UserListItemDto"
-            }
-          },
-          "total": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "page": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "pageSize": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          }
-        }
-      },
       "VerifyApplicationDocumentRequest": {
         "type": "object",
         "properties": {
@@ -17203,10 +23762,16 @@
       "name": "Tenants"
     },
     {
+      "name": "OfficePermissions"
+    },
+    {
       "name": "Applications"
     },
     {
       "name": "Files"
+    },
+    {
+      "name": "LookupAdmin"
     },
     {
       "name": "Lookups"
@@ -17246,6 +23811,9 @@
     },
     {
       "name": "Finance"
+    },
+    {
+      "name": "NonMembershipBilling"
     },
     {
       "name": "Admin"

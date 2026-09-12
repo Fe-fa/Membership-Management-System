@@ -7,6 +7,7 @@ using ClubManagement.Entities.Committee;
 using ClubManagement.Entities.Engagement;
 using ClubManagement.Entities.Lookups;
 using ClubManagement.Entities.Settings;
+using ClubManagement.Services.Finance;
 using ClubManagement.Services.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -39,6 +40,14 @@ public interface IManagerStageService
         long? actorUserId,
         CancellationToken cancellationToken);
     Task NotifyApplicantRejectedAsync(long applicationId, string reason, CancellationToken cancellationToken);
+    Task NotifyApplicantPaymentRejectedAsync(
+        long profileId,
+        long? applicationId,
+        string feeLabel,
+        string reason,
+        CancellationToken cancellationToken);
+    /// <summary>True when joining + annual fees are finance-cleared (Paid/Waived) for any method: cash, cheque, M-Pesa, bank.</summary>
+    Task<bool> AreEntranceAndAnnualFeesClearedAsync(long applicationId, CancellationToken cancellationToken);
 }
 
 public class ManagerStageService : IManagerStageService
@@ -52,11 +61,11 @@ public class ManagerStageService : IManagerStageService
     private static readonly string[] JoiningChequeCodes = ["CHEQUE_JOINING"];
     private static readonly HashSet<string> PaymentOkStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
-        "PENDING", "PAID", "PARTIALLY_PAID", "WAIVED", "PARTIAL", "INITIATED"
+        "PENDING", "PAID", "PARTIALLY_PAID", "WAIVED", "PARTIAL", "INITIATED", "UNCLEARED"
     };
     private static readonly HashSet<string> PaymentReceivedStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
-        "PAID", "WAIVED", "COMPLETE", "COMPLETED", "RECEIVED", "SUCCESS", "CLEARED"
+        "PAID", "WAIVED", "COMPLETE", "COMPLETED", "RECEIVED", "SUCCESS", "CLEARED", "SETTLED"
     };
 
     private readonly ApplicationModuleDbContext _db;
@@ -168,6 +177,18 @@ END
         return await BuildReadinessAsync(app, cancellationToken);
     }
 
+    public async Task<bool> AreEntranceAndAnnualFeesClearedAsync(long applicationId, CancellationToken cancellationToken)
+    {
+        var profileId = await _db.Applications.AsNoTracking()
+            .Where(a => a.ApplicationId == applicationId)
+            .Select(a => (long?)a.ApplicantProfileId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (profileId is null or 0) return false;
+
+        var (joining, annual) = await LoadFeeLinesAsync(profileId.Value, cancellationToken);
+        return joining.Received && annual.Received;
+    }
+
     public async Task EnsureReadyForManagerAsync(long applicationId, CancellationToken cancellationToken)
     {
         var readiness = await GetReadinessAsync(applicationId, cancellationToken)
@@ -205,22 +226,19 @@ END
         await EnsureClubVisitsForInterviewAsync(applicationId, cancellationToken);
         var readiness = await GetReadinessAsync(applicationId, cancellationToken)
             ?? throw new InvalidOperationException("Application was not found.");
-        if (!readiness.PaymentsReceived)
+        if (!readiness.PaymentsReady)
             throw new InvalidOperationException(
-                "Entrance fee and annual subscription must both be received (or waived), or both fee cheques must be uploaded, before authorizing to interview.");
+                "Entrance fee and annual subscription must both be paid or uploaded (cheque) before authorizing to interview.");
         if (!readiness.MemberDetailsComplete)
             throw new InvalidOperationException(
                 "Member details on the application form must be complete before authorizing to interview.");
-        if (!readiness.FeeChequesUploaded)
-            throw new InvalidOperationException(
-                "Annual subscription cheque and joining / entrance fee cheque must both be uploaded on the application before authorizing to interview.");
         if (!readiness.CanProceedToInterview)
         {
             if (readiness.PilotLicenseRequired && !readiness.PilotLicenseUploaded)
                 throw new InvalidOperationException(
                     "Pilot licence copy is still missing. Send a document request to the applicant before authorizing to interview.");
             throw new InvalidOperationException(
-                "Manager verification incomplete. Confirm sponsors, fees received, member details, documents, fee cheques and club visits before authorizing to interview.");
+                "Manager verification incomplete. Confirm sponsors, fee uploads/payments, member details, documents and club visits before authorizing to interview.");
         }
     }
 
@@ -866,40 +884,65 @@ END
             || FormHasLicenseCopy(app.FormDataJson);
 
         var (joining, annual) = await LoadFeeLinesAsync(app.ApplicantProfileId, cancellationToken);
-        // Uploaded annual + joining/entrance cheques represent payment for manager review.
-        var joiningSatisfied = joining.Received || joining.Initiated || hasJoiningCheque;
-        var annualSatisfied = annual.Received || annual.Initiated || hasAnnualCheque;
-        var joiningReceivedOrCheque = joining.Received || hasJoiningCheque;
-        var annualReceivedOrCheque = annual.Received || hasAnnualCheque;
-        var paymentsReady = joiningSatisfied && annualSatisfied;
-        var paymentsReceived = joiningReceivedOrCheque && annualReceivedOrCheque;
+        // Cheque upload / payment initiation verifies fees for manager authorize.
+        // Finance Paid/Waived clearance is required later (after ballot, before signatures / membership no.).
+        var joiningSubmitted = joining.Received || joining.Initiated || hasJoiningCheque;
+        var annualSubmitted = annual.Received || annual.Initiated || hasAnnualCheque;
+        var joiningCleared = joining.Received;
+        var annualCleared = annual.Received;
+        var paymentsReady = joiningSubmitted && annualSubmitted;
+        var paymentsReceived = joiningCleared && annualCleared;
+
         var documentsReady = hasCv && hasId && (!licenseRequired || hasLicense);
         var memberDetailsComplete = MemberDetailsComplete(app.CompletedStepsJson);
 
         var pendingPayments = new List<string>();
-        if (!joiningSatisfied) pendingPayments.Add("Entrance / joining fee");
-        else if (!joiningReceivedOrCheque) pendingPayments.Add("Entrance / joining fee (not yet received)");
-        if (!annualSatisfied) pendingPayments.Add("Annual subscription fee");
-        else if (!annualReceivedOrCheque) pendingPayments.Add("Annual subscription fee (not yet received)");
+        if (!joiningCleared)
+        {
+            pendingPayments.Add(joiningSubmitted
+                ? "Entrance / joining fee (awaiting finance clearance after ballot)"
+                : "Entrance / joining fee");
+        }
+        if (!annualCleared)
+        {
+            pendingPayments.Add(annualSubmitted
+                ? "Annual subscription fee (awaiting finance clearance after ballot)"
+                : "Annual subscription fee");
+        }
+
+        var childOfMember = MembershipFeeCalculator.IsChildOfMember(app.FormDataJson);
+        var entranceWaived = MembershipFeeCalculator.EntranceWaiverApplies(app.FormDataJson, DateOnly.FromDateTime(DateTime.UtcNow));
+        if (entranceWaived)
+        {
+            joiningSubmitted = true;
+            joiningCleared = true;
+            pendingPayments.RemoveAll(item => item.Contains("Entrance", StringComparison.OrdinalIgnoreCase));
+        }
+
+        paymentsReady = joiningSubmitted && annualSubmitted;
+        paymentsReceived = joiningCleared && annualCleared;
 
         var pending = new List<string>();
         if (!endorsementsComplete) pending.Add("Both proposer and seconder endorsements");
-        pending.AddRange(pendingPayments.Select(p => $"{p} payment"));
+        if (!joiningSubmitted) pending.Add("Entrance / joining fee payment");
+        if (!annualSubmitted) pending.Add("Annual subscription fee payment");
         if (!memberDetailsComplete) pending.Add("Complete member details on the application form");
         if (!hasCv) pending.Add("Upload CV");
         if (!hasId) pending.Add("Upload ID / Passport copy");
-        if (!hasAnnualCheque) pending.Add("Upload annual subscription cheque");
-        if (!hasJoiningCheque) pending.Add("Upload joining / entrance fee cheque");
+        if (!hasAnnualCheque && !annualSubmitted) pending.Add("Upload annual subscription cheque (or pay another method via Payment)");
+        if (!entranceWaived && !hasJoiningCheque && !joiningSubmitted) pending.Add("Upload joining / entrance fee cheque (or pay another method via Payment)");
         if (licenseRequired && !hasLicense) pending.Add("Upload pilot licence copy");
 
         var mergedVisits = await MergeClubVisitsAsync(app, cancellationToken);
         var logged = mergedVisits.Count;
         if (logged == 0 && app.ClubVisitsCount > 0) logged = app.ClubVisitsCount;
-        var visitsMet = logged >= RequiredClubVisits || app.ClubVisitsOverride;
+        var visitsRequired = childOfMember ? 0 : RequiredClubVisits;
+        var visitsMet = childOfMember || logged >= RequiredClubVisits || app.ClubVisitsOverride;
 
         var readyForManager = endorsementsComplete && paymentsReady;
-        var canInterview = endorsementsComplete && paymentsReceived && memberDetailsComplete
-            && documentsReady && visitsMet && feeChequesUploaded;
+        // Authorize when fees are uploaded/initiated; finance clearance comes after voting.
+        var canInterview = endorsementsComplete && paymentsReady && memberDetailsComplete
+            && documentsReady && visitsMet;
 
         var status = NormalizeStatusCode(app.Status?.Code);
         var visible = endorsementsComplete
@@ -912,8 +955,8 @@ END
             StatusCode = status,
             StatusName = app.Status?.Name,
             EndorsementsComplete = endorsementsComplete,
-            EntranceFeeOk = joiningSatisfied,
-            AnnualSubscriptionOk = annualSatisfied,
+            EntranceFeeOk = joiningSubmitted,
+            AnnualSubscriptionOk = annualSubmitted,
             CvUploaded = hasCv,
             IdPassportUploaded = hasId,
             AnnualChequeUploaded = hasAnnualCheque,
@@ -930,7 +973,7 @@ END
             PendingItems = pending,
             PendingPaymentItems = pendingPayments,
             ClubVisitsLogged = logged,
-            ClubVisitsRequired = RequiredClubVisits,
+            ClubVisitsRequired = visitsRequired,
             ClubVisitsMet = visitsMet,
             ClubVisitsOverride = app.ClubVisitsOverride,
             ClubVisitsOverrideReason = app.ClubVisitsOverrideReason,
@@ -1025,11 +1068,20 @@ END
             .OrderByDescending(t => t.PaymentDate)
             .ThenByDescending(t => t.TransactionId)
             .ToList();
-        var received = matches.FirstOrDefault(t =>
-            t.PaymentStatus != null && PaymentReceivedStatuses.Contains(NormalizePay(t.PaymentStatus.Code)));
+        var paidMatches = matches.Where(t => IsPaymentReceived(t.PaymentStatus?.Code, t.PaymentStatus?.Name)).ToList();
+        var received = paidMatches.FirstOrDefault();
+        var paidAmount = paidMatches.Sum(t => t.Amount);
         var initiated = matches.Any(t =>
-            t.PaymentStatus != null && PaymentOkStatuses.Contains(NormalizePay(t.PaymentStatus.Code)));
-        var shown = received ?? matches.FirstOrDefault();
+        {
+            var code = NormalizePay(t.PaymentStatus?.Code);
+            return code is not ("REJECTED" or "REFUNDED")
+                && (PaymentOkStatuses.Contains(code) || IsPaymentReceived(code, t.PaymentStatus?.Name));
+        });
+        var shown = received ?? matches.FirstOrDefault(t =>
+        {
+            var code = NormalizePay(t.PaymentStatus?.Code);
+            return code is not ("REJECTED" or "REFUNDED");
+        }) ?? matches.FirstOrDefault();
         string? receiptNo = null;
         if (shown is not null)
         {
@@ -1043,10 +1095,10 @@ END
             FeeLabel = label,
             Initiated = initiated,
             Received = received != null,
-            Amount = shown?.Amount ?? 0,
+            Amount = paidAmount > 0 ? paidAmount : shown?.Amount ?? 0,
             ReceiptNumber = receiptNo,
             PaymentDate = shown?.PaymentDate,
-            Status = shown?.PaymentStatus?.Name
+            Status = received?.PaymentStatus?.Name ?? shown?.PaymentStatus?.Name
         };
     }
 
@@ -1062,13 +1114,25 @@ END
         {
             FeeCode = feeCode,
             FeeLabel = label,
-            Initiated = PaymentOkStatuses.Contains(code),
-            Received = PaymentReceivedStatuses.Contains(code),
+            Initiated = PaymentOkStatuses.Contains(code) || IsPaymentReceived(code, tx.PaymentStatus?.Name),
+            Received = IsPaymentReceived(code, tx.PaymentStatus?.Name),
             Amount = tx.Amount,
             ReceiptNumber = tx.Receipt?.ReceiptNumber ?? receiptNo,
             PaymentDate = tx.PaymentDate,
             Status = tx.PaymentStatus?.Name
         };
+    }
+
+    private static bool IsPaymentReceived(string? statusCode, string? statusName)
+    {
+        var code = NormalizePay(statusCode);
+        if (PaymentReceivedStatuses.Contains(code)) return true;
+        var name = NormalizePay(statusName);
+        return PaymentReceivedStatuses.Contains(name)
+            || name.Contains("PAID", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("WAIVED", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("SETTLED", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("CLEARED", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool MatchesFee(Entities.Subscriptions.MTransaction t, string feeCode)
@@ -1141,20 +1205,19 @@ END
     private static bool AreEndorsementsComplete(IEnumerable<Endorsement> endorsements)
     {
         static bool Complete(Endorsement e) =>
-            !string.IsNullOrWhiteSpace(e.PersonalKnowledge)
+            !e.IsDeclined
+            && !string.IsNullOrWhiteSpace(e.PersonalKnowledge)
             && !string.IsNullOrWhiteSpace(e.ProfessionalKnowledge)
             && !string.IsNullOrWhiteSpace(e.ValueAddition);
 
+        static bool RoleComplete(IEnumerable<Endorsement> list, string role) =>
+            list.Any(e =>
+                Complete(e)
+                && (string.Equals(e.EndorserRole, role, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(e.EndorserRole, role == "PROPOSER" ? "Proposer" : "Seconder", StringComparison.OrdinalIgnoreCase)));
+
         var list = endorsements.ToList();
-        var proposer = list.Where(e => string.Equals(e.EndorserRole, "PROPOSER", StringComparison.OrdinalIgnoreCase)
-                                       || string.Equals(e.EndorserRole, "Proposer", StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(e => e.EndorsementId)
-            .FirstOrDefault();
-        var seconder = list.Where(e => string.Equals(e.EndorserRole, "SECONDER", StringComparison.OrdinalIgnoreCase)
-                                       || string.Equals(e.EndorserRole, "Seconder", StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(e => e.EndorsementId)
-            .FirstOrDefault();
-        return proposer is not null && Complete(proposer) && seconder is not null && Complete(seconder);
+        return RoleComplete(list, "PROPOSER") && RoleComplete(list, "SECONDER");
     }
 
     private static bool PilotLicenseRequired(string? formJson)
@@ -1457,6 +1520,64 @@ END
             ReturnedStageName = app.Status?.Name,
             PreviousHandlerUserId = app.CurrentHandlerUserId
         }, cancellationToken);
+    }
+
+    public async Task NotifyApplicantPaymentRejectedAsync(
+        long profileId,
+        long? applicationId,
+        string feeLabel,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        var profile = await _db.Profiles.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.ProfileId == profileId, cancellationToken);
+        if (profile is null) return;
+
+        long? appId = applicationId;
+        string applicationNo = "";
+        if (appId is null or 0)
+        {
+            var app = await _db.Applications.AsNoTracking()
+                .Where(a => a.ApplicantProfileId == profileId)
+                .OrderByDescending(a => a.ApplicationId)
+                .Select(a => new { a.ApplicationId, a.ApplicationNo })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (app is not null)
+            {
+                appId = app.ApplicationId;
+                applicationNo = app.ApplicationNo;
+            }
+        }
+        else
+        {
+            applicationNo = await _db.Applications.AsNoTracking()
+                .Where(a => a.ApplicationId == appId)
+                .Select(a => a.ApplicationNo)
+                .FirstOrDefaultAsync(cancellationToken) ?? "";
+        }
+
+        if (appId is null or 0) return;
+
+        var fee = string.IsNullOrWhiteSpace(feeLabel) ? "membership fee" : feeLabel.Trim();
+        var portal = (_app.PublicBaseUrl ?? "http://localhost:8080").TrimEnd('/');
+        var subject = $"{fee} payment rejected — {applicationNo}";
+        var body =
+            $"Finance / Treasurer rejected your {fee} payment for application {applicationNo}.\n\n" +
+            $"Reason: {reason.Trim()}\n\n" +
+            $"Please upload a new cheque or submit payment again:\n" +
+            $"{portal}/payment\n" +
+            $"You can also attach cheque copies on the application form:\n" +
+            $"{portal}/application";
+
+        await PushNotificationAsync(
+            "APPLICATION_PAYMENT_REJECTED",
+            "Fee payment rejected",
+            profile.ProfileId,
+            profile.Email,
+            subject,
+            body,
+            appId.Value,
+            cancellationToken);
     }
 
     private async Task NotifyEndorserFollowUpAsync(

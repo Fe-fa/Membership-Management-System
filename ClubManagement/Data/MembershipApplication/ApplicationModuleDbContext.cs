@@ -5,6 +5,7 @@ using ClubManagement.Entities.Committee;
 using ClubManagement.Entities.Discipline;
 using ClubManagement.Entities.Engagement;
 using ClubManagement.Entities.Facilities;
+using ClubManagement.Entities.Finance;
 using ClubManagement.Entities.GeneralMeetings;
 using ClubManagement.Entities.Governance;
 using ClubManagement.Entities.Guarantorship;
@@ -99,6 +100,10 @@ public partial class ApplicationModuleDbContext : DbContext
     public DbSet<CommitteeRole> CommitteeRoles => Set<CommitteeRole>();
     public DbSet<MeetingType> MeetingTypes => Set<MeetingType>();
     public DbSet<AccommodationBooking> AccommodationBookings => Set<AccommodationBooking>();
+    public DbSet<NmAccommodationBooking> NmAccommodationBookings => Set<NmAccommodationBooking>();
+    public DbSet<NmCorkageCharge> NmCorkageCharges => Set<NmCorkageCharge>();
+    public DbSet<NmCustomCharge> NmCustomCharges => Set<NmCustomCharge>();
+    public DbSet<NmCustomChargeLine> NmCustomChargeLines => Set<NmCustomChargeLine>();
     public DbSet<GeneralMeeting> GeneralMeetings => Set<GeneralMeeting>();
     public DbSet<MemberStatusHistory> MemberStatusHistories => Set<MemberStatusHistory>();
     public DbSet<MemberStatusOverride> MemberStatusOverrides => Set<MemberStatusOverride>();
@@ -202,6 +207,8 @@ public partial class ApplicationModuleDbContext : DbContext
                 .WithMany(x => x.Endorsements)
                 .HasForeignKey(x => x.EndorserProfileId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => new { x.ApplicationId, x.EndorserProfileId, x.Status });
         });
 
         modelBuilder.Entity<ApplicationSignature>(entity =>
@@ -604,6 +611,7 @@ public partial class ApplicationModuleDbContext : DbContext
         {
             entity.HasKey(x => x.ClubSettingId);
             entity.HasIndex(x => x.SettingKey).IsUnique();
+            entity.Property(x => x.SettingValue).HasColumnType("nvarchar(max)");
             entity.HasOne(x => x.AuthorizingResolution).WithMany(x => x.ClubSettings).HasForeignKey(x => x.AuthorizingResolutionId).OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -655,6 +663,30 @@ public partial class ApplicationModuleDbContext : DbContext
         {
             entity.HasKey(x => x.AccommodationBookingId);
             entity.HasOne(x => x.Account).WithMany(x => x.AccommodationBookings).HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<NmAccommodationBooking>(entity =>
+        {
+            entity.HasKey(x => x.NmAccommodationBookingId);
+            entity.HasOne(x => x.Account).WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<NmCorkageCharge>(entity =>
+        {
+            entity.HasKey(x => x.NmCorkageChargeId);
+            entity.HasOne(x => x.Account).WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<NmCustomCharge>(entity =>
+        {
+            entity.HasKey(x => x.NmCustomChargeId);
+            entity.HasOne(x => x.Account).WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(x => x.LineItems).WithOne(x => x.Charge).HasForeignKey(x => x.NmCustomChargeId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<NmCustomChargeLine>(entity =>
+        {
+            entity.HasKey(x => x.NmCustomChargeLineId);
         });
 
         modelBuilder.Entity<CreditFacility>(entity =>

@@ -47,6 +47,9 @@ namespace ClubManagement.Entities.Facilities
         [Column("updated_by_user_id")]
         public long? UpdatedByUserId { get; set; }
 
+        [Column("updated_at")]
+        public DateTime? UpdatedAt { get; set; }
+
         public virtual MAccount Account { get; set; } = null!;
 
     }

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { ListPagination } from "@/components/common/ListPagination";
 import { PageBackLink, PageFrame, PageHeader } from "@/components/layout/PageFrame";
+import { PageBodyLoading, PageDataGate } from "@/components/layout/PageLoading";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -171,6 +172,7 @@ function ExistingMembersPanel() {
         </Button>
       </div>
 
+      <PageDataGate loading={members.isLoading} label="Loading members…" minHeightClassName="min-h-[22rem]">
       <div className="overflow-x-auto rounded-xl border border-border bg-card">
         <table className="w-full min-w-[920px] text-sm">
           <thead className="bg-secondary/60 text-left">
@@ -183,13 +185,7 @@ function ExistingMembersPanel() {
             </tr>
           </thead>
           <tbody>
-            {members.isLoading ? (
-              <tr>
-                <td className="px-4 py-6 text-muted-foreground" colSpan={6}>
-                  Loading members…
-                </td>
-              </tr>
-            ) : rows.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
                 <td className="px-4 py-6 text-muted-foreground" colSpan={6}>
                   No members yet. Register a legacy member or elect an applicant.
@@ -284,6 +280,7 @@ function ExistingMembersPanel() {
           </tbody>
         </table>
       </div>
+      </PageDataGate>
 
       <ListPagination
         page={page}
@@ -622,8 +619,8 @@ function PrivilegesPanel() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td className="px-4 py-6 text-muted-foreground" colSpan={privilegeColumns.length + 2}>
-                  Loading classes…
+                <td className="px-4 py-6" colSpan={privilegeColumns.length + 2}>
+                  <PageBodyLoading label="Loading classes…" minHeightClassName="min-h-[10rem]" />
                 </td>
               </tr>
             ) : (

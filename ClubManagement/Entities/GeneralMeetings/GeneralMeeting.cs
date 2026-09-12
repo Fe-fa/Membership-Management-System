@@ -41,6 +41,25 @@ namespace ClubManagement.Entities.GeneralMeetings
         [Column("minutes_url")]
         public string? MinutesUrl { get; set; }
 
+        [Column("minutes_text")]
+        public string? MinutesText { get; set; }
+
+        [Column("minutes_status")]
+        [MaxLength(20)]
+        public string MinutesStatus { get; set; } = "DRAFT";
+
+        [Column("minutes_recorded_by_profile_id")]
+        public long? MinutesRecordedByProfileId { get; set; }
+
+        [Column("minutes_recorded_at")]
+        public DateTime? MinutesRecordedAt { get; set; }
+
+        [Column("minutes_signed_by_profile_id")]
+        public long? MinutesSignedByProfileId { get; set; }
+
+        [Column("minutes_signed_at")]
+        public DateTime? MinutesSignedAt { get; set; }
+
         [Column("agenda_text")]
         public string? AgendaText { get; set; }
 

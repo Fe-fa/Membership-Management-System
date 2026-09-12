@@ -18,6 +18,7 @@ public interface ICommitteeBallotService
     Task<CommitteeBallotMeetingDto> SetAttendanceAsync(long meetingId, IReadOnlyList<long> committeeMemberIds, long? actorUserId, CancellationToken cancellationToken);
     Task<CommitteeBallotItemDto> AttachAsync(long meetingId, long applicationId, long? actorUserId, CancellationToken cancellationToken);
     Task<CommitteeBallotItemDto> CastVoteAsync(long itemId, long voterProfileId, string voteValue, long? actorUserId, CancellationToken cancellationToken);
+    Task<CommitteeBallotItemDto> SetVotingOpenAsync(long itemId, bool open, long? actorUserId, CancellationToken cancellationToken);
     Task<CommitteeBallotItemDto> ProceedToSignaturesAsync(long itemId, long? actorUserId, CancellationToken cancellationToken);
     Task<CommitteeBallotItemDto> SignAdmissionAsync(long itemId, long signerProfileId, AdmissionSignRequest request, long? actorUserId, CancellationToken cancellationToken);
     Task<IReadOnlyList<BallotCandidateDto>> SearchCandidatesAsync(long meetingId, string? search, CancellationToken cancellationToken);
@@ -34,15 +35,18 @@ public class CommitteeBallotService : ICommitteeBallotService
     private readonly ApplicationModuleDbContext _db;
     private readonly IMemberLifecycleService _members;
     private readonly IApplicationDecisionNotifier _decisions;
+    private readonly IManagerStageService _manager;
 
     public CommitteeBallotService(
         ApplicationModuleDbContext db,
         IMemberLifecycleService members,
-        IApplicationDecisionNotifier decisions)
+        IApplicationDecisionNotifier decisions,
+        IManagerStageService manager)
     {
         _db = db;
         _members = members;
         _decisions = decisions;
+        _manager = manager;
     }
 
     public async Task EnsureSchemaAsync(CancellationToken cancellationToken)
@@ -160,17 +164,47 @@ END
             PresentCount = present,
             MeetingQuorumMet = quorumMet,
             Seats = seats,
-            Items = items.Select(i => MapItem(
+            Items = await MapItemsAsync(
+                items,
+                size,
+                present,
+                viewerProfileId,
+                seats,
+                people.Votes,
+                people.Approvals,
+                people.Names,
+                cancellationToken),
+            PendingApplicants = await SearchCandidatesAsync(meetingId, null, cancellationToken)
+        };
+    }
+
+    private async Task<List<CommitteeBallotItemDto>> MapItemsAsync(
+        IReadOnlyList<CommitteeBallotItem> items,
+        int size,
+        int present,
+        long? viewerProfileId,
+        IReadOnlyList<BallotSeatDto> seats,
+        IReadOnlyList<CommitteeBallotVote> votes,
+        IReadOnlyList<ApplicationApproval> approvals,
+        IReadOnlyDictionary<long, string> names,
+        CancellationToken cancellationToken)
+    {
+        var result = new List<CommitteeBallotItemDto>(items.Count);
+        foreach (var i in items)
+        {
+            var feesCleared = await _manager.AreEntranceAndAnnualFeesClearedAsync(i.ApplicationId, cancellationToken);
+            result.Add(MapItem(
                 i,
                 size,
                 present,
                 viewerProfileId,
                 seats,
-                people.Votes.Where(v => v.CommitteeBallotItemId == i.CommitteeBallotItemId).ToList(),
-                people.Approvals.Where(a => a.ApplicationId == i.ApplicationId).ToList(),
-                people.Names)).ToList(),
-            PendingApplicants = await SearchCandidatesAsync(meetingId, null, cancellationToken)
-        };
+                votes.Where(v => v.CommitteeBallotItemId == i.CommitteeBallotItemId).ToList(),
+                approvals.Where(a => a.ApplicationId == i.ApplicationId).ToList(),
+                names,
+                feesCleared));
+        }
+        return result;
     }
 
     public async Task<CommitteeBallotMeetingDto> SetAttendanceAsync(
@@ -301,7 +335,10 @@ END
             ?? throw new InvalidOperationException("Ballot item was not found.");
 
         if (!string.Equals(item.Status, "OPEN", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("This ballot is already resolved.");
+            throw new InvalidOperationException(
+                string.Equals(item.Status, "CLOSED", StringComparison.OrdinalIgnoreCase)
+                    ? "Voting is closed for this applicant. Open voting to accept more votes."
+                    : "This ballot is already resolved.");
 
         var presentIds = await _db.MeetingAttendances.AsNoTracking()
             .Where(a => a.CommitteeMeetingId == item.CommitteeMeetingId && a.AttendedFlag)
@@ -337,6 +374,38 @@ END
         return await MapLoadedAsync(await ReloadItemAsync(itemId, cancellationToken), voterProfileId, cancellationToken);
     }
 
+    public async Task<CommitteeBallotItemDto> SetVotingOpenAsync(
+        long itemId,
+        bool open,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var item = await ReloadItemAsync(itemId, cancellationToken);
+        var status = item.Status ?? "";
+        if (string.Equals(status, "PASSED", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, "REJECTED", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Voting cannot be changed after the ballot is resolved.");
+
+        if (open)
+        {
+            if (!string.Equals(status, "CLOSED", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(status, "OPEN", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Only a closed ballot can be reopened for voting.");
+            item.Status = "OPEN";
+        }
+        else
+        {
+            if (!string.Equals(status, "OPEN", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(status, "CLOSED", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Only an open ballot can close voting.");
+            item.Status = "CLOSED";
+        }
+
+        item.UpdatedByUserId = actorUserId;
+        await _db.SaveChangesAsync(cancellationToken);
+        return await MapLoadedAsync(await ReloadItemAsync(itemId, cancellationToken), null, cancellationToken);
+    }
+
     public async Task<CommitteeBallotItemDto> ProceedToSignaturesAsync(
         long itemId,
         long? actorUserId,
@@ -345,6 +414,11 @@ END
         var item = await ReloadItemAsync(itemId, cancellationToken);
         if (string.Equals(item.Status, "REJECTED", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("This application was auto-rejected and cannot proceed.");
+        if (string.Equals(item.Status, "PASSED", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("This applicant is already on the signatures desk.");
+        if (!string.Equals(item.Status, "OPEN", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(item.Status, "CLOSED", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Close or complete voting before collecting signatures.");
 
         var mapped = await MapLoadedAsync(item, null, cancellationToken);
         if (mapped.AutoRejected)
@@ -352,6 +426,8 @@ END
         if (mapped.VotesCast < VotesRequiredBeforeSignatures)
             throw new InvalidOperationException(
                 $"Signatures open after more than 4 Committee members have voted on this applicant (currently {mapped.VotesCast}).");
+
+        await EnsureFinanceClearedBeforeSignaturesAsync(item.ApplicationId, cancellationToken);
 
         var committee = await FindStatusAsync("Committee", cancellationToken)
                         ?? throw new InvalidOperationException("Committee application status is missing.");
@@ -387,6 +463,8 @@ END
             && !string.Equals(item.Application.Status?.Code, "Committee", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(item.Application.Status?.Code, "COMMITTEE", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The ballot must pass before signatures are collected.");
+
+        await EnsureFinanceClearedBeforeSignaturesAsync(item.ApplicationId, cancellationToken);
 
         var kind = (request.SignatoryKind ?? "COMMITTEE").Trim().ToUpperInvariant();
         var approvals = item.Application.ApplicationApprovals.Where(a => a.ApprovalDecision == "APPROVE").ToList();
@@ -608,7 +686,32 @@ END
             [item.ApplicationId],
             seats.Select(s => s.ProfileId),
             cancellationToken);
-        return MapItem(item, size, present, viewerProfileId, seats, people.Votes, people.Approvals, people.Names);
+        var readiness = await _manager.GetReadinessAsync(item.ApplicationId, cancellationToken);
+        var feesCleared = await _manager.AreEntranceAndAnnualFeesClearedAsync(item.ApplicationId, cancellationToken);
+        return MapItem(
+            item,
+            size,
+            present,
+            viewerProfileId,
+            seats,
+            people.Votes,
+            people.Approvals,
+            people.Names,
+            feesCleared || readiness?.PaymentsReceived == true);
+    }
+
+    private async Task EnsureFinanceClearedBeforeSignaturesAsync(long applicationId, CancellationToken cancellationToken)
+    {
+        if (await _manager.AreEntranceAndAnnualFeesClearedAsync(applicationId, cancellationToken))
+            return;
+
+        var readiness = await _manager.GetReadinessAsync(applicationId, cancellationToken);
+        var pending = readiness?.PendingPaymentItems is { Count: > 0 }
+            ? string.Join("; ", readiness.PendingPaymentItems)
+            : "entrance and annual fees";
+        throw new InvalidOperationException(
+            "After the ballot, Finance must mark entrance and annual fees as Paid (or Waived) before signatures and membership number — for cheque, cash, M-Pesa, or bank. Still pending: "
+            + pending);
     }
 
     private static CommitteeBallotItemDto MapItem(
@@ -619,7 +722,8 @@ END
         IReadOnlyList<BallotSeatDto> seats,
         IReadOnlyList<CommitteeBallotVote> votes,
         IReadOnlyList<ApplicationApproval> approvals,
-        IReadOnlyDictionary<long, string> names)
+        IReadOnlyDictionary<long, string> names,
+        bool financeFeesCleared)
     {
         var forCount = votes.Count(v => string.Equals(v.VoteValue, "FOR", StringComparison.OrdinalIgnoreCase));
         var against = votes.Count(v => string.Equals(v.VoteValue, "AGAINST", StringComparison.OrdinalIgnoreCase));
@@ -630,6 +734,7 @@ END
             ? null
             : votes.FirstOrDefault(v => v.VoterProfileId == viewerProfileId.Value);
         var open = string.Equals(item.Status, "OPEN", StringComparison.OrdinalIgnoreCase);
+        var closed = string.Equals(item.Status, "CLOSED", StringComparison.OrdinalIgnoreCase);
         var quorumMet = presentCount >= MeetingQuorum;
         var approved = approvals.Where(a =>
                 string.Equals(a.ApprovalDecision, "APPROVE", StringComparison.OrdinalIgnoreCase)
@@ -659,7 +764,8 @@ END
                         : string.IsNullOrWhiteSpace(name) ? $"Member #{vote.VoterProfileId}" : name,
                     RoleName = seat?.RoleName ?? "",
                     VoteValue = vote.VoteValue,
-                    Present = seat?.Present ?? false
+                    Present = seat?.Present ?? false,
+                    CastAt = vote.CastAt == default ? null : vote.CastAt.ToString("yyyy-MM-dd HH:mm")
                 };
             })
             .ToList();
@@ -694,7 +800,8 @@ END
                     : string.IsNullOrWhiteSpace(name) ? $"Member #{a.ApproverProfileId}" : name,
                 RoleName = a.ApproverRole?.Name ?? seat?.RoleName ?? code,
                 Kind = kind,
-                DateElected = a.DateElected?.ToString("yyyy-MM-dd")
+                DateElected = a.DateElected?.ToString("yyyy-MM-dd"),
+                SignedAt = (a.ApprovedAt ?? a.CreatedAt).ToString("yyyy-MM-dd HH:mm")
             };
         }).ToList();
 
@@ -762,7 +869,9 @@ END
             ExcludedUntil = exclusion?.ExcludedUntilDate?.ToString("yyyy-MM-dd"),
             MyVoteCast = mine is not null,
             MyVoteValue = mine?.VoteValue,
-            CanProceedToSignatures = open && !autoRejected && cast >= VotesRequiredBeforeSignatures,
+            VotingOpen = open,
+            CanProceedToSignatures = (open || closed) && !autoRejected && cast >= VotesRequiredBeforeSignatures,
+            FinanceFeesCleared = financeFeesCleared,
             CommitteeSignatures = committeeSigs,
             GmSignatures = gmSigs,
             ChairmanSigned = chairmanSigned,

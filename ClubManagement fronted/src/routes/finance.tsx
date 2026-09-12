@@ -1,6 +1,13 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { FinancePage } from "@/pages/admin/FinancePage";
+import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
+import { canVisitPath, homePathForUser, readUser } from "@/lib/auth";
 
 export const Route = createFileRoute("/finance")({
-  component: FinancePage,
+  beforeLoad: () => {
+    if (typeof window === "undefined") return;
+    const user = readUser();
+    if (!canVisitPath(user, "/finance")) {
+      throw redirect({ to: homePathForUser(user) });
+    }
+  },
+  component: () => <Outlet />,
 });

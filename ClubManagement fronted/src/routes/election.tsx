@@ -1,5 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
-import { ElectionPage } from "@/pages/member/ElectionPage";
+import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
 import { canVisitPath, homePathForUser, readUser } from "@/lib/auth";
 
 export const Route = createFileRoute("/election")({
@@ -10,8 +9,5 @@ export const Route = createFileRoute("/election")({
       throw redirect({ to: homePathForUser(user) });
     }
   },
-  head: () => ({
-    meta: [{ title: "AGM/EGM Election — Aero Club of East Africa" }],
-  }),
-  component: ElectionPage,
+  component: () => <Outlet />,
 });

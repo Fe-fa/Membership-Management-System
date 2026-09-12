@@ -1,972 +1,444 @@
-import { getRouteApi } from "@tanstack/react-router";
+import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, LogOut, Search, UserRound } from "lucide-react";
+import { MoreHorizontal, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import heroImage from "@/assets/acea-hero.jpg";
 import { ListPagination } from "@/components/common/ListPagination";
-import { PageBackLink, PageFrame, PageHeader } from "@/components/layout/PageFrame";
+import { PageBackLink, PageFrame } from "@/components/layout/PageFrame";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { canOperateReception, isReceptionistOnly, readUser } from "@/lib/auth";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { canOperateReception, canViewAllReceptionVisits, isReceptionistOnly, readUser } from "@/lib/auth";
+import { emptyPage, pagedQuery, type PagedResult } from "@/lib/pagination";
 import { apiRequest, extractErrorMessage } from "@/services/membership/api";
-import { DEFAULT_PAGE_SIZE, emptyPage, pagedQuery, type PagedResult } from "@/lib/pagination";
 import { cn } from "@/utils/cn";
+import { formatKenyaDate, kenyaTodayISO } from "@/utils/kenyaDate";
+
+import { RegisterGuestCard } from "./reception/RegisterGuestCard";
+import type { ReceptionHost, ReceptionVisitRow } from "./reception/types";
 
 const routeApi = getRouteApi("/reception");
+const VISIT_PAGE_SIZE = 50;
 
-type ReceptionMember = {
-  profileId: number;
-  membershipNo: string;
-  fullName: string;
-};
-
-type GuestLookup = {
-  guestId: number;
-  guestName: string;
-  phone?: string | null;
-  email?: string | null;
-  idNumber?: string | null;
-  firstVisitDate?: string | null;
-  visitSlipCode?: string | null;
-  introducedByProfileId?: number | null;
-  introducedByName?: string | null;
-  visitCount: number;
-  visitsThisMonth?: number;
-  visitsThisYear?: number;
-  isBarred: boolean;
-  barredReason?: string | null;
-  hasApplicantProfile: boolean;
-};
-
-type ReceptionVisit = {
-  visitId: number;
-  guestId: number;
-  guestName: string;
-  phone?: string | null;
-  visitSlipCode?: string | null;
-  visitCount: number;
-  visitDate: string;
-  timeIn?: string | null;
-  timeOut?: string | null;
-  isCurrent: boolean;
-  guestBookEntryNo?: string | null;
-  accompanyingProfileId: number;
-  accompanyingMemberName: string;
-  introducedByName?: string | null;
-  staffName?: string | null;
-  notes?: string | null;
-};
-
-const LIMITS = { month: 2, year: 12, onSite: 6 };
+type DateFilter = "all" | "today" | "week";
 
 export function ReceptionDashboardPage() {
   const user = readUser();
   const canOperate = canOperateReception(user);
+  const canViewAll = canViewAllReceptionVisits(user);
   const receptionHome = isReceptionistOnly(user);
   const searchParams = routeApi.useSearch();
   const section = "section" in searchParams ? String(searchParams.section ?? "") : "";
-
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [viewing, setViewing] = useState<ReceptionVisitRow | null>(null);
+  const [historyHost, setHistoryHost] = useState<ReceptionHost | null>(null);
 
-  const [lookupName, setLookupName] = useState("");
-  const [lookupPhone, setLookupPhone] = useState("");
-  const [lookupSlip, setLookupSlip] = useState("");
-  const [matches, setMatches] = useState<GuestLookup[]>([]);
-  const [selected, setSelected] = useState<GuestLookup | null>(null);
-
-  const [guestName, setGuestName] = useState("");
-  const [guestPhone, setGuestPhone] = useState("");
-  const [guestEmail, setGuestEmail] = useState("");
-  const [guestIdNumber, setGuestIdNumber] = useState("");
-  const [firstVisitDate, setFirstVisitDate] = useState(() =>
-    new Date().toISOString().slice(0, 10),
-  );
-
-  const [introduceMemberSearch, setIntroduceMemberSearch] = useState("");
-  const [debouncedIntroduceMemberSearch, setDebouncedIntroduceMemberSearch] =
-    useState("");
-  const [introduceMemberId, setIntroduceMemberId] = useState("");
-  const [confirmIntroduceMember, setConfirmIntroduceMember] = useState(false);
-
-  const [memberId, setMemberId] = useState("");
-  const [memberSearch, setMemberSearch] = useState("");
-  const [guestBookNo, setGuestBookNo] = useState("");
-  const [notes, setNotes] = useState("");
-  const [visitPage, setVisitPage] = useState(1);
-  const [visitPageSize, setVisitPageSize] = useState(DEFAULT_PAGE_SIZE);
-
-  const members = useQuery({
-    queryKey: ["reception-members"],
-    queryFn: () => apiRequest<ReceptionMember[]>("/api/reception/members"),
-    enabled: canOperate,
-  });
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedIntroduceMemberSearch(introduceMemberSearch.trim());
-    }, 300);
-
-    return () => window.clearTimeout(timer);
-  }, [introduceMemberSearch]);
-
-  const introduceMemberQuery = useQuery({
-    queryKey: [
-      "reception-introduce-members",
-      debouncedIntroduceMemberSearch,
-    ],
-    queryFn: () => {
-      const params = new URLSearchParams({
-        search: debouncedIntroduceMemberSearch,
-      });
-
-      return apiRequest<ReceptionMember[]>(
-        `/api/reception/members?${params.toString()}`,
-      );
-    },
-    enabled:
-      canOperate && debouncedIntroduceMemberSearch.length >= 2,
-  });
-
-  const visits = useQuery({
-    queryKey: ["reception-visits", visitPage, visitPageSize],
+  const onSiteVisits = useQuery({
+    queryKey: ["reception-visits", "onsite"],
     queryFn: () =>
-      apiRequest<PagedResult<ReceptionVisit>>(
-        `/api/reception/visits?${pagedQuery({ page: visitPage, pageSize: visitPageSize })}`,
+      apiRequest<PagedResult<ReceptionVisitRow>>(
+        `/api/reception/visits?${pagedQuery({ page: 1, pageSize: 50 })}&currentOnly=true`,
       ),
-  });
-
-  useEffect(() => {
-    const id =
-      section === "visit"
-        ? "reception-visit"
-        : section === "onsite"
-          ? "reception-onsite"
-          : section === "policy"
-            ? "reception-policy"
-            : "reception-lookup";
-
-    document.getElementById(id)?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-  }, [section]);
-
-  const memberLabel = useMemo(() => {
-    const map = new Map<number, string>();
-
-    for (const row of members.data ?? []) {
-      map.set(row.profileId, `${row.fullName} (${row.membershipNo})`);
-    }
-
-    return map;
-  }, [members.data]);
-
-  const hosts = members.data ?? [];
-
-  const filteredHosts = useMemo(() => {
-    const query = memberSearch.trim().toLowerCase();
-
-    if (!query) {
-      return hosts;
-    }
-
-    return hosts.filter((row) =>
-      `${row.fullName} ${row.membershipNo}`
-        .toLowerCase()
-        .includes(query),
-    );
-  }, [hosts, memberSearch]);
-
-  const search = useMutation({
-    mutationFn: (slipOnly?: string) => {
-      const params = new URLSearchParams();
-      const slip = (slipOnly ?? lookupSlip).trim();
-
-      if (!slipOnly && lookupName.trim()) {
-        params.set("name", lookupName.trim());
-      }
-
-      if (!slipOnly && lookupPhone.trim()) {
-        params.set("phone", lookupPhone.trim());
-      }
-
-      if (slip) {
-        params.set("visitSlipCode", slip);
-      }
-
-      return apiRequest<GuestLookup[]>(
-        `/api/reception/guests?${params.toString()}`,
-      );
-    },
-
-    onSuccess: (rows) => {
-      setMatches(rows);
-
-      if (rows.length === 1) {
-        applyGuest(rows[0]);
-
-        toast.success(
-          `Found ${rows[0].guestName} — ${rows[0].visitCount}/3 visits.`,
-        );
-      } else if (rows.length === 0) {
-        setSelected(null);
-
-        toast.message(
-          "No guest record yet. Add a new guest, then log the visit.",
-        );
-      } else {
-        setSelected(null);
-
-        toast.message(
-          "Several guests match. Select one from the results.",
-        );
-      }
-    },
-
-    onError: (error) => toast.error(extractErrorMessage(error)),
-  });
-
-  const createGuest = useMutation({
-    mutationFn: () => {
-      if (!introduceMemberId) {
-        throw new Error(
-          "Search for and select the introducing member first.",
-        );
-      }
-
-      if (!confirmIntroduceMember) {
-        throw new Error(
-          "Confirm the selected introducing member first.",
-        );
-      }
-
-      return apiRequest<GuestLookup>("/api/reception/guests", {
-        method: "POST",
-        body: JSON.stringify({
-          guestName: guestName.trim() || lookupName.trim(),
-          phone: (guestPhone.trim() || lookupPhone.trim()) || null,
-          email: guestEmail.trim() || null,
-          idNumber: guestIdNumber.trim() || null,
-          firstVisitDate:
-            firstVisitDate ||
-            new Date().toISOString().slice(0, 10),
-          introducedByProfileId: Number(introduceMemberId),
-        }),
-      });
-    },
-
-    onSuccess: (guest) => {
-      applyGuest(guest);
-      setMatches([guest]);
-      setConfirmIntroduceMember(false);
-
-      void queryClient.invalidateQueries({
-        queryKey: ["reception-members"],
-      });
-
-      toast.success(
-        `Guest saved. Visit slip ${guest.visitSlipCode ?? "—"}.`,
-      );
-    },
-
-    onError: (error) => toast.error(extractErrorMessage(error)),
-  });
-
-  const logVisit = useMutation({
-    mutationFn: () => {
-      if (!selected) {
-        throw new Error("Look up or add a guest first.");
-      }
-
-      if (!memberId) {
-        throw new Error("Select the member on site.");
-      }
-
-      return apiRequest<ReceptionVisit>("/api/reception/visits", {
-        method: "POST",
-        body: JSON.stringify({
-          guestId: selected.guestId,
-          accompanyingProfileId: Number(memberId),
-          guestBookEntryNo:
-            guestBookNo.trim() ||
-            selected.visitSlipCode ||
-            lookupSlip.trim(),
-          notes: notes.trim() || null,
-        }),
-      });
-    },
-
-    onSuccess: (visit) => {
-      toast.success(
-        `Visit logged. Slip ${visit.visitSlipCode ?? "—"} — give this to the guest.`,
-      );
-
-      setNotes("");
-
-      void queryClient.invalidateQueries({
-        queryKey: ["reception-visits"],
-      });
-
-      if (selected) {
-        setSelected({
-          ...selected,
-          visitCount: visit.visitCount,
-          visitSlipCode: visit.visitSlipCode,
-        });
-      }
-    },
-
-    onError: (error) => toast.error(extractErrorMessage(error)),
+    enabled: section !== "visit",
   });
 
   const signOut = useMutation({
     mutationFn: (visitId: number) =>
-      apiRequest<ReceptionVisit>(
-        `/api/reception/visits/${visitId}/sign-out`,
-        { method: "POST" },
-      ),
-
+      apiRequest<ReceptionVisitRow>(`/api/reception/visits/${visitId}/sign-out`, { method: "POST" }),
     onSuccess: () => {
       toast.success("Guest signed out.");
-
-      void queryClient.invalidateQueries({
-        queryKey: ["reception-visits"],
-      });
+      void queryClient.invalidateQueries({ queryKey: ["reception-visits"] });
+      void queryClient.invalidateQueries({ queryKey: ["reception-host-visits"] });
     },
-
     onError: (error) => toast.error(extractErrorMessage(error)),
   });
 
-  function applyGuest(guest: GuestLookup) {
-    setSelected(guest);
-
-    setGuestName(guest.guestName);
-    setGuestPhone(guest.phone ?? "");
-    setGuestEmail(guest.email ?? "");
-    setGuestIdNumber(guest.idNumber ?? "");
-    setFirstVisitDate(
-      guest.firstVisitDate ??
-        new Date().toISOString().slice(0, 10),
-    );
-
-    setLookupName(guest.guestName);
-    setLookupPhone(guest.phone ?? "");
-    setLookupSlip(guest.visitSlipCode ?? "");
-
-    if (guest.introducedByProfileId) {
-      const introducedMemberId = String(
-        guest.introducedByProfileId,
-      );
-
-      const introducedMemberLabel =
-        memberLabel.get(guest.introducedByProfileId) ??
-        guest.introducedByName ??
-        "";
-
-      setIntroduceMemberId(introducedMemberId);
-      setIntroduceMemberSearch(introducedMemberLabel);
-      setConfirmIntroduceMember(false);
-
-      setMemberId(introducedMemberId);
-      setMemberSearch(introducedMemberLabel);
+  useEffect(() => {
+    if (section === "visit" && !canViewAll) {
+      void navigate({ to: "/reception", search: {} });
     }
+  }, [section, canViewAll, navigate]);
+
+  const onSite = onSiteVisits.data?.items ?? [];
+
+  function openHostHistory(row: ReceptionVisitRow) {
+    setHistoryHost({
+      profileId: row.accompanyingProfileId,
+      membershipNo: "",
+      fullName: row.accompanyingMemberName || "Host member",
+    });
+    setViewing(null);
+    if (section === "visit") void navigate({ to: "/reception", search: {} });
   }
 
-  const visitPageData = visits.data ?? emptyPage<ReceptionVisit>(visitPage, visitPageSize);
-  const rows = visitPageData.items;
-  const onSite = rows.filter((row) => row.isCurrent);
+  if (section === "visit" && canViewAll) {
+    return (
+      <AllVisitsPage
+        canOperate={canOperate}
+        onView={setViewing}
+        onHostHistory={openHostHistory}
+        onSignOut={(row) => signOut.mutate(row.visitId)}
+        signingOut={signOut.isPending}
+        drawer={<VisitDrawer visit={viewing} onClose={() => setViewing(null)} onHostHistory={openHostHistory} canBrowseHistory />}
+      />
+    );
+  }
 
-  const onSiteForMember = memberId
-    ? onSite.filter(
-        (row) => String(row.accompanyingProfileId) === memberId,
-      ).length
-    : onSite.length;
-
-  const monthUsed = selected?.visitsThisMonth ?? 0;
-  const yearUsed = selected?.visitsThisYear ?? 0;
-
-  const overLimit =
-    monthUsed >= LIMITS.month ||
-    yearUsed >= LIMITS.year ||
-    onSiteForMember >= LIMITS.onSite ||
-    Boolean(selected?.isBarred);
+  const directory = (
+    <section className="flex min-h-[28rem] flex-col rounded-xl border border-border bg-card">
+      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <div>
+          <h2 className="text-sm font-semibold">On site</h2>
+          <p className="text-xs text-muted-foreground">
+            {onSite.length} guest{onSite.length === 1 ? "" : "s"} in the club now
+          </p>
+        </div>
+        {canViewAll ? (
+          <Button type="button" variant="outline" size="sm" onClick={() => void navigate({ to: "/reception", search: { section: "visit" } })}>
+            View all visits
+          </Button>
+        ) : null}
+      </div>
+      {canViewAll ? null : <GuestLookup />}
+      <VisitTable
+        rows={onSite}
+        emptyLabel={onSiteVisits.isFetching ? "Checking who is on site…" : "No guests currently on site."}
+        canOperate={canOperate}
+        canBrowseHistory={canViewAll}
+        signingOut={signOut.isPending}
+        onView={setViewing}
+        onHostHistory={openHostHistory}
+        onSignOut={(row) => signOut.mutate(row.visitId)}
+      />
+    </section>
+  );
 
   if (!canOperate) {
     return (
-      <PageFrame width="lg">
-        <PageBackLink
-          to="/admin"
-          label="Back to admin dashboard"
-        />
-
-        <PageHeader
-          title="Guest visits"
-          description="Guests in the club and the member who accompanied them. Reception logs visits; this view is read-only."
-        />
-
-        <OnSiteTable rows={rows} />
-        <ListPagination
-          page={visitPage}
-          pageSize={visitPageSize}
-          totalCount={visitPageData.totalCount}
-          totalPages={visitPageData.totalPages}
-          onPageChange={setVisitPage}
-          onPageSizeChange={setVisitPageSize}
-        />
+      <PageFrame width="lg" className="max-w-none">
+        <PageBackLink to="/admin" label="Back to admin dashboard" />
+        <header>
+          <h1 className="text-xl font-semibold">Guests on site</h1>
+          <p className="text-sm text-muted-foreground">Only guests currently in the club. Open all visits when you need the full book.</p>
+        </header>
+        {directory}
+        <VisitDrawer visit={viewing} onClose={() => setViewing(null)} onHostHistory={openHostHistory} canBrowseHistory={canViewAll} />
       </PageFrame>
     );
   }
 
   return (
-    <PageFrame width="lg">
-      {receptionHome ? null : (
-        <PageBackLink
-          to="/admin"
-          label="Back to admin dashboard"
+    <PageFrame width="lg" className="max-w-none">
+      {receptionHome ? null : <PageBackLink to="/admin" label="Back to admin dashboard" />}
+
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(20rem,2fr)_minmax(0,3fr)]">
+        <RegisterGuestCard
+          requestedHost={historyHost}
+          onRegistered={(visit) => {
+            toast.success(`${visit.guestName} registered.`);
+            void queryClient.invalidateQueries({ queryKey: ["reception-visits"] });
+            void queryClient.invalidateQueries({ queryKey: ["reception-host-visits"] });
+          }}
         />
-      )}
-
-      <section className="relative overflow-hidden rounded-2xl">
-        <img
-          src={heroImage}
-          alt=""
-          width={1600}
-          height={900}
-          className="h-40 w-full object-cover sm:h-52"
-        />
-
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/85 via-primary/45 to-transparent" />
-
-        <h1 className="absolute inset-0 flex items-center px-6 font-sans text-2xl font-semibold tracking-tight text-white sm:px-8 sm:text-3xl">
-          Reception dashboard
-        </h1>
-      </section>
-
-      <p className="-mt-2 text-sm text-muted-foreground">
-        Register guests with optional ID / Passport details for deduplication.
-        Visit logging does not collect ID / Passport.
-      </p>
-
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="space-y-4">
-          <section
-            id="reception-lookup"
-            className="scroll-mt-24 space-y-4 rounded-xl border border-border bg-card p-4"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold">Search</h2>
-            </div>
-
-            <form
-              className="grid gap-3 sm:grid-cols-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                search.mutate(undefined);
-              }}
-            >
-              <Field label="Guest name">
-                <Input
-                  value={lookupName}
-                  onChange={(e) => setLookupName(e.target.value)}
-                  placeholder="e.g. Festus"
-                />
-              </Field>
-
-              <Field label="Phone (optional)">
-                <Input
-                  value={lookupPhone}
-                  onChange={(e) => setLookupPhone(e.target.value)}
-                  placeholder="0740…"
-                />
-              </Field>
-
-              <Field label="Visit slip code">
-                <Input
-                  value={lookupSlip}
-                  onChange={(e) => setLookupSlip(e.target.value)}
-                  placeholder="ACEA-XXXXXX"
-                />
-              </Field>
-
-              <div className="sm:col-span-3">
-                <Button
-                  type="submit"
-                  disabled={search.isPending}
-                >
-                  <Search className="size-4" />
-                  {search.isPending
-                    ? "Checking…"
-                    : "Check Guest Records"}
-                </Button>
-              </div>
-            </form>
-
-            <div className="overflow-hidden rounded-lg border border-border">
-              <div className="grid grid-cols-4 gap-2 bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
-                <span>Guest name</span>
-                <span>Member</span>
-                <span>Phone</span>
-                <span>3-visit counter</span>
-              </div>
-
-              {matches.length === 0 ? (
-                <p className="px-3 py-4 text-sm text-muted-foreground">
-                  No results yet. Check guest records to fill this table.
-                </p>
-              ) : (
-                matches.map((row) => (
-                  <button
-                    key={row.guestId}
-                    type="button"
-                    onClick={() => applyGuest(row)}
-                    className={cn(
-                      "grid w-full grid-cols-4 gap-2 border-t border-border px-3 py-2.5 text-left text-sm hover:bg-muted/40",
-                      selected?.guestId === row.guestId &&
-                        "bg-primary/5",
-                    )}
-                  >
-                    <span className="font-medium">
-                      {row.guestName}
-                    </span>
-
-                    <span>{row.introducedByName ?? "—"}</span>
-                    <span>{row.phone ?? "—"}</span>
-
-                    <span
-                      className={
-                        row.visitCount >= 3
-                          ? "text-emerald-700"
-                          : "text-muted-foreground"
-                      }
-                    >
-                      {row.visitCount}/3
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-
-            <form
-              className="grid gap-3 rounded-lg border border-dashed border-border p-3 sm:grid-cols-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                createGuest.mutate();
-              }}
-            >
-              <Field label="Full Name">
-                <Input
-                  required
-                  value={guestName}
-                  onChange={(e) => setGuestName(e.target.value)}
-                />
-              </Field>
-
-              <Field label="Phone Number">
-                <Input
-                  required
-                  value={guestPhone}
-                  onChange={(e) => setGuestPhone(e.target.value)}
-                />
-              </Field>
-
-              <Field label="Email (optional at this stage)">
-                <Input
-                  type="email"
-                  value={guestEmail}
-                  onChange={(e) => setGuestEmail(e.target.value)}
-                />
-              </Field>
-
-              <Field label="ID/Passport Number (optional, for dedupe)">
-                <Input
-                  value={guestIdNumber}
-                  onChange={(e) => setGuestIdNumber(e.target.value)}
-                />
-              </Field>
-
-              <Field label="Date of first visit">
-                <Input
-                  type="date"
-                  required
-                  value={firstVisitDate}
-                  onChange={(e) => setFirstVisitDate(e.target.value)}
-                />
-              </Field>
-
-              <Field label="Introduce Member">
-                <Input
-                  required
-                  value={introduceMemberSearch}
-                  onChange={(e) => {
-                    setIntroduceMemberSearch(e.target.value);
-                    setIntroduceMemberId("");
-                    setConfirmIntroduceMember(false);
-                  }}
-                  placeholder="Search existing member by name or membership number"
-                />
-
-                <div className="max-h-40 overflow-y-auto rounded-md border border-input bg-background">
-                  {!canOperate ? (
-                    <p className="px-3 py-2 text-xs text-muted-foreground">
-                      You do not have permission to search members.
-                    </p>
-                  ) : introduceMemberSearch.trim().length < 2 ? (
-                    <p className="px-3 py-2 text-xs text-muted-foreground">
-                      Enter at least 2 characters to search.
-                    </p>
-                  ) : introduceMemberQuery.isPending ? (
-                    <p className="px-3 py-2 text-xs text-muted-foreground">
-                      Searching members…
-                    </p>
-                  ) : introduceMemberQuery.isError ? (
-                    <p className="px-3 py-2 text-xs text-destructive">
-                      Unable to search members.
-                    </p>
-                  ) : (introduceMemberQuery.data ?? []).length === 0 ? (
-                    <p className="px-3 py-2 text-xs text-muted-foreground">
-                      No existing member found.
-                    </p>
-                  ) : (
-                    introduceMemberQuery.data?.map((row) => (
-                      <button
-                        key={row.profileId}
-                        type="button"
-                        className={cn(
-                          "block w-full px-3 py-2 text-left text-sm hover:bg-muted/40",
-                          String(row.profileId) ===
-                            introduceMemberId && "bg-primary/5",
-                        )}
-                        onClick={() => {
-                          setIntroduceMemberId(
-                            String(row.profileId),
-                          );
-                          setIntroduceMemberSearch(
-                            `${row.fullName} (${row.membershipNo})`,
-                          );
-                          setConfirmIntroduceMember(false);
-                        }}
-                      >
-                        {row.fullName} ({row.membershipNo})
-                      </button>
-                    ))
-                  )}
-                </div>
-              </Field>
-
-              <div className="flex items-end">
-                <Button
-                  type="submit"
-                  variant="outline"
-                  disabled={
-                    createGuest.isPending ||
-                    Boolean(selected?.isBarred) ||
-                    !introduceMemberId ||
-                    !confirmIntroduceMember
-                  }
-                >
-                  {createGuest.isPending
-                    ? "Saving…"
-                    : "Add New Guest"}
-                </Button>
-              </div>
-
-              {introduceMemberId ? (
-                <label className="flex items-start gap-2 text-xs text-muted-foreground sm:col-span-2">
-                  <input
-                    type="checkbox"
-                    checked={confirmIntroduceMember}
-                    onChange={(e) =>
-                      setConfirmIntroduceMember(e.target.checked)
-                    }
-                    className="mt-0.5"
-                  />
-
-                  <span>
-                    Confirm that{" "}
-                    <strong className="text-foreground">
-                      {introduceMemberSearch}
-                    </strong>{" "}
-                    is the member introducing this guest.
-                  </span>
-                </label>
-              ) : null}
-            </form>
-
-            {selected?.isBarred ? (
-              <p className="text-sm text-destructive">
-                Barred — may not be re-introduced
-                {selected.barredReason
-                  ? `: ${selected.barredReason}`
-                  : "."}
-              </p>
-            ) : null}
-          </section>
-
-          <section
-            id="reception-visit"
-            className="scroll-mt-24 space-y-3 rounded-xl border border-border bg-card p-4"
-          >
-            <h2 className="text-sm font-semibold">Log visit</h2>
-
-            <form
-              className="grid gap-3 sm:grid-cols-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                logVisit.mutate();
-              }}
-            >
-              <Field label="Introducing / accompanying member">
-                <Input
-                  required
-                  value={memberSearch}
-                  onChange={(e) => {
-                    setMemberSearch(e.target.value);
-                    setMemberId("");
-                  }}
-                  placeholder="Search by member name or number"
-                />
-
-                <div className="max-h-48 overflow-y-auto rounded-md border border-input bg-background">
-                  {filteredHosts.length === 0 ? (
-                    <p className="px-3 py-2 text-xs text-muted-foreground">
-                      No members found.
-                    </p>
-                  ) : (
-                    filteredHosts.map((row) => (
-                      <button
-                        key={row.profileId}
-                        type="button"
-                        className={cn(
-                          "block w-full px-3 py-2 text-left text-sm hover:bg-muted/40",
-                          String(row.profileId) === memberId &&
-                            "bg-primary/5",
-                        )}
-                        onClick={() => {
-                          setMemberId(String(row.profileId));
-                          setMemberSearch(
-                            memberLabel.get(row.profileId) ?? "",
-                          );
-                        }}
-                      >
-                        {memberLabel.get(row.profileId)}
-                      </button>
-                    ))
-                  )}
-                </div>
-              </Field>
-
-              <Field label="Visit slip code">
-                <div className="flex gap-2">
-                  <Input
-                    value={lookupSlip}
-                    onChange={(e) => setLookupSlip(e.target.value)}
-                  />
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => search.mutate(lookupSlip)}
-                  >
-                    Lookup
-                  </Button>
-                </div>
-              </Field>
-
-              <Field label="Guest Book entry number">
-                <Input
-                  value={guestBookNo}
-                  onChange={(e) => setGuestBookNo(e.target.value)}
-                  placeholder="Matches the physical book"
-                />
-              </Field>
-
-              <Field label="Notes (optional)">
-                <Input
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                />
-              </Field>
-
-              <div className="sm:col-span-2">
-                <Button
-                  type="submit"
-                  disabled={
-                    logVisit.isPending ||
-                    !selected ||
-                    selected.isBarred
-                  }
-                >
-                  {logVisit.isPending ? "Logging…" : "Log Visit"}
-                </Button>
-              </div>
-            </form>
-          </section>
-        </div>
-
-        <aside
-          id="reception-policy"
-          className="scroll-mt-24 h-fit space-y-3 rounded-xl border border-border bg-card p-4"
-        >
-          <div className="flex items-center gap-2">
-            <AlertTriangle
-              className={cn(
-                "size-4",
-                overLimit
-                  ? "text-destructive"
-                  : "text-amber-500",
-              )}
-            />
-
-            <h2 className="text-sm font-semibold">
-              Visit Policy & Alert
-            </h2>
-          </div>
-
-          <PolicyBar
-            label="2 visits/mo"
-            used={monthUsed}
-            max={LIMITS.month}
-          />
-
-          <PolicyBar
-            label="12/yr"
-            used={yearUsed}
-            max={LIMITS.year}
-          />
-
-          <PolicyBar
-            label="6 on-site"
-            used={onSiteForMember}
-            max={LIMITS.onSite}
-          />
-
-          {selected ? (
-            <p className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-              {selected.guestName}: {selected.visitCount}/3 visits toward
-              registration.
-            </p>
-          ) : null}
-        </aside>
+        {directory}
       </div>
 
-      <section
-        id="reception-onsite"
-        className="scroll-mt-24 space-y-3 rounded-xl border border-border bg-card p-4"
-      >
-        <h2 className="text-sm font-semibold">
-          Guests on site ({onSite.length})
-        </h2>
-
-        <OnSiteTable
-          rows={onSite}
-          actions={
-            canOperate
-              ? (row) => (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => signOut.mutate(row.visitId)}
-                    disabled={signOut.isPending}
-                  >
-                    <LogOut className="size-3.5" />
-                    Time out
-                  </Button>
-                )
-              : undefined
-          }
-        />
-        <ListPagination
-          page={visitPage}
-          pageSize={visitPageSize}
-          totalCount={visitPageData.totalCount}
-          totalPages={visitPageData.totalPages}
-          onPageChange={setVisitPage}
-          onPageSizeChange={setVisitPageSize}
-        />
-      </section>
+      <VisitDrawer visit={viewing} onClose={() => setViewing(null)} onHostHistory={openHostHistory} canBrowseHistory={canViewAll} />
     </PageFrame>
   );
 }
 
-function OnSiteTable({
-  rows,
-  actions,
+function AllVisitsPage({
+  canOperate,
+  signingOut,
+  onView,
+  onHostHistory,
+  onSignOut,
+  drawer,
 }: {
-  rows: ReceptionVisit[];
-  actions?: (row: ReceptionVisit) => React.ReactNode;
+  canOperate: boolean;
+  signingOut: boolean;
+  onView: (row: ReceptionVisitRow) => void;
+  onHostHistory: (row: ReceptionVisitRow) => void;
+  onSignOut: (row: ReceptionVisitRow) => void;
+  drawer: React.ReactNode;
+}) {
+  const navigate = useNavigate();
+  const [query, setQuery] = useState("");
+  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(VISIT_PAGE_SIZE);
+
+  const visits = useQuery({
+    queryKey: ["reception-visits", "all", page, pageSize],
+    queryFn: () =>
+      apiRequest<PagedResult<ReceptionVisitRow>>(
+        `/api/reception/visits?${pagedQuery({ page, pageSize })}`,
+      ),
+  });
+
+  const pageData = visits.data ?? emptyPage<ReceptionVisitRow>(page, pageSize);
+  const today = kenyaTodayISO();
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return pageData.items.filter((row) => {
+      if (dateFilter === "today" && row.visitDate.slice(0, 10) !== today) return false;
+      if (dateFilter === "week" && !withinDays(row.visitDate, 7)) return false;
+      if (!needle) return true;
+      return [row.guestName, row.accompanyingMemberName, row.email, row.purpose]
+        .some((value) => (value ?? "").toLowerCase().includes(needle));
+    });
+  }, [pageData.items, query, dateFilter, today]);
+
+  return (
+    <PageFrame width="lg" className="max-w-none">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <Button type="button" variant="ghost" size="sm" className="-ml-2 mb-1" onClick={() => void navigate({ to: "/reception", search: {} })}>
+            Back to reception
+          </Button>
+          <h1 className="text-xl font-semibold">All visits</h1>
+          <p className="text-sm text-muted-foreground">The full guest book, loaded only when you open this page.</p>
+        </div>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:max-w-md">
+          <span className="relative min-w-[10rem] flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="h-8 pl-8"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search guest or host"
+            />
+          </span>
+          <select
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+            value={dateFilter}
+            onChange={(event) => setDateFilter(event.target.value as DateFilter)}
+            aria-label="Filter by date"
+          >
+            <option value="all">Any date</option>
+            <option value="today">Today</option>
+            <option value="week">Last 7 days</option>
+          </select>
+        </div>
+      </div>
+
+      <section className="flex min-h-[28rem] flex-col rounded-xl border border-border bg-card">
+        <VisitTable
+          rows={filtered}
+          emptyLabel={visits.isFetching ? "Loading the guest book…" : "No visits match this filter."}
+          canOperate={canOperate}
+          canBrowseHistory
+          signingOut={signingOut}
+          onView={onView}
+          onHostHistory={onHostHistory}
+          onSignOut={onSignOut}
+        />
+        <div className="border-t border-border px-2 py-1">
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            totalCount={pageData.totalCount}
+            totalPages={pageData.totalPages}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        </div>
+      </section>
+      {drawer}
+    </PageFrame>
+  );
+}
+
+function GuestLookup() {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [submitted, setSubmitted] = useState("");
+
+  const lookup = useQuery({
+    queryKey: ["reception-visit-lookup", submitted],
+    queryFn: () =>
+      apiRequest<ReceptionVisitRow[]>(`/api/reception/visits/lookup?name=${encodeURIComponent(submitted)}`),
+    enabled: open && submitted.length >= 2,
+  });
+
+  const matches = lookup.data ?? [];
+
+  return (
+    <div className="border-b border-border px-4 py-3">
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) {
+            setName("");
+            setSubmitted("");
+          }
+        }}
+      >
+        <DialogTrigger asChild>
+          <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto">
+            <Search className="size-3.5" />
+            Look up guest
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Guest lookup</DialogTitle>
+            <DialogDescription>
+              Search by guest name to see visit date, host, purpose, and guest book entry number.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="flex flex-wrap items-center gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setSubmitted(name.trim());
+            }}
+          >
+            <span className="relative min-w-[12rem] flex-1">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="h-9 pl-8"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Guest name"
+                aria-label="Guest name"
+                autoFocus
+              />
+            </span>
+            <Button type="submit" size="sm" disabled={name.trim().length < 2 || lookup.isFetching}>
+              {lookup.isFetching ? "Looking up…" : "Look up"}
+            </Button>
+          </form>
+          {submitted.length >= 2 ? (
+            <div className="space-y-2">
+              {lookup.isError ? (
+                <p className="text-sm text-destructive">Could not look up that name. Try again.</p>
+              ) : lookup.isFetching ? (
+                <p className="text-sm text-muted-foreground">Searching visits…</p>
+              ) : matches.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No visit found for that name.</p>
+              ) : (
+                matches.map((row) => (
+                  <div key={row.visitId} className="rounded-md border border-border px-3 py-2.5 text-sm">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-medium">{row.guestName}</p>
+                      <StatusBadge current={row.isCurrent} label={row.status} />
+                    </div>
+                    <p className="mt-1.5 text-sm font-medium text-foreground">
+                      Guest book entry:{" "}
+                      <span className="font-mono tracking-wide">{row.guestBookEntryNo || "—"}</span>
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Host {row.accompanyingMemberName || "—"}
+                      {" · "}
+                      {formatKenyaDate(row.visitDate)}
+                      {row.timeIn ? ` · in ${formatTime(row.timeIn)}` : ""}
+                      {row.timeOut ? ` · out ${formatTime(row.timeOut)}` : ""}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{row.purpose || "Purpose not recorded"}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Enter at least two letters of the guest name.</p>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function VisitTable({
+  rows,
+  emptyLabel,
+  canOperate,
+  canBrowseHistory,
+  signingOut,
+  onView,
+  onHostHistory,
+  onSignOut,
+}: {
+  rows: ReceptionVisitRow[];
+  emptyLabel: string;
+  canOperate: boolean;
+  canBrowseHistory: boolean;
+  signingOut: boolean;
+  onView: (row: ReceptionVisitRow) => void;
+  onHostHistory: (row: ReceptionVisitRow) => void;
+  onSignOut: (row: ReceptionVisitRow) => void;
 }) {
   if (rows.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        No guests currently signed in.
-      </p>
-    );
+    return <p className="px-4 py-8 text-sm text-muted-foreground">{emptyLabel}</p>;
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] text-left text-sm">
-        <thead>
+    <div className="min-h-0 flex-1 overflow-auto">
+      <table className="w-full text-left text-sm">
+        <thead className="sticky top-0 bg-card">
           <tr className="border-b border-border text-xs text-muted-foreground">
-            <th className="py-2 pr-3 font-medium">Guest name</th>
-            <th className="py-2 pr-3 font-medium">Member</th>
-            <th className="py-2 pr-3 font-medium">Phone</th>
-            <th className="py-2 pr-3 font-medium">3-visit counter</th>
-            <th className="py-2 pr-3 font-medium">Time in</th>
-            <th className="py-2 pr-3 font-medium">Visit code</th>
-            {actions ? (
-              <th className="py-2 font-medium">Actions</th>
-            ) : null}
+            <th className="px-3 py-2 font-medium">Guest</th>
+            <th className="px-3 py-2 font-medium">Host</th>
+            <th className="hidden px-3 py-2 font-medium md:table-cell">When</th>
+            <th className="px-3 py-2 font-medium">Status</th>
+            <th className="px-3 py-2 text-right font-medium">Action</th>
           </tr>
         </thead>
-
         <tbody>
           {rows.map((row) => (
-            <tr
-              key={row.visitId}
-              className="border-b border-border last:border-0"
-            >
-              <td className="py-2.5 pr-3 font-medium">
-                {row.guestName}
+            <tr key={row.visitId} className="border-b border-border last:border-0">
+              <td className="px-3 py-2.5">
+                <p className="font-medium">{row.guestName}</p>
+                <p className="text-xs text-muted-foreground">{canBrowseHistory ? row.email || row.purpose || "—" : row.purpose || "—"}</p>
               </td>
-
-              <td className="py-2.5 pr-3">
-                {row.accompanyingMemberName ||
-                  row.introducedByName ||
-                  "—"}
+              <td className="px-3 py-2.5">{row.accompanyingMemberName || "—"}</td>
+              <td className="hidden px-3 py-2.5 text-muted-foreground md:table-cell">
+                {formatKenyaDate(row.visitDate)}
+                {row.timeIn ? ` · ${formatTime(row.timeIn)}` : ""}
               </td>
-
-              <td className="py-2.5 pr-3">
-                {row.phone ?? "—"}
+              <td className="px-3 py-2.5">
+                <StatusBadge current={row.isCurrent} label={row.status} />
               </td>
-
-              <td className="py-2.5 pr-3">
-                {row.visitCount}/3
+              <td className="px-3 py-2.5">
+                <div className="flex items-center justify-end gap-1">
+                  {row.isCurrent && canOperate ? (
+                    <Button type="button" size="sm" variant="outline" disabled={signingOut} onClick={() => onSignOut(row)}>
+                      Sign out
+                    </Button>
+                  ) : null}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button type="button" variant="ghost" size="icon" className="size-8" aria-label={`Actions for ${row.guestName}`}>
+                        <MoreHorizontal className="size-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={() => onView(row)}>View details</DropdownMenuItem>
+                      {canBrowseHistory ? (
+                        <DropdownMenuItem onSelect={() => onHostHistory(row)}>Host history</DropdownMenuItem>
+                      ) : null}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </td>
-
-              <td className="py-2.5 pr-3">
-                {formatTime(row.timeIn)}
-              </td>
-
-              <td className="py-2.5 pr-3 font-mono text-xs">
-                {row.visitSlipCode ??
-                  row.guestBookEntryNo ??
-                  "—"}
-              </td>
-
-              {actions ? (
-                <td className="py-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className="grid size-7 place-items-center rounded-full bg-muted text-muted-foreground">
-                      <UserRound className="size-3.5" />
-                    </span>
-
-                    {actions(row)}
-                  </div>
-                </td>
-              ) : null}
             </tr>
           ))}
         </tbody>
@@ -975,73 +447,107 @@ function OnSiteTable({
   );
 }
 
-function PolicyBar({
-  label,
-  used,
-  max,
+function StatusBadge({ current, label }: { current: boolean; label?: string | null }) {
+  const text = label || (current ? "On site" : "Signed out");
+  return (
+    <span
+      className={cn(
+        "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
+        current ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600",
+      )}
+    >
+      {text}
+    </span>
+  );
+}
+
+function VisitDrawer({
+  visit,
+  onClose,
+  onHostHistory,
+  canBrowseHistory,
 }: {
-  label: string;
-  used: number;
-  max: number;
+  visit: ReceptionVisitRow | null;
+  onClose: () => void;
+  onHostHistory: (row: ReceptionVisitRow) => void;
+  canBrowseHistory: boolean;
 }) {
-  const ratio = Math.min(1, used / Math.max(max, 1));
+  const detail = useQuery({
+    queryKey: ["reception-visit", visit?.visitId],
+    queryFn: () => apiRequest<ReceptionVisitRow>(`/api/reception/visits/${visit?.visitId}`),
+    enabled: Boolean(visit?.visitId),
+  });
+  const shown = detail.data ?? visit;
 
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-muted-foreground">{label}</span>
+    <Sheet open={Boolean(visit)} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>{shown?.guestName ?? "Visit"}</SheetTitle>
+        </SheetHeader>
+        {shown ? (
+          <div className="mt-4 space-y-4 text-sm">
+            <dl className="grid gap-3">
+              <Detail label="Host" value={shown.accompanyingMemberName || "—"} />
+              <Detail label="Date" value={`${formatKenyaDate(shown.visitDate)}${shown.timeIn ? ` · in ${formatTime(shown.timeIn)}` : ""}${shown.timeOut ? ` · out ${formatTime(shown.timeOut)}` : ""}`} />
+              {canBrowseHistory ? <Detail label="Email" value={shown.email || "—"} /> : null}
+              <Detail label="Purpose" value={shown.purpose || "—"} />
+              <Detail label="Guest book entry" value={shown.guestBookEntryNo || "—"} />
+              <Detail label="Status" value={shown.status || (shown.isCurrent ? "On site" : "Signed out")} />
+            </dl>
+            {canBrowseHistory ? (
+              <div>
+                <p className="text-xs text-muted-foreground">Signature</p>
+                <div className="mt-1">
+                  {detail.isFetching ? (
+                    <p className="text-muted-foreground">Loading signature…</p>
+                  ) : shown.signature?.startsWith("data:image") ? (
+                    <img src={shown.signature} alt="Guest signature" className="h-24 rounded-md border border-border bg-background" />
+                  ) : shown.signature?.startsWith("typed:") ? (
+                    <p className="font-serif text-lg">{shown.signature.slice(6)}</p>
+                  ) : (
+                    <p className="text-muted-foreground">{shown.hasSignature ? "Signed" : "No signature stored"}</p>
+                  )}
+                </div>
+              </div>
+            ) : null}
+            {canBrowseHistory ? (
+              <Button type="button" variant="outline" onClick={() => onHostHistory(shown)}>
+                View this host's history
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </SheetContent>
+    </Sheet>
+  );
+}
 
-        <span
-          className={
-            used >= max ? "font-medium text-destructive" : ""
-          }
-        >
-          {used}/{max}
-        </span>
-      </div>
-
-      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-        <div
-          className={cn(
-            "h-full rounded-full",
-            used >= max ? "bg-destructive" : "bg-primary",
-          )}
-          style={{ width: `${ratio * 100}%` }}
-        />
-      </div>
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="font-medium">{value}</dd>
     </div>
   );
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="grid gap-1 text-sm">
-      <span className="text-xs font-medium text-muted-foreground">
-        {label}
-      </span>
-
-      {children}
-    </label>
-  );
+function withinDays(value: string, days: number) {
+  const day = value.slice(0, 10);
+  const then = new Date(`${day}T00:00:00`);
+  if (Number.isNaN(then.getTime())) return false;
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - (days - 1));
+  return then >= start;
 }
 
 function formatTime(value?: string | null) {
   if (!value) return "—";
-
   const [hours, minutes] = value.split(":");
   const hour = Number(hours);
-
-  if (Number.isNaN(hour)) {
-    return value;
-  }
-
-  const suffix = hour >= 12 ? "PM" : "AM";
-
-  return `${hour % 12 || 12}:${minutes ?? "00"} ${suffix}`;
+  if (Number.isNaN(hour)) return value;
+  const suffix = hour >= 12 ? "pm" : "am";
+  const hour12 = hour % 12 || 12;
+  return `${hour12}:${minutes ?? "00"} ${suffix}`;
 }

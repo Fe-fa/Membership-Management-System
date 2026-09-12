@@ -296,6 +296,15 @@ export type ApplicationDraft = {
   };
   clubs: z.input<typeof clubsSchema>;
   consent: Partial<z.input<typeof consentSchema>>;
+  applicationPath?: {
+    category: "STANDARD" | "CHILD_OF_MEMBER";
+    parentAccountId?: number | null;
+    parentProfileId?: number | null;
+    parentMembershipNo?: string | null;
+    parentName?: string | null;
+    parentContinuousYears?: number;
+    entranceFeeWaiverEligible?: boolean;
+  };
 };
 
 export type StepKey = keyof ApplicationDraft | "review";

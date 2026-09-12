@@ -7,6 +7,7 @@ using ClubManagement.Services.Finance;
 using ClubManagement.Services.MembershipApplication;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace ClubManagement.Services.MembershipAccount;
 
@@ -15,10 +16,17 @@ public interface IMemberDashboardService
     Task<MemberDashboardDto?> GetMineAsync(long profileId, CancellationToken cancellationToken);
     Task<MemberSubscriptionDto?> GetSubscriptionAsync(long profileId, CancellationToken cancellationToken);
     Task<PaymentRowDto> PaySubscriptionAsync(long profileId, MemberPayRequest request, long? actorUserId, CancellationToken cancellationToken);
+    Task<MpesaStkPushResultDto> InitiateMpesaStkAsync(long profileId, MpesaStkPushRequest request, CancellationToken cancellationToken);
     Task<IReadOnlyList<EndorsementInviteDto>> ListInvitesAsync(long profileId, CancellationToken cancellationToken);
     Task<IReadOnlyList<MemberNotificationDto>> ListNotificationsAsync(long profileId, CancellationToken cancellationToken);
     Task<IReadOnlyList<EndorsementHistoryDto>> ListHistoryAsync(long profileId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<EndorsementHistoryDto>> SearchHistoryAsync(long profileId, string? query, CancellationToken cancellationToken);
+    Task<EndorsementHistoryDto> GetHistoryAsync(long profileId, long endorsementId, CancellationToken cancellationToken);
+    Task<EndorsementHistoryDto> UpdateHistoryAsync(long profileId, long endorsementId, UpdateEndorsementHistoryRequest request, long? actorUserId, CancellationToken cancellationToken);
+    Task HideHistoryAsync(long profileId, long endorsementId, CancellationToken cancellationToken);
+    Task RestoreHistoryAsync(long profileId, long endorsementId, CancellationToken cancellationToken);
     Task CompleteEndorsementAsync(long profileId, long applicationId, CompleteEndorsementRequest request, long? actorUserId, CancellationToken cancellationToken);
+    Task DeclineEndorsementAsync(long profileId, long applicationId, DeclineEndorsementRequest request, long? actorUserId, CancellationToken cancellationToken);
     Task<MemberDocumentsDto> GetDocumentsAsync(long profileId, CancellationToken cancellationToken);
     Task WithdrawConsentAsync(long profileId, long? actorUserId, CancellationToken cancellationToken);
     Task<ReciprocalSummaryDto> ReciprocalSummaryAsync(long profileId, CancellationToken cancellationToken);
@@ -31,6 +39,7 @@ public class MemberDashboardService : IMemberDashboardService
 {
     private readonly ApplicationModuleDbContext _db;
     private readonly IFinanceService _finance;
+    private readonly INonMembershipBillingService _nmBilling;
     private readonly IMemberAccountProvisioner _accounts;
     private readonly IEndorsementInviteService _endorsementInvites;
     private readonly IManagerStageService _managerStage;
@@ -38,12 +47,14 @@ public class MemberDashboardService : IMemberDashboardService
     public MemberDashboardService(
         ApplicationModuleDbContext db,
         IFinanceService finance,
+        INonMembershipBillingService nmBilling,
         IMemberAccountProvisioner accounts,
         IEndorsementInviteService endorsementInvites,
         IManagerStageService managerStage)
     {
         _db = db;
         _finance = finance;
+        _nmBilling = nmBilling;
         _accounts = accounts;
         _endorsementInvites = endorsementInvites;
         _managerStage = managerStage;
@@ -74,6 +85,12 @@ public class MemberDashboardService : IMemberDashboardService
         };
         var standing = await ResolveStandingAsync(account.AccountId, priv, account.CurrentMemberStatus.Code, cancellationToken);
         var pending = await CountPendingInvitesAsync(profileId, cancellationToken);
+        var pendingProxies = await _db.Proxies.AsNoTracking()
+            .CountAsync(p =>
+                p.ProxyProfileId == profileId
+                && p.GeneralMeeting.Status != "CANCELLED"
+                && p.GeneralMeeting.Status != "HELD",
+                cancellationToken);
         var children21 = account.Profile.MDependants.Count(d =>
             string.Equals(d.RelationshipType?.Code, "CHILD", StringComparison.OrdinalIgnoreCase)
             && YearsBetween(d.DependantDob, today) >= 21);
@@ -127,6 +144,7 @@ public class MemberDashboardService : IMemberDashboardService
             Standing = standing.Code,
             StandingDetail = standing.Detail,
             PendingEndorsements = pending,
+            PendingProxies = pendingProxies,
             ChildrenRequiringOwnMembership = children21
         };
     }
@@ -139,43 +157,169 @@ public class MemberDashboardService : IMemberDashboardService
         var pays = account.MembershipType.CanAccessSubscriptions;
         var priv = hard with { PaysSubscription = pays };
         var year = DateTime.UtcNow.Year;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var due = new DateOnly(year, 1, 1);
         var posting = new DateOnly(year, 2, 28);
         var removal = new DateOnly(year, 4, 30);
-        var discount = string.Equals(account.MembershipType.Code, "SENIOR", StringComparison.OrdinalIgnoreCase) ? 50 : priv.SubscriptionDiscountPercent;
+        var years = YearsBetween(account.JoinedDate ?? account.StartDate, today);
+        var age = account.Profile?.DateOfBirth is DateOnly dob ? YearsBetween(dob, today) : (int?)null;
+        var typeCode = (account.MembershipType.Code ?? "").Trim().ToUpperInvariant();
+        var isLifeExempt = typeCode is "LIFE" or "SENIOR_LIFE" or "HONORARY"
+            || (!pays && hard.PaysSubscription == false);
+        var isSeniorByRules = (age is >= 55 && years >= 25)
+            || typeCode is "SENIOR" or "SENIOR_LIFE";
+        var discount = isLifeExempt
+            ? 0
+            : typeCode == "SENIOR" || (isSeniorByRules && typeCode != "SENIOR_LIFE")
+                ? 50
+                : priv.SubscriptionDiscountPercent;
 
-        if (!pays)
+        var asOf = new DateOnly(year, 1, 1);
+        var schedule = await _db.MembershipFeeSchedules.AsNoTracking()
+            .Where(x => x.IsActive && x.MembershipTypeId == account.MembershipTypeId && x.EffectiveDate <= asOf)
+            .OrderByDescending(x => x.EffectiveDate)
+            .FirstOrDefaultAsync(cancellationToken);
+        var fullAnnual = schedule?.AnnualSubscription ?? 0m;
+
+        var joined = account.JoinedDate ?? account.StartDate;
+        var halfYear = joined is DateOnly jd
+            && jd.Year == year
+            && jd > new DateOnly(year, 6, 30);
+
+        var joining = await ResolveJoiningDuesAsync(account, cancellationToken);
+        decimal amountDue = 0, amountPaid = 0, outstanding = 0;
+        string standingCode;
+        string detail;
+
+        if (!pays || isLifeExempt)
         {
-            return new MemberSubscriptionDto
+            standingCode = "NotApplicable";
+            detail = isLifeExempt
+                ? "Life / Senior Life members are exempt from annual subscription (Ksh 0)."
+                : "This membership class does not pay an annual subscription.";
+        }
+        else
+        {
+            await EnsureYearSubscriptionAsync(account.AccountId, account.MembershipTypeId, discount, year, cancellationToken);
+            // Mid-year joiners (after 30 June) show half-rate indicator and adjust unpaid schedule once.
+            if (halfYear)
             {
-                Standing = "NotApplicable",
-                Detail = "This membership class does not pay an annual subscription.",
-                PaysSubscription = false,
-                Year = year,
-                DueDate = due,
-                PostingDeadline = posting,
-                RemovalDeadline = removal,
-                DiscountPercent = discount
-            };
+                var subAdj = await _db.Subscriptions
+                    .FirstOrDefaultAsync(s => s.AccountId == account.AccountId && s.SubscriptionYear == year, cancellationToken);
+                if (subAdj is not null && subAdj.AmountPaid == 0 && fullAnnual > 0)
+                {
+                    var half = Math.Round(fullAnnual * (100 - discount) / 100m * 0.5m, 2, MidpointRounding.AwayFromZero);
+                    if (subAdj.AmountDue != half)
+                    {
+                        subAdj.AmountDue = half;
+                        subAdj.ArrearsAmount = Math.Max(0, half - subAdj.AmountPaid);
+                        await _db.SaveChangesAsync(cancellationToken);
+                    }
+                }
+            }
+
+            var sub = await _db.Subscriptions.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.AccountId == account.AccountId && s.SubscriptionYear == year, cancellationToken);
+            amountDue = sub?.AmountDue ?? 0;
+            amountPaid = sub?.AmountPaid ?? 0;
+            outstanding = Math.Max(0, amountDue - amountPaid);
+            var standing = await ResolveStandingAsync(account.AccountId, priv, account.CurrentMemberStatus.Code, cancellationToken);
+            standingCode = standing.Code;
+            detail = standing.Detail;
         }
 
-        await EnsureYearSubscriptionAsync(account.AccountId, account.MembershipTypeId, discount, year, cancellationToken);
-        var sub = await _db.Subscriptions.AsNoTracking()
-            .FirstOrDefaultAsync(s => s.AccountId == account.AccountId && s.SubscriptionYear == year, cancellationToken);
-        var standing = await ResolveStandingAsync(account.AccountId, priv, account.CurrentMemberStatus.Code, cancellationToken);
+        var clubCredit = Math.Max(0, joining.Paid - joining.Due) + Math.Max(0, amountPaid - amountDue);
+        var duesBalance = outstanding + joining.Outstanding;
+        var canVote = account.MembershipType.CanVote;
+        var votingBlocked = canVote && duesBalance > 0;
+
+        // Heal stale POSTED/REMOVED flags once the ledger is fully paid.
+        if (duesBalance <= 0)
+        {
+            var statusCode = (account.CurrentMemberStatus?.Code ?? "").Trim().ToUpperInvariant();
+            if (statusCode is "REMOVED" or "POSTED")
+            {
+                var active = await _db.MemberStatuses.FirstOrDefaultAsync(s => s.Code == "ACTIVE", cancellationToken);
+                if (active is not null)
+                {
+                    account.CurrentMemberStatusId = active.MemberStatusId;
+                    account.IsActive = true;
+                    account.EndDate = null;
+                    await _db.SaveChangesAsync(cancellationToken);
+                    account.CurrentMemberStatus = active;
+                }
+            }
+            if (standingCode is "AtRiskOfRemoval" or "Posted")
+            {
+                standingCode = "InGoodStanding";
+                detail = "Joining fee and current-year subscription are settled.";
+            }
+        }
+
         return new MemberSubscriptionDto
         {
-            Standing = standing.Code,
-            Detail = standing.Detail,
-            PaysSubscription = true,
+            Standing = standingCode,
+            Detail = detail,
+            PaysSubscription = pays && !isLifeExempt,
             Year = year,
-            AmountDue = sub?.AmountDue ?? 0,
-            AmountPaid = sub?.AmountPaid ?? 0,
-            Outstanding = Math.Max(0, (sub?.AmountDue ?? 0) - (sub?.AmountPaid ?? 0)),
+            AmountDue = amountDue,
+            AmountPaid = amountPaid,
+            Outstanding = outstanding,
             DueDate = due,
             PostingDeadline = posting,
             RemovalDeadline = removal,
-            DiscountPercent = discount
+            DiscountPercent = discount,
+            JoiningFeeDue = joining.Due,
+            JoiningPaid = joining.Paid,
+            JoiningOutstanding = joining.Outstanding,
+            EntranceFeeWaived = joining.Waived,
+            Balance = duesBalance,
+            MembershipNo = account.MembershipNo,
+            MembershipTypeCode = account.MembershipType.Code,
+            MembershipTypeName = account.MembershipType.Name,
+            FullAnnualRate = fullAnnual,
+            IsLifeExempt = isLifeExempt,
+            IsSeniorMember = isSeniorByRules,
+            HalfYearProrated = halfYear,
+            CanVote = canVote,
+            VotingBlockedByArrears = votingBlocked,
+            ClubCreditBalance = clubCredit,
+            ContinuousMembershipYears = years,
+            AgeYears = age,
+            StatusCode = account.CurrentMemberStatus?.Code ?? ""
+        };
+    }
+
+    public async Task<MpesaStkPushResultDto> InitiateMpesaStkAsync(
+        long profileId,
+        MpesaStkPushRequest request,
+        CancellationToken cancellationToken)
+    {
+        var account = await LoadAccountAsync(profileId, cancellationToken)
+            ?? throw new InvalidOperationException("Membership account was not found.");
+        if (request.Amount <= 0)
+            throw new InvalidOperationException("STK amount must be greater than zero.");
+
+        var phone = NormalizeKenyaMpesaPhone(request.Phone)
+            ?? throw new InvalidOperationException("Enter a valid Kenyan M-Pesa phone (07… / 01… / 254…).");
+
+        // Gateway integration point: until Safaricom Daraja credentials are configured,
+        // return a simulated checkout id so the portal can complete the STK UX flow.
+        var token = Guid.NewGuid().ToString("N")[..12].ToUpperInvariant();
+        var checkoutId = $"ws_CO_{DateTime.UtcNow:yyyyMMddHHmmss}_{token}";
+        var merchantId = $"ACEA-{account.MembershipNo ?? account.AccountId.ToString()}-{token}";
+        var reference = string.IsNullOrWhiteSpace(request.AccountReference)
+            ? account.MembershipNo ?? $"ACEA-{account.AccountId}"
+            : request.AccountReference.Trim();
+
+        return new MpesaStkPushResultDto
+        {
+            CheckoutRequestId = checkoutId,
+            MerchantRequestId = merchantId,
+            CustomerMessage = $"STK push sent to {phone} for {request.Amount:0.00} KES ({reference}). Approve on your phone, then enter the M-Pesa code below.",
+            Status = "PENDING",
+            Phone = phone,
+            Amount = request.Amount
         };
     }
 
@@ -183,15 +327,177 @@ public class MemberDashboardService : IMemberDashboardService
     {
         var account = await LoadAccountAsync(profileId, cancellationToken)
             ?? throw new InvalidOperationException("Membership account was not found.");
-        var priv = MemberClassPrivileges.ForCode(account.MembershipType.Code);
-        if (!priv.PaysSubscription)
+
+        var feeCode = (request.FeeTypeCode ?? "ANNUAL").Trim().ToUpperInvariant().Replace("-", "_").Replace(" ", "_");
+        if (feeCode is "SUBSCRIPTION" or "ANNUAL_SUBSCRIPTION") feeCode = "ANNUAL";
+        if (feeCode is "ENTRANCE" or "ENTRANCE_FEE" or "JOINING_FEE") feeCode = "JOINING";
+        if (feeCode is "ROOM" or "ACCOM" or "ACCOMMODATION_FEE") feeCode = "ACCOMMODATION";
+        if (feeCode is "CUSTOM" or "MISC" or "OTHER_FEE") feeCode = "OTHER";
+        if (feeCode is "OUTSIDE_FOOD" or "OUTSIDE_CATERING") feeCode = "CORKAGE";
+
+        var allowed = feeCode is "JOINING" or "ANNUAL" or "ACCOMMODATION" or "CORKAGE" or "OTHER";
+        if (!allowed)
+            throw new InvalidOperationException("Fee type must be JOINING, ANNUAL, ACCOMMODATION, CORKAGE or OTHER.");
+
+        if (feeCode == "ANNUAL" && !account.MembershipType.CanAccessSubscriptions)
             throw new InvalidOperationException("This membership class does not pay subscriptions.");
 
-        var fee = await _db.FeeTypes.FirstAsync(x => x.Code == "ANNUAL", cancellationToken);
-        return await _finance.RecordPaymentAsync(new RecordPaymentRequest(
-            account.AccountId, account.ApplicationId, fee.FeeTypeId, request.PaymentMethodId,
-            request.Amount, request.PaymentDate, request.ChequeNo, request.MpesaCode, request.ReferenceNote,
-            request.PaymentStatusCode), actorUserId, cancellationToken);
+        var fee = await _db.FeeTypes.FirstOrDefaultAsync(
+                x => x.Code == feeCode || x.Code == request.FeeTypeCode,
+                cancellationToken);
+        if (fee is null)
+        {
+            fee = new Entities.Lookups.FeeType
+            {
+                Code = feeCode,
+                Name = feeCode switch
+                {
+                    "ACCOMMODATION" => "Accommodation / room",
+                    "CORKAGE" => "Corkage / outside food",
+                    "OTHER" => "Other club charge",
+                    _ => feeCode
+                },
+                SortOrder = 50,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.FeeTypes.Add(fee);
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        var method = await _db.PaymentMethods.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.PaymentMethodId == request.PaymentMethodId, cancellationToken)
+            ?? throw new InvalidOperationException("Payment method was not found.");
+        var methodCode = (method.Code ?? "").Trim().ToUpperInvariant().Replace("-", "_");
+
+        if (methodCode is "CLUB_CARD" or "ACCOUNT_BALANCE" or "CLUB_CREDIT" or "MEMBER_ACCOUNT")
+        {
+            var subSnapshot = await GetSubscriptionAsync(profileId, cancellationToken);
+            var credit = subSnapshot?.ClubCreditBalance ?? 0;
+            if (request.Amount > credit)
+                throw new InvalidOperationException(
+                    $"Club card balance is {credit:0.00} KES — not enough to cover {request.Amount:0.00} KES.");
+            request.PaymentStatusCode = "PAID";
+        }
+
+        var note = request.ReferenceNote;
+        if (!string.IsNullOrWhiteSpace(request.LineDescription))
+        {
+            var line = request.LineDescription.Trim();
+            note = string.IsNullOrWhiteSpace(note) ? line : $"{line} | {note}";
+        }
+        if (request.NmChargeId is long nmId && feeCode is "ACCOMMODATION" or "CORKAGE" or "OTHER")
+        {
+            var kind = feeCode switch
+            {
+                "ACCOMMODATION" => "accommodation",
+                "CORKAGE" => "corkage",
+                _ => "custom",
+            };
+            var tag = $"nm:{kind}:{nmId}";
+            note = string.IsNullOrWhiteSpace(note) ? tag : $"{note} | {tag}";
+        }
+        if (!string.IsNullOrWhiteSpace(request.MpesaPhone))
+        {
+            var phoneNote = $"M-Pesa phone: {request.MpesaPhone.Trim()}";
+            note = string.IsNullOrWhiteSpace(note) ? phoneNote : $"{note} | {phoneNote}";
+        }
+
+        var row = await _finance.RecordPaymentAsync(new RecordPaymentRequest(
+            account.AccountId,
+            account.ApplicationId,
+            fee.FeeTypeId,
+            request.PaymentMethodId,
+            request.Amount,
+            request.PaymentDate,
+            request.ChequeNo,
+            request.MpesaCode,
+            note,
+            request.PaymentStatusCode,
+            request.ChequeBankName,
+            request.ChequeBankCode,
+            request.ChequeDate,
+            request.ChequeFileName,
+            request.ChequeFileUrl), actorUserId, cancellationToken);
+
+        var statusCode = (row.StatusCode ?? row.Status ?? "").Trim().ToUpperInvariant().Replace("-", "_").Replace(" ", "_");
+        if (statusCode is "PAID" or "SETTLED" or "WAIVED"
+            && feeCode is "ACCOMMODATION" or "CORKAGE" or "OTHER")
+        {
+            try
+            {
+                await _nmBilling.SettleFromMemberPaymentAsync(
+                    account.AccountId,
+                    feeCode,
+                    request.Amount,
+                    method.Code ?? "CASH",
+                    request.MpesaCode ?? request.ChequeNo ?? request.ReferenceNote,
+                    request.NmChargeId,
+                    actorUserId,
+                    cancellationToken);
+            }
+            catch (InvalidOperationException)
+            {
+                // Payment recorded; charge may already be settled or not found.
+            }
+        }
+
+        return row;
+    }
+
+    private static string? NormalizeKenyaMpesaPhone(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var digits = new string(raw.Where(char.IsDigit).ToArray());
+        if (digits.StartsWith("0") && digits.Length == 10)
+            digits = "254" + digits[1..];
+        if (digits.StartsWith("7") && digits.Length == 9)
+            digits = "254" + digits;
+        if (digits.StartsWith("1") && digits.Length == 9)
+            digits = "254" + digits;
+        if (digits.Length == 12 && digits.StartsWith("254"))
+            return digits;
+        return null;
+    }
+
+    private async Task<(decimal Due, decimal Paid, decimal Outstanding, bool Waived)> ResolveJoiningDuesAsync(
+        Entities.MembershipAccount.MAccount account,
+        CancellationToken cancellationToken)
+    {
+        var waived = account.EntranceFeeWaivedFlag;
+        decimal due = waived ? 0 : (account.EntranceFeeAmount ?? 0);
+        if (!waived && due <= 0 && account.Profile?.DateOfBirth is DateOnly dob)
+        {
+            try
+            {
+                var quote = await _finance.QuoteAsync(
+                    account.MembershipTypeId,
+                    dob,
+                    DateOnly.FromDateTime(DateTime.UtcNow),
+                    cancellationToken);
+                due = quote.PayableJoining;
+            }
+            catch
+            {
+                // Keep due at 0 when no fee schedule exists.
+            }
+        }
+
+        var joiningFee = await _db.FeeTypes.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Code == "JOINING" || x.Code == "Joining", cancellationToken);
+        decimal paid = 0;
+        if (joiningFee is not null)
+        {
+            paid = await _db.Transactions.AsNoTracking()
+                .Where(t =>
+                    t.AccountId == account.AccountId
+                    && t.FeeTypeId == joiningFee.FeeTypeId
+                    && (t.PaymentStatus.Code == "PAID" || t.PaymentStatus.Code == "WAIVED"))
+                .SumAsync(t => (decimal?)t.Amount, cancellationToken) ?? 0;
+        }
+
+        var outstanding = Math.Max(0, due - paid);
+        return (due, paid, outstanding, waived);
     }
 
     public async Task<IReadOnlyList<EndorsementInviteDto>> ListInvitesAsync(long profileId, CancellationToken cancellationToken)
@@ -235,23 +541,104 @@ public class MemberDashboardService : IMemberDashboardService
 
     public async Task<IReadOnlyList<EndorsementHistoryDto>> ListHistoryAsync(long profileId, CancellationToken cancellationToken)
     {
-        return await _db.Endorsements.AsNoTracking()
-            .Where(e => e.EndorserProfileId == profileId
-                && e.PersonalKnowledge != null && e.PersonalKnowledge != ""
-                && e.ProfessionalKnowledge != null && e.ProfessionalKnowledge != ""
-                && e.ValueAddition != null && e.ValueAddition != "")
-            .OrderByDescending(e => e.CreatedAt)
-            .Select(e => new EndorsementHistoryDto
-            {
-                ApplicationId = e.ApplicationId,
-                ApplicationNo = e.Application.ApplicationNo,
-                ApplicantName = e.Application.Applicant.FirstName + " " + e.Application.Applicant.LastName,
-                Role = e.EndorserRole,
-                Outcome = e.Application.Status.Name,
-                CompletedAt = e.CreatedAt
-            })
+        var rows = await LoadHistoryRowsAsync(profileId, includeHidden: false, cancellationToken);
+        return rows
+            .Where(r => !r.Hidden)
+            .OrderByDescending(r => r.CompletedAt)
+            .Take(200)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<EndorsementHistoryDto>> SearchHistoryAsync(long profileId, string? query, CancellationToken cancellationToken)
+    {
+        var q = (query ?? "").Trim();
+        var rows = await LoadHistoryRowsAsync(profileId, includeHidden: true, cancellationToken);
+        IEnumerable<EndorsementHistoryDto> filtered = rows;
+        if (q.Length == 0)
+            filtered = rows.Where(r => r.Hidden);
+        else if (q.Length >= 2)
+        {
+            filtered = rows.Where(r =>
+                ContainsInsensitive(r.ApplicantName, q)
+                || ContainsInsensitive(r.ApplicationNo, q)
+                || ContainsInsensitive(r.Role, q)
+                || ContainsInsensitive(r.Outcome, q)
+                || ContainsInsensitive(r.MembershipType, q)
+                || ContainsInsensitive(r.PersonalKnowledge, q)
+                || ContainsInsensitive(r.DeclineReason, q)
+                || ContainsInsensitive(r.LastRejectionReason, q));
+        }
+        else
+            return Array.Empty<EndorsementHistoryDto>();
+
+        return filtered
+            .OrderByDescending(r => r.Hidden)
+            .ThenByDescending(r => r.CompletedAt)
             .Take(50)
-            .ToListAsync(cancellationToken);
+            .ToList();
+    }
+
+    public async Task<EndorsementHistoryDto> GetHistoryAsync(long profileId, long endorsementId, CancellationToken cancellationToken)
+    {
+        var endorsement = await LoadOwnedEndorsementAsync(profileId, endorsementId, cancellationToken);
+        return MapHistory(endorsement, endorsement.HiddenFromEndorser);
+    }
+
+    public async Task<EndorsementHistoryDto> UpdateHistoryAsync(long profileId, long endorsementId, UpdateEndorsementHistoryRequest request, long? actorUserId, CancellationToken cancellationToken)
+    {
+        var endorsement = await LoadOwnedEndorsementAsync(profileId, endorsementId, cancellationToken);
+        if (!HistoryHasContent(endorsement))
+            throw new InvalidOperationException("There is no endorsement statement to update.");
+
+        var declined = endorsement.IsDeclined;
+        var canEdit = CanEditHistory(endorsement);
+        if (!canEdit)
+            throw new InvalidOperationException("This record can no longer be edited because the application has moved on. You can still view or retrieve it.");
+
+        if (declined)
+        {
+            var reason = (request.DeclineReason ?? "").Trim();
+            if (reason.Length < 5)
+                throw new InvalidOperationException("Enter a rejection reason of at least 5 characters.");
+            endorsement.DeclineReason = reason;
+            endorsement.PersonalKnowledge = Endorsement.DeclinedPrefix + " " + reason;
+            endorsement.DeclinedAt ??= DateTime.UtcNow;
+            endorsement.Status = Endorsement.StatusDeclined;
+        }
+        else
+        {
+            var personal = (request.PersonalKnowledge ?? "").Trim();
+            var professional = (request.ProfessionalKnowledge ?? "").Trim();
+            var value = (request.ValueAddition ?? "").Trim();
+            if (personal.Length == 0 || professional.Length == 0 || value.Length == 0)
+                throw new InvalidOperationException("Personal, professional, and value-addition statements are required.");
+            endorsement.YearsKnownCandidate = request.YearsKnownCandidate;
+            endorsement.PersonalKnowledge = personal;
+            endorsement.ProfessionalKnowledge = professional;
+            endorsement.ValueAddition = value;
+            endorsement.Status = Endorsement.StatusComplete;
+        }
+
+        endorsement.UpdatedByUserId = actorUserId;
+        endorsement.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
+        return MapHistory(endorsement, endorsement.HiddenFromEndorser);
+    }
+
+    public async Task HideHistoryAsync(long profileId, long endorsementId, CancellationToken cancellationToken)
+    {
+        var endorsement = await LoadOwnedEndorsementAsync(profileId, endorsementId, cancellationToken);
+        endorsement.HiddenFromEndorser = true;
+        endorsement.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task RestoreHistoryAsync(long profileId, long endorsementId, CancellationToken cancellationToken)
+    {
+        var endorsement = await LoadOwnedEndorsementAsync(profileId, endorsementId, cancellationToken);
+        endorsement.HiddenFromEndorser = false;
+        endorsement.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task CompleteEndorsementAsync(long profileId, long applicationId, CompleteEndorsementRequest request, long? actorUserId, CancellationToken cancellationToken)
@@ -279,7 +666,8 @@ public class MemberDashboardService : IMemberDashboardService
 
         var existing = application.Endorsements.FirstOrDefault(e =>
             e.EndorserProfileId == profileId
-            && RolesMatch(e.EndorserRole, role));
+            && RolesMatch(e.EndorserRole, role)
+            && !e.IsDeclined);
 
         if (existing is not null)
         {
@@ -291,6 +679,9 @@ public class MemberDashboardService : IMemberDashboardService
             existing.EndorserYearOfJoining = joiningYear;
             existing.EndorserPhone = profile.Mobile;
             existing.EndorserEmail = profile.Email;
+            existing.Status = Endorsement.StatusComplete;
+            existing.DeclinedAt = null;
+            existing.DeclineReason = null;
             existing.UpdatedByUserId = actorUserId;
             existing.UpdatedAt = DateTime.UtcNow;
         }
@@ -308,6 +699,7 @@ public class MemberDashboardService : IMemberDashboardService
                 EndorserYearOfJoining = joiningYear,
                 EndorserPhone = profile.Mobile,
                 EndorserEmail = profile.Email,
+                Status = Endorsement.StatusComplete,
                 CreatedAt = DateTime.UtcNow,
                 CreatedByUserId = actorUserId
             });
@@ -326,6 +718,104 @@ public class MemberDashboardService : IMemberDashboardService
         await _db.SaveChangesAsync(cancellationToken);
         try { await _managerStage.OnEndorsementsPossiblyCompleteAsync(applicationId, cancellationToken); }
         catch { /* do not fail endorsement on notify errors */ }
+    }
+
+    public async Task DeclineEndorsementAsync(long profileId, long applicationId, DeclineEndorsementRequest request, long? actorUserId, CancellationToken cancellationToken)
+    {
+        var reason = (request.Reason ?? "").Trim();
+        if (reason.Length < 5)
+            throw new InvalidOperationException("Enter a rejection reason of at least 5 characters.");
+
+        var application = await _db.Applications
+            .Include(a => a.Endorsements)
+            .FirstOrDefaultAsync(a => a.ApplicationId == applicationId, cancellationToken)
+            ?? throw new InvalidOperationException("Application was not found.");
+
+        var role = ResolveNamedEndorserRole(application, profileId, request.EndorserRole)
+            ?? throw new InvalidOperationException("You are not named as proposer or seconder on this application.");
+        if (IsEndorsementComplete(application, role))
+            throw new InvalidOperationException("This endorsement is already complete.");
+
+        var joiningYear = await JoiningYearAsync(profileId, cancellationToken);
+        var profile = await _db.Profiles.FirstAsync(p => p.ProfileId == profileId, cancellationToken);
+        var declinedAt = DateTime.UtcNow;
+
+        var stub = application.Endorsements.FirstOrDefault(e =>
+            e.EndorserProfileId == profileId
+            && RolesMatch(e.EndorserRole, role)
+            && !e.IsDeclined
+            && string.IsNullOrWhiteSpace(e.PersonalKnowledge)
+            && string.IsNullOrWhiteSpace(e.ProfessionalKnowledge)
+            && string.IsNullOrWhiteSpace(e.ValueAddition));
+
+        if (stub is not null)
+        {
+            stub.EndorserRole = role;
+            stub.YearsKnownCandidate = null;
+            stub.PersonalKnowledge = Endorsement.DeclinedPrefix + " " + reason;
+            stub.ProfessionalKnowledge = null;
+            stub.ValueAddition = null;
+            stub.Status = Endorsement.StatusDeclined;
+            stub.DeclinedAt = declinedAt;
+            stub.DeclineReason = reason;
+            stub.EndorserYearOfJoining = joiningYear;
+            stub.EndorserPhone = profile.Mobile;
+            stub.EndorserEmail = profile.Email;
+            stub.UpdatedByUserId = actorUserId;
+            stub.UpdatedAt = declinedAt;
+        }
+        else
+        {
+            _db.Endorsements.Add(new Endorsement
+            {
+                ApplicationId = applicationId,
+                EndorserProfileId = profileId,
+                EndorserRole = role,
+                PersonalKnowledge = Endorsement.DeclinedPrefix + " " + reason,
+                Status = Endorsement.StatusDeclined,
+                DeclinedAt = declinedAt,
+                DeclineReason = reason,
+                EndorserYearOfJoining = joiningYear,
+                EndorserPhone = profile.Mobile,
+                EndorserEmail = profile.Email,
+                CreatedAt = declinedAt,
+                CreatedByUserId = actorUserId
+            });
+        }
+
+        if (NormalizeEndorserRole(role) == "PROPOSER")
+            application.ProposerProfileId = null;
+        else
+            application.SeconderProfileId = null;
+
+        ClearSupporterFromForm(application, role);
+        application.UpdatedByUserId = actorUserId;
+        application.UpdatedAt = DateTime.UtcNow;
+
+        _db.ApplicationStatusHistories.Add(new ApplicationStatusHistory
+        {
+            ApplicationId = applicationId,
+            FromStatusId = application.ApplicationStatusId,
+            ToStatusId = application.ApplicationStatusId,
+            ChangedAt = DateTime.UtcNow,
+            ChangedByUserId = actorUserId,
+            Reason = $"{ToRoleLabel(role)} declined to endorse: {reason}",
+            Action = "ENDORSEMENT_DECLINED"
+        });
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        var endorserName = string.Join(" ", new[] { profile.FirstName, profile.LastName }.Where(v => !string.IsNullOrWhiteSpace(v)));
+        try
+        {
+            await _endorsementInvites.NotifyEndorsementDeclinedAsync(
+                applicationId,
+                ToRoleLabel(role),
+                endorserName,
+                reason,
+                cancellationToken);
+        }
+        catch { /* keep the decline even if notify fails */ }
     }
 
     public async Task<IReadOnlyList<MemberNotificationDto>> ListNotificationsAsync(long profileId, CancellationToken cancellationToken)
@@ -485,7 +975,9 @@ public class MemberDashboardService : IMemberDashboardService
         "MANAGER_ENDORSEMENT_REQUEST",
         "MANAGER_ENDORSEMENT_FOLLOWUP",
         "APPLICATION_PAYMENT_REQUIRED",
-        "APPLICATION_PENDING_ITEMS"
+        "APPLICATION_PAYMENT_REJECTED",
+        "APPLICATION_PENDING_ITEMS",
+        "ENDORSEMENT_DECLINED"
     };
 
     private static readonly HashSet<string> MeetingNoticeTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -549,7 +1041,7 @@ public class MemberDashboardService : IMemberDashboardService
     {
         if (string.IsNullOrWhiteSpace(typeCode)) return false;
         var c = typeCode.ToUpperInvariant();
-        return c.Contains("ELECTION") || c.Contains("BALLOT") || c.Contains("AGM") || c.Contains("EGM");
+        return c.Contains("ELECTION") || c.Contains("BALLOT") || c.Contains("AGM") || c.Contains("EGM") || c.Contains("PROXY");
     }
 
     private static bool StatusPastEndorsement(string? status)
@@ -733,9 +1225,12 @@ public class MemberDashboardService : IMemberDashboardService
             CheckInDate = request.CheckInDate,
             CheckOutDate = request.CheckOutDate,
             RoomType = string.IsNullOrWhiteSpace(request.RoomType) ? "Standard" : request.RoomType.Trim(),
+            NightlyRate = request.NightlyRate,
             Status = "BOOKED",
             CreatedAt = DateTime.UtcNow,
-            CreatedByUserId = actorUserId
+            CreatedByUserId = actorUserId,
+            UpdatedAt = DateTime.UtcNow,
+            UpdatedByUserId = actorUserId
         };
         _db.AccommodationBookings.Add(booking);
         await _db.SaveChangesAsync(cancellationToken);
@@ -760,8 +1255,187 @@ public class MemberDashboardService : IMemberDashboardService
         if (hours < 24)
             booking.CancellationFee ??= 0;
         booking.Status = "CANCELLED";
+        booking.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
     }
+
+    private async Task<List<EndorsementHistoryDto>> LoadHistoryRowsAsync(long profileId, bool includeHidden, CancellationToken cancellationToken)
+    {
+        var endorsements = await _db.Endorsements
+            .Include(e => e.Application).ThenInclude(a => a.Applicant)
+            .Include(e => e.Application).ThenInclude(a => a.Status)
+            .Include(e => e.Application).ThenInclude(a => a.ElectionType)
+            .Include(e => e.Application).ThenInclude(a => a.ApplicationStatusHistories).ThenInclude(h => h.ToStatus)
+            .Where(e => e.EndorserProfileId == profileId)
+            .ToListAsync(cancellationToken);
+        endorsements = endorsements.Where(HistoryHasContent).ToList();
+
+        var rows = new List<EndorsementHistoryDto>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var endorsement in endorsements)
+        {
+            if (!includeHidden && endorsement.HiddenFromEndorser) continue;
+            var row = MapHistory(endorsement, endorsement.HiddenFromEndorser);
+            rows.Add(row);
+            seen.Add(HistoryKey(row.ApplicationId, row.Role));
+        }
+
+        var namedApps = await _db.Applications
+            .Include(a => a.Applicant)
+            .Include(a => a.Status)
+            .Include(a => a.ElectionType)
+            .Include(a => a.ApplicationStatusHistories).ThenInclude(h => h.ToStatus)
+            .Where(a => a.ProposerProfileId == profileId || a.SeconderProfileId == profileId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var app in namedApps)
+        {
+            var pendingStage = IsPendingEndorsementStage(app.Status?.Code);
+            if (app.ProposerProfileId == profileId)
+                TryAddNamedHistory(rows, seen, app, "PROPOSER", pendingStage, endorsements);
+            if (app.SeconderProfileId == profileId)
+                TryAddNamedHistory(rows, seen, app, "SECONDER", pendingStage, endorsements);
+        }
+
+        return rows;
+    }
+
+    private static void TryAddNamedHistory(
+        List<EndorsementHistoryDto> rows,
+        HashSet<string> seen,
+        MApplication app,
+        string role,
+        bool pendingStage,
+        List<Endorsement> endorsements)
+    {
+        var key = HistoryKey(app.ApplicationId, role);
+        if (seen.Contains(key)) return;
+        var matching = endorsements.Where(e =>
+            e.ApplicationId == app.ApplicationId && RolesMatch(e.EndorserRole, role)).ToList();
+        if (matching.Count > 0) return;
+        if (pendingStage) return;
+        rows.Add(MapNamedHistory(app, role));
+        seen.Add(key);
+    }
+
+    private async Task<Endorsement> LoadOwnedEndorsementAsync(long profileId, long endorsementId, CancellationToken cancellationToken)
+    {
+        return await _db.Endorsements
+            .Include(e => e.Application).ThenInclude(a => a.Applicant)
+            .Include(e => e.Application).ThenInclude(a => a.Status)
+            .Include(e => e.Application).ThenInclude(a => a.ElectionType)
+            .Include(e => e.Application).ThenInclude(a => a.ApplicationStatusHistories).ThenInclude(h => h.ToStatus)
+            .FirstOrDefaultAsync(e => e.EndorsementId == endorsementId && e.EndorserProfileId == profileId, cancellationToken)
+            ?? throw new InvalidOperationException("That endorsement history was not found.");
+    }
+
+    private static EndorsementHistoryDto MapHistory(Endorsement endorsement, bool hidden)
+    {
+        var app = endorsement.Application;
+        var declined = endorsement.IsDeclined;
+        var statusCode = app?.Status?.Code;
+        return new EndorsementHistoryDto
+        {
+            EndorsementId = endorsement.EndorsementId,
+            ApplicationId = endorsement.ApplicationId,
+            ApplicationNo = app?.ApplicationNo ?? "",
+            ApplicantName = ApplicantDisplayName(app?.Applicant),
+            ApplicantPhotoUrl = app?.Applicant?.PhotoUrl,
+            Role = ToRoleLabel(endorsement.EndorserRole),
+            Outcome = declined ? "Declined" : (app?.Status?.Name ?? "Recorded"),
+            ApplicationStatusCode = statusCode,
+            MembershipType = MembershipTypeFromDraft(app?.FormDataJson) ?? app?.ElectionType?.Name,
+            CompletedAt = endorsement.DeclinedAt ?? endorsement.UpdatedAt ?? endorsement.CreatedAt,
+            YearsKnownCandidate = endorsement.YearsKnownCandidate,
+            PersonalKnowledge = declined ? null : endorsement.PersonalKnowledge,
+            ProfessionalKnowledge = declined ? null : endorsement.ProfessionalKnowledge,
+            ValueAddition = declined ? null : endorsement.ValueAddition,
+            DeclineReason = declined
+                ? (endorsement.DeclineReason ?? StripDeclinedPrefix(endorsement.PersonalKnowledge))
+                : null,
+            DeclinedAt = endorsement.DeclinedAt,
+            LastRejectionReason = LatestApplicationRejectionReason(app),
+            CanEdit = CanEditHistory(endorsement),
+            CanDelete = true,
+            Hidden = hidden
+        };
+    }
+
+    private static EndorsementHistoryDto MapNamedHistory(MApplication app, string role)
+    {
+        var code = app.Status?.Code;
+        return new EndorsementHistoryDto
+        {
+            EndorsementId = null,
+            ApplicationId = app.ApplicationId,
+            ApplicationNo = app.ApplicationNo,
+            ApplicantName = ApplicantDisplayName(app.Applicant),
+            ApplicantPhotoUrl = app.Applicant?.PhotoUrl,
+            Role = ToRoleLabel(role),
+            Outcome = app.Status?.Name ?? "Recorded",
+            ApplicationStatusCode = code,
+            MembershipType = MembershipTypeFromDraft(app.FormDataJson) ?? app.ElectionType?.Name,
+            CompletedAt = app.UpdatedAt ?? app.CreatedAt,
+            LastRejectionReason = LatestApplicationRejectionReason(app),
+            CanEdit = false,
+            CanDelete = false,
+            Hidden = false
+        };
+    }
+
+    private static bool HistoryHasContent(Endorsement e) =>
+        e.IsDeclined
+        || !string.IsNullOrWhiteSpace(e.PersonalKnowledge)
+        || !string.IsNullOrWhiteSpace(e.ProfessionalKnowledge)
+        || !string.IsNullOrWhiteSpace(e.ValueAddition);
+
+    private static bool CanEditHistory(Endorsement endorsement)
+    {
+        if (!HistoryHasContent(endorsement)) return false;
+        if (endorsement.IsDeclined) return true;
+        return IsPendingEndorsementStage(endorsement.Application?.Status?.Code);
+    }
+
+    private static bool IsPendingEndorsementStage(string? statusCode) =>
+        string.Equals(statusCode, "Endorsement", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(statusCode, "EndorsementReview", StringComparison.OrdinalIgnoreCase);
+
+    private static string HistoryKey(long applicationId, string role) =>
+        applicationId + ":" + NormalizeEndorserRole(role);
+
+    private static string ApplicantDisplayName(MProfile? profile) =>
+        profile is null
+            ? "Applicant"
+            : string.Join(" ", new[] { profile.FirstName, profile.LastName }.Where(v => !string.IsNullOrWhiteSpace(v)));
+
+    private static string? StripDeclinedPrefix(string? personalKnowledge)
+    {
+        var text = (personalKnowledge ?? "").Trim();
+        if (!text.StartsWith(Endorsement.DeclinedPrefix, StringComparison.OrdinalIgnoreCase))
+            return string.IsNullOrWhiteSpace(text) ? null : text;
+        return text[Endorsement.DeclinedPrefix.Length..].Trim();
+    }
+
+    private static string? LatestApplicationRejectionReason(MApplication? app)
+    {
+        if (app?.ApplicationStatusHistories is null || app.ApplicationStatusHistories.Count == 0)
+            return null;
+        return app.ApplicationStatusHistories
+            .Where(h =>
+                string.Equals(h.Action, "REJECT", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(h.Action, "HANDBACK", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(h.ToStatus?.Code, "Rejected", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(h.ToStatus?.Code, "NotElected", StringComparison.OrdinalIgnoreCase)
+                || (!string.IsNullOrWhiteSpace(h.Reason)
+                    && (app.Status?.Code is "Rejected" or "NotElected")))
+            .OrderByDescending(h => h.ChangedAt)
+            .Select(h => h.Reason)
+            .FirstOrDefault(r => !string.IsNullOrWhiteSpace(r));
+    }
+
+    private static bool ContainsInsensitive(string? value, string query) =>
+        !string.IsNullOrWhiteSpace(value)
+        && value.Contains(query, StringComparison.OrdinalIgnoreCase);
 
     private EndorsementInviteDto Invite(MApplication app, string role, int? joiningYear, string? membershipNo, MProfile? profile)
     {
@@ -775,6 +1449,7 @@ public class MemberDashboardService : IMemberDashboardService
             ApplicantPhotoUrl = app.Applicant.PhotoUrl,
             MembershipType = membershipType,
             Role = role,
+            // A prior decline by someone else in this role must not hide the newly named member.
             Status = done ? "Complete" : "Pending",
             EndorserYearOfJoining = joiningYear,
             EndorserMembershipNo = membershipNo ?? profile?.MembershipNo,
@@ -824,9 +1499,36 @@ public class MemberDashboardService : IMemberDashboardService
         return app.Endorsements.Any(e =>
             e.EndorserProfileId == namedId
             && RolesMatch(e.EndorserRole, normalized)
+            && !Endorsement.IsDeclinedRecord(e.Status, e.PersonalKnowledge)
             && !string.IsNullOrWhiteSpace(e.PersonalKnowledge)
             && !string.IsNullOrWhiteSpace(e.ProfessionalKnowledge)
             && !string.IsNullOrWhiteSpace(e.ValueAddition));
+    }
+
+    private static string ToRoleLabel(string role) =>
+        NormalizeEndorserRole(role) switch
+        {
+            "PROPOSER" => "Proposer",
+            "SECONDER" => "Seconder",
+            _ => string.IsNullOrWhiteSpace(role) ? "endorser" : role.Trim(),
+        };
+
+    private static void ClearSupporterFromForm(MApplication app, string role)
+    {
+        if (string.IsNullOrWhiteSpace(app.FormDataJson)) return;
+        try
+        {
+            var node = JsonNode.Parse(app.FormDataJson);
+            if (node is not JsonObject root) return;
+            if (root["supporters"] is not JsonObject supporters) return;
+            var key = NormalizeEndorserRole(role) == "PROPOSER" ? "proposer" : "seconder";
+            supporters[key] = new JsonObject();
+            app.FormDataJson = root.ToJsonString();
+        }
+        catch (JsonException)
+        {
+            /* leave the draft as-is if it cannot be parsed */
+        }
     }
 
     private static string? MembershipTypeFromDraft(string? json)
@@ -865,18 +1567,22 @@ public class MemberDashboardService : IMemberDashboardService
     {
         if (!priv.PaysSubscription)
             return ("NotApplicable", "No annual subscription is payable for this class.");
-        if (string.Equals(statusCode, "REMOVED", StringComparison.OrdinalIgnoreCase))
-            return ("AtRiskOfRemoval", "Membership has been removed for unpaid subscription (30 April deadline).");
-        if (string.Equals(statusCode, "POSTED", StringComparison.OrdinalIgnoreCase))
-            return ("Posted", "Posted (in arrears) after the 28 February posting deadline.");
 
         var year = DateTime.UtcNow.Year;
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var sub = await _db.Subscriptions.AsNoTracking()
             .FirstOrDefaultAsync(s => s.AccountId == accountId && s.SubscriptionYear == year, cancellationToken);
         var outstanding = sub is null ? 0 : Math.Max(0, sub.AmountDue - sub.AmountPaid);
+
+        // Paid-up members are in good standing even if account status was not yet restored.
         if (outstanding <= 0)
             return ("InGoodStanding", "Subscription for the current year is settled.");
+
+        if (string.Equals(statusCode, "REMOVED", StringComparison.OrdinalIgnoreCase))
+            return ("AtRiskOfRemoval", "Membership has been removed for unpaid subscription (30 April deadline).");
+        if (string.Equals(statusCode, "POSTED", StringComparison.OrdinalIgnoreCase))
+            return ("Posted", "Posted (in arrears) after the 28 February posting deadline.");
+
         if (today >= new DateOnly(year, 4, 1))
             return ("AtRiskOfRemoval", "Unpaid subscription — at risk of removal on 30 April.");
         if (today >= new DateOnly(year, 2, 1))

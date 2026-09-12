@@ -43,6 +43,15 @@ export type ManagerReadiness = {
   documentsReady?: boolean;
   pendingItems: string[];
   pendingPaymentItems?: string[];
+  paymentLines?: {
+    feeCode?: string | null;
+    feeLabel?: string | null;
+    amount?: number | null;
+    receiptNumber?: string | null;
+    paymentDate?: string | null;
+    status?: string | null;
+    received?: boolean | null;
+  }[];
   clubVisitsLogged: number;
   clubVisitsRequired: number;
   clubVisitsMet: boolean;
@@ -82,6 +91,8 @@ export type PaymentRow = {
 };
 
 export type EndorsementRow = {
+  endorsementId?: number | null;
+  endorserProfileId?: number | null;
   endorserRole?: string | null;
   endorserName?: string | null;
   endorserMembershipNo?: string | null;
@@ -89,8 +100,58 @@ export type EndorsementRow = {
   professionalKnowledge?: string | null;
   valueAddition?: string | null;
   yearsKnownCandidate?: number | null;
+  status?: string | null;
+  declineReason?: string | null;
 };
 
+function roleKey(role?: string | null) {
+  return (role ?? "").trim().toUpperCase().replace(/[\s_-]/g, "");
+}
+
+export function isDeclinedEndorsement(row?: {
+  status?: string | null;
+  personalKnowledge?: string | null;
+} | null) {
+  if (!row) return false;
+  if ((row.status ?? "").toUpperCase() === "DECLINED") return true;
+  return (row.personalKnowledge ?? "").toUpperCase().startsWith("DECLINED:");
+}
+
+export function isCompleteEndorsement(row?: EndorsementRow | null) {
+  if (!row || isDeclinedEndorsement(row)) return false;
+  return Boolean(
+    row.personalKnowledge?.trim() &&
+      row.professionalKnowledge?.trim() &&
+      row.valueAddition?.trim(),
+  );
+}
+
+export function pickActiveEndorsement(
+  rows: EndorsementRow[],
+  role: "PROPOSER" | "SECONDER",
+  namedProfileId?: number | null,
+) {
+  const forRole = rows
+    .filter((e) => roleKey(e.endorserRole).includes(role))
+    .slice()
+    .sort((a, b) => (a.endorsementId ?? 0) - (b.endorsementId ?? 0));
+  const named = namedProfileId
+    ? forRole.filter((e) => e.endorserProfileId === namedProfileId)
+    : [];
+  const latestComplete = (list: EndorsementRow[]) => {
+    const complete = list.filter(isCompleteEndorsement);
+    return complete.at(-1) ?? null;
+  };
+  return (
+    latestComplete(named) ??
+    latestComplete(forRole) ??
+    named.filter((e) => !isDeclinedEndorsement(e)).at(-1) ??
+    forRole.filter((e) => !isDeclinedEndorsement(e)).at(-1) ??
+    null
+  );
+}
+
+/** Manager readiness checklist row. */
 function Check({
   ok,
   label,
@@ -112,7 +173,7 @@ function Check({
           ok ? "bg-emerald-600 text-white" : "border border-amber-400 text-amber-800",
         )}
       >
-        {ok ? "âœ“" : "â—‹"}
+        {ok ? "✓" : "○"}
       </span>
       <span className="min-w-0 flex-1">{label}</span>
       {!ok && onRequest ? (
@@ -151,10 +212,6 @@ function formatPersonDate(value?: string | null) {
   const date = new Date(`${day}T12:00:00`);
   if (Number.isNaN(date.getTime())) return day;
   return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-}
-
-function roleKey(role?: string | null) {
-  return (role ?? "").trim().toUpperCase();
 }
 
 function feeLabel(p: PaymentRow) {
@@ -353,7 +410,6 @@ export function ManagerStagePanel({
 
   const applicationCheques = pickApplicationCheques(detail);
   const ledgerRows = chequeLedgerItems(applicationCheques);
-  const feeChequesOk = Boolean(applicationCheques.annual && applicationCheques.joining);
 
   const addVisit = useMutation({
     mutationFn: () =>
@@ -441,15 +497,17 @@ export function ManagerStagePanel({
   );
   const licenseOk = !r?.pilotLicenseRequired || Boolean(r?.pilotLicenseUploaded) || formLicenseCopy;
 
-  const joiningChequeOk = Boolean(r?.joiningChequeUploaded) || Boolean(applicationCheques.joining);
-  const annualChequeOk = Boolean(r?.annualChequeUploaded) || Boolean(applicationCheques.annual);
-  const entranceFeeOk = Boolean(r?.entranceFeeOk) || joiningChequeOk;
-  const annualFeeOk = Boolean(r?.annualSubscriptionOk) || annualChequeOk;
-  const paymentsRepresented = entranceFeeOk && annualFeeOk;
+  const feeChequesOk = Boolean(r?.feeChequesUploaded) || Boolean(applicationCheques.annual && applicationCheques.joining);
+  // Entrance / annual verified for manager when cheque uploaded or payment initiated.
+  // Finance Paid clearance stays separate (after ballot / before signatures).
+  const entranceFeeOk = Boolean(r?.entranceFeeOk) || Boolean(applicationCheques.joining);
+  const annualFeeOk = Boolean(r?.annualSubscriptionOk) || Boolean(applicationCheques.annual);
+  const paymentsReady = Boolean(r?.paymentsReady) || (entranceFeeOk && annualFeeOk);
+  const paymentsCleared = Boolean(r?.paymentsReceived);
   const pendingItems = (r?.pendingItems ?? []).filter(
     (item) =>
       !(licenseOk && /pilot licence/i.test(item)) &&
-      !(paymentsRepresented && /fee|cheque/i.test(item)),
+      !(paymentsReady && /fee|cheque/i.test(item)),
   );
   const checklist = r
     ? [
@@ -459,8 +517,8 @@ export function ManagerStagePanel({
         { ok: r.cvUploaded, label: "CV", type: "documents" as const },
         { ok: r.idPassportUploaded, label: "ID/Passport", type: "documents" as const },
         {
-          ok: Boolean(r.feeChequesUploaded) || feeChequesOk,
-          label: "Fee cheques",
+          ok: feeChequesOk,
+          label: "Fee cheques (uploaded)",
           type: "documents" as const,
         },
         ...(r.pilotLicenseRequired
@@ -472,13 +530,8 @@ export function ManagerStagePanel({
   const metCount = checklist.filter((c) => c.ok).length;
 
   const sponsorRows = endorsements ?? detail?.endorsements ?? [];
-  const proposer =
-    sponsorRows.find((e) => roleKey(e.endorserRole).includes("PROPOSER")) ??
-    sponsorRows[0] ??
-    null;
-  const seconder =
-    sponsorRows.find((e) => roleKey(e.endorserRole).includes("SECONDER")) ??
-    (sponsorRows.length > 1 ? sponsorRows[1] : null);
+  const proposer = pickActiveEndorsement(sponsorRows, "PROPOSER", detail?.proposerProfileId);
+  const seconder = pickActiveEndorsement(sponsorRows, "SECONDER", detail?.seconderProfileId);
 
   return (
     <section className="grid gap-4 lg:grid-cols-2">
@@ -616,20 +669,18 @@ export function ManagerStagePanel({
             <p
               className={cn(
                 "mt-3 text-sm font-medium",
-                (r.canProceedToInterview || (paymentsRepresented && r.endorsementsComplete && r.cvUploaded && r.idPassportUploaded && r.clubVisitsMet && licenseOk)) && feeChequesOk
+                r.canProceedToInterview || (paymentsReady && r.endorsementsComplete && r.cvUploaded && r.idPassportUploaded && r.clubVisitsMet && licenseOk)
                   ? "text-emerald-800"
                   : "text-amber-900",
               )}
             >
-              {(r.canProceedToInterview || (paymentsRepresented && r.endorsementsComplete && r.cvUploaded && r.idPassportUploaded && r.clubVisitsMet && licenseOk)) && feeChequesOk
-                ? "Verification complete. All requirements verified."
-                : !feeChequesOk
-                  ? "Upload annual subscription and joining / entrance fee cheques on the application before authorizing."
-                  : !paymentsRepresented
-                  ? `Applicant must pay: ${r.pendingPaymentItems?.join(", ") || "entrance and annual fees"}.`
-                  : r.pilotLicenseRequired && !licenseOk
-                    ? "Pilot licence copy is missing. Send a document request before authorizing."
-                    : `Pending: ${pendingItems.join("; ") || "complete checklist + visits"}`}
+              {r.canProceedToInterview || (paymentsReady && r.endorsementsComplete && r.cvUploaded && r.idPassportUploaded && r.clubVisitsMet && licenseOk)
+                ? paymentsCleared
+                  ? "Verification complete. Fees are also finance-cleared."
+                  : "Verification complete for authorize. Finance clearance of cheques stays pending until after the ballot (before signatures / membership no.)."
+                : r.pilotLicenseRequired && !licenseOk
+                  ? "Pilot licence copy is missing. Send a document request before authorizing."
+                  : `Pending: ${pendingItems.join("; ") || "complete checklist + visits"}`}
             </p>
             <div className="mt-3 space-y-2 border-t border-border pt-3">
               <Input
@@ -657,44 +708,78 @@ export function ManagerStagePanel({
           Financial ledger
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Uploaded annual and joining / entrance cheques count as payment. Authorize needs both files attached.
+          Manager can view uploaded cheques and payment proofs. Cheque upload verifies Entrance / Annual for authorize.
+          Finance / Treasurer clearance to Paid is required later — after voting, before signatures and membership number.
         </p>
         <table className="mt-3 w-full text-sm">
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
               <th className="pb-2 font-medium">Item</th>
               <th className="pb-2 font-medium">File</th>
-              <th className="pb-2 text-right font-medium">Cheque</th>
+              <th className="pb-2 font-medium">Clearance</th>
+              <th className="pb-2 text-right font-medium">Proof</th>
             </tr>
           </thead>
           <tbody>
-            {ledgerRows.map((row) => (
-              <tr key={row.key} className="border-t border-border/60">
-                <td className="py-3 pr-3 font-medium">{row.label}</td>
-                <td className="py-3 pr-3 text-muted-foreground">{row.cheque?.fileName ?? "—"}</td>
-                <td className="py-3 text-right">
-                  {row.cheque?.url ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        setViewingCheque({
-                          label: row.label,
-                          fileName: row.cheque!.fileName,
-                          url: row.cheque!.url,
-                        })
-                      }
+            {ledgerRows.map((row) => {
+              const line = (r?.paymentLines ?? []).find((p) =>
+                row.key === "annual"
+                  ? /annual|subscri/i.test(`${p.feeCode ?? ""} ${p.feeLabel ?? ""}`)
+                  : /join|entrance/i.test(`${p.feeCode ?? ""} ${p.feeLabel ?? ""}`),
+              );
+              const cleared = Boolean(line?.received);
+              const statusLabel = cleared
+                ? line?.status || "Paid"
+                : line?.status
+                  ? line.status
+                  : row.cheque
+                    ? "Pending finance clearance"
+                    : "Not submitted";
+              return (
+                <tr key={row.key} className="border-t border-border/60">
+                  <td className="py-3 pr-3 font-medium">{row.label}</td>
+                  <td className="py-3 pr-3 text-muted-foreground">{row.cheque?.fileName ?? "—"}</td>
+                  <td className="py-3 pr-3">
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium",
+                        cleared
+                          ? "bg-emerald-100 text-emerald-900"
+                          : row.cheque || line
+                            ? "bg-amber-100 text-amber-900"
+                            : "bg-muted text-muted-foreground",
+                      )}
                     >
-                      <Receipt className="size-3.5" />
-                      View cheque
-                    </Button>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">Not uploaded</span>
-                  )}
-                </td>
-              </tr>
-            ))}
+                      {statusLabel}
+                    </span>
+                    {cleared && line?.receiptNumber ? (
+                      <p className="mt-1 text-xs text-muted-foreground">{line.receiptNumber}</p>
+                    ) : null}
+                  </td>
+                  <td className="py-3 text-right">
+                    {row.cheque?.url ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setViewingCheque({
+                            label: row.label,
+                            fileName: row.cheque!.fileName,
+                            url: row.cheque!.url,
+                          })
+                        }
+                      >
+                        <Receipt className="size-3.5" />
+                        View cheque
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">No file</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -819,12 +904,7 @@ export function ManagerStagePanel({
                 .map((p) => p[0])
                 .join("")
                 .toUpperCase() || "—";
-            const hasRecommendation = Boolean(
-              row &&
-                [row.personalKnowledge, row.professionalKnowledge, row.valueAddition].some(
-                  (part) => (part ?? "").trim(),
-                ),
-            );
+            const hasRecommendation = isCompleteEndorsement(row);
             return (
               <div key={label} className="rounded-lg border border-border/80 bg-muted/20 p-4">
                 <div className="flex gap-3">
@@ -956,11 +1036,9 @@ export function ApplicantStageChecklist({
   if (!r.endorsementsComplete) {
     missing.push({ label: "Proposer and seconder must both submit their recommendations" });
   }
-  if (!r.entranceFeeOk) {
-    missing.push({ label: "Entrance / joining fee — pay or initiate", href: "/payment" });
-  }
-  if (!r.annualSubscriptionOk) {
-    missing.push({ label: "Annual subscription fee — pay or initiate", href: "/payment" });
+  if (!r.paymentsReady) {
+    missing.push({ label: "Entrance / joining fee — pay or upload cheque", href: "/payment" });
+    missing.push({ label: "Annual subscription fee — pay or upload cheque", href: "/payment" });
   }
   if (!r.cvUploaded) {
     missing.push({ label: "Upload your CV", href: "/documents" });
@@ -968,11 +1046,11 @@ export function ApplicantStageChecklist({
   if (!r.idPassportUploaded) {
     missing.push({ label: "Upload ID / Passport copy", href: "/documents" });
   }
-  if (r.annualChequeUploaded === false) {
-    missing.push({ label: "Upload annual subscription cheque", href: "/application" });
+  if (r.annualChequeUploaded === false && !r.paymentsReady) {
+    missing.push({ label: "Upload annual subscription cheque (if paying by cheque)", href: "/application" });
   }
-  if (r.joiningChequeUploaded === false) {
-    missing.push({ label: "Upload joining / entrance fee cheque", href: "/application" });
+  if (r.joiningChequeUploaded === false && !r.paymentsReady) {
+    missing.push({ label: "Upload joining / entrance fee cheque (if paying by cheque)", href: "/application" });
   }
   if (r.pilotLicenseRequired && !r.pilotLicenseUploaded) {
     missing.push({ label: "Upload pilot licence copy", href: "/documents" });
@@ -984,8 +1062,7 @@ export function ApplicantStageChecklist({
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
           <p className="font-medium">Ready for the General Manager</p>
           <p className="mt-1">
-            Your fees and documents are in. The manager has been (or will be) notified to verify your
-            application and authorize the interview stage.
+            Your fees and documents are submitted. The manager can authorize interview. Finance will clear cheques after the ballot, before signatures and membership number.
           </p>
         </div>
       );

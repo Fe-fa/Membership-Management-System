@@ -221,6 +221,7 @@ export function ApplicationWizard() {
               value={draft.supporters}
               errors={errors}
               onChange={patch("supporters")}
+              applicationId={app.record?.id}
             />
           )}
           {step === "clubs" && (

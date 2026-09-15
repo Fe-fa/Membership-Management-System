@@ -191,37 +191,36 @@ export function RegisterPage() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-lg space-y-4 rounded-2xl border border-border bg-card p-8 shadow-sm">
         <div>
-          <h1 className="text-2xl">Applicant registration</h1>
+          <h1 className="text-2xl">Sign up</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Choose how you are applying for membership. Both paths create an applicant account.
+            Welcome back!
           </p>
         </div>
 
         {step === "lookup" ? (
           <>
-            <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Application category">
-              <CategoryButton
-                active={category === "STANDARD"}
-                title="Standard applicant"
-                detail="At least 3 club visits"
-                onClick={() => chooseCategory("STANDARD")}
-              />
-              <CategoryButton
-                active={category === "CHILD_OF_MEMBER"}
-                title="Member's child"
-                detail="Listed child, reaching 21"
-                onClick={() => chooseCategory("CHILD_OF_MEMBER")}
-              />
-            </div>
+<div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Application category">
+  <CategoryButton
+    active={category === "STANDARD"}
+    title="Standard applicant"
+    onClick={() => chooseCategory("STANDARD")}
+  />
+  <CategoryButton
+    active={category === "CHILD_OF_MEMBER"}
+    title="Member's child"
+    onClick={() => chooseCategory("CHILD_OF_MEMBER")}
+  />
+</div>
 
             {category === "STANDARD" ? (
               <form onSubmit={checkVisits} className="space-y-4">
                 <label className="block text-sm">
-                  Guest name
+                 Full name 
                   <input
                     className={inputClass}
                     value={lookup.guestName}
                     onChange={(e) => setLookup({ ...lookup, guestName: e.target.value })}
+                    placeholder="as on your visit record"
                   />
                 </label>
                 <label className="block text-sm">
@@ -234,7 +233,7 @@ export function RegisterPage() {
                   />
                 </label>
                 <label className="block text-sm">
-                  Visit slip code (recommended)
+                  Application no
                   <input
                     className={inputClass}
                     value={lookup.visitSlipCode}

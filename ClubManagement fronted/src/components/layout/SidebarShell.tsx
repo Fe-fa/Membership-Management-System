@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, LogOut, Menu, Plane } from "lucide-react";
 
 import { AppBreadcrumb } from "@/components/layout/AppBreadcrumb";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 import { isNavActive, navForUser, type AppNavGroup } from "@/components/layout/nav";
 import { PageLoadingPanel } from "@/components/layout/PageLoading";
 import {
@@ -399,10 +400,13 @@ export const SidebarShell = memo(function SidebarShell({
 
             <div className="flex flex-wrap items-center justify-end gap-2 justify-self-end">
               {currentUser ? (
-                <ProfileMenu
-                  name={currentUser.fullName}
-                  onRequestLogout={() => setLogoutOpen(true)}
-                />
+                <>
+                  <NotificationBell />
+                  <ProfileMenu
+                    name={currentUser.fullName}
+                    onRequestLogout={() => setLogoutOpen(true)}
+                  />
+                </>
               ) : (
                 <Button asChild variant="outline" size="sm">
                   <Link to="/">Sign in</Link>

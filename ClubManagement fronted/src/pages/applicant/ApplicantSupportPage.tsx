@@ -287,7 +287,7 @@ export function ApplicantSupportPage() {
   return (
     <PageFrame width="lg">
       <PageHeader
-        title="Applicant Support Center"
+        title=""
         description="Search guidance, open a ticket with Membership or Finance, and follow replies in one place."
       />
 

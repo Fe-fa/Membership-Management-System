@@ -35,4 +35,6 @@ export {
   useMpesaStkPush,
   usePaymentMethods,
   useRecordMemberPayment,
+  useVoidApplicationPayment,
+  useVoidMemberPayment,
 } from "./useMemberPayments";

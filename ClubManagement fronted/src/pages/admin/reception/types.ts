@@ -34,3 +34,17 @@ export type ReceptionVisitRow = {
 };
 
 export const VISIT_PURPOSES = ["Lunch", "Meeting", "Social", "Club event", "Overnight", "Other"] as const;
+
+export function isOtherVisitPurpose(purpose: string) {
+  return purpose === "Other";
+}
+
+/** When purpose is Other, the free-text detail is stored as the visit reason. */
+export function resolveVisitPurpose(purpose: string, otherDetail: string): string | null {
+  if (!purpose) return null;
+  if (isOtherVisitPurpose(purpose)) {
+    const detail = otherDetail.trim();
+    return detail || null;
+  }
+  return purpose;
+}

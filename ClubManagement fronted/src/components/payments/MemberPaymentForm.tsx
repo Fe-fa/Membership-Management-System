@@ -124,6 +124,18 @@ export function MemberPaymentForm({
     });
   }, [isApplicant, methods]);
 
+  const upcomingOutstanding = Math.max(0, Number(sub.upcomingOutstanding || 0));
+  const annualBillingYear =
+    sub.paysSubscription && sub.outstanding <= EPSILON && upcomingOutstanding > EPSILON && sub.upcomingYear
+      ? sub.upcomingYear
+      : sub.year;
+  const annualOutstanding =
+    sub.paysSubscription
+      ? sub.outstanding > EPSILON
+        ? Math.max(0, sub.outstanding)
+        : upcomingOutstanding
+      : 0;
+
   const [purpose, setPurpose] = useState<FeePurpose>(initialPurpose ?? "annual");
   const [paidAt, setPaidAt] = useState(kenyaTodayISO());
   const [lineDescription, setLineDescription] = useState(initialLineDescription ?? "");
@@ -134,9 +146,9 @@ export function MemberPaymentForm({
 
   const suggestedAmount = useMemo(() => {
     if (purpose === "joining") return Math.max(0, sub.joiningOutstanding);
-    if (purpose === "annual") return sub.paysSubscription ? Math.max(0, sub.outstanding) : 0;
+    if (purpose === "annual") return annualOutstanding;
     return 0;
-  }, [purpose, sub]);
+  }, [purpose, sub.joiningOutstanding, annualOutstanding]);
 
   const defaultMethodId = useMemo(() => {
     const preferred = ["MPESA", "CASH", "CHEQUE", "CARD", "CLUB_CARD"];
@@ -151,9 +163,9 @@ export function MemberPaymentForm({
   useEffect(() => {
     if (!open) return;
     const fallbackPurpose: FeePurpose =
-      sub.joiningOutstanding > 0 && (!sub.paysSubscription || sub.outstanding <= 0)
+      sub.joiningOutstanding > 0 && (!sub.paysSubscription || annualOutstanding <= 0)
         ? "joining"
-        : sub.paysSubscription && sub.outstanding > 0
+        : sub.paysSubscription && annualOutstanding > 0
           ? "annual"
           : isApplicant
             ? "joining"
@@ -167,7 +179,7 @@ export function MemberPaymentForm({
         : nextPurpose === "joining"
           ? sub.joiningOutstanding
           : nextPurpose === "annual" && sub.paysSubscription
-            ? sub.outstanding
+            ? annualOutstanding
             : 0;
     setRows([
       newRow({
@@ -184,7 +196,7 @@ export function MemberPaymentForm({
     open,
     defaultMethodId,
     sub.joiningOutstanding,
-    sub.outstanding,
+    annualOutstanding,
     sub.paysSubscription,
     initialPurpose,
     initialAmount,
@@ -228,7 +240,7 @@ export function MemberPaymentForm({
 
   const purposeEnabled = (p: FeePurpose) => {
     if (p === "joining") return sub.joiningOutstanding > 0;
-    if (p === "annual") return sub.paysSubscription && sub.outstanding > 0;
+    if (p === "annual") return sub.paysSubscription && annualOutstanding > 0;
     return true;
   };
 
@@ -445,6 +457,8 @@ export function MemberPaymentForm({
                 ? lineDescription.trim() || FEE_PURPOSE_LABEL[purpose]
                 : undefined,
             nmChargeId: !isApplicant ? nmChargeId || undefined : undefined,
+            subscriptionYear:
+              !isApplicant && purpose === "annual" ? annualBillingYear : undefined,
             paymentStatusCode:
               isCard || isCheque || (isMpesa && !row.mpesaCode.trim()) ? "PENDING" : undefined,
           }),
@@ -511,10 +525,18 @@ export function MemberPaymentForm({
                 </div>
                 <div className="flex justify-between gap-3">
                   <span className="text-muted-foreground">
-                    {isApplicant ? `Annual subscription (${sub.year})` : `Annual arrears (${sub.year})`}
+                    {isApplicant
+                      ? `Annual subscription (${sub.year})`
+                      : `Annual arrears (${annualBillingYear})`}
                   </span>
-                  <strong>{formatKes(sub.paysSubscription ? sub.outstanding : 0)}</strong>
+                  <strong>{formatKes(sub.paysSubscription ? annualOutstanding : 0)}</strong>
                 </div>
+                {!isApplicant && sub.upcomingYear && upcomingOutstanding > 0 && sub.outstanding > EPSILON ? (
+                  <div className="flex justify-between gap-3 text-xs text-amber-800">
+                    <span>{sub.upcomingYear} renewal also unpaid</span>
+                    <span>{formatKes(upcomingOutstanding)}</span>
+                  </div>
+                ) : null}
                 {!isApplicant ? (
                   <div className="flex justify-between gap-3">
                     <span className="text-muted-foreground">Club card credit</span>

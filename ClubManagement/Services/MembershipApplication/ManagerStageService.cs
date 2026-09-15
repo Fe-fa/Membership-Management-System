@@ -1074,13 +1074,13 @@ END
         var initiated = matches.Any(t =>
         {
             var code = NormalizePay(t.PaymentStatus?.Code);
-            return code is not ("REJECTED" or "REFUNDED")
+            return code is not ("REJECTED" or "REFUNDED" or "VOIDED" or "CANCELLED" or "CANCELED")
                 && (PaymentOkStatuses.Contains(code) || IsPaymentReceived(code, t.PaymentStatus?.Name));
         });
         var shown = received ?? matches.FirstOrDefault(t =>
         {
             var code = NormalizePay(t.PaymentStatus?.Code);
-            return code is not ("REJECTED" or "REFUNDED");
+            return code is not ("REJECTED" or "REFUNDED" or "VOIDED" or "CANCELLED" or "CANCELED");
         }) ?? matches.FirstOrDefault();
         string? receiptNo = null;
         if (shown is not null)

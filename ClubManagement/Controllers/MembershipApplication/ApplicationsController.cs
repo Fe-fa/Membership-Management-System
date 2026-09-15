@@ -445,6 +445,37 @@ public class ApplicationsController : ControllerBase
     }
 
     [Authorize]
+    [HttpPost("{applicationId:long}/payments/{transactionId:long}/void")]
+    public async Task<ActionResult<PaymentRowDto>> VoidPayment(
+        long applicationId,
+        long transactionId,
+        [FromBody] VoidPaymentRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var existing = await _applicationService.GetByIdAsync(applicationId, cancellationToken);
+        if (existing is null || !CanAccessApplication(existing.ApplicantProfileId)) return NotFound();
+        try
+        {
+            var row = await _finance.VoidPaymentAsync(
+                transactionId,
+                existing.ApplicantProfileId,
+                request,
+                User.UserId(),
+                cancellationToken);
+            try
+            {
+                await _managerStage.OnApplicantPrerequisitesChangedAsync(applicationId, cancellationToken);
+            }
+            catch { /* ignore notify errors */ }
+            return Ok(row);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [Authorize]
     [HttpPost("{applicationId:long}/payments/{transactionId:long}/receipt")]
     public async Task<ActionResult<PaymentRowDto>> IssueReceipt(
         long applicationId,

@@ -1,6 +1,6 @@
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal, Search } from "lucide-react";
+import { Bell, Check, MoreHorizontal, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -37,6 +37,17 @@ const VISIT_PAGE_SIZE = 50;
 
 type DateFilter = "all" | "today" | "week";
 
+type ArrivalAlert = {
+  alertId: number;
+  visitId: number;
+  hostProfileId: number;
+  guestName: string;
+  hostMemberName: string;
+  message?: string | null;
+  createdAt: string;
+  isAcknowledged: boolean;
+};
+
 export function ReceptionDashboardPage() {
   const user = readUser();
   const canOperate = canOperateReception(user);
@@ -65,6 +76,16 @@ export function ReceptionDashboardPage() {
       toast.success("Guest signed out.");
       void queryClient.invalidateQueries({ queryKey: ["reception-visits"] });
       void queryClient.invalidateQueries({ queryKey: ["reception-host-visits"] });
+    },
+    onError: (error) => toast.error(extractErrorMessage(error)),
+  });
+
+  const acknowledgeAlert = useMutation({
+    mutationFn: (alertId: number) =>
+      apiRequest(`/api/reception/arrival-alerts/${alertId}/acknowledge`, { method: "POST" }),
+    onSuccess: () => {
+      toast.success("Alert acknowledged.");
+      void queryClient.invalidateQueries({ queryKey: ["reception-arrival-alerts"] });
     },
     onError: (error) => toast.error(extractErrorMessage(error)),
   });
@@ -137,6 +158,7 @@ export function ReceptionDashboardPage() {
           <h1 className="text-xl font-semibold">Guests on site</h1>
           <p className="text-sm text-muted-foreground">Only guests currently in the club. Open all visits when you need the full book.</p>
         </header>
+        {canOperate ? <ArrivalAlertsPanel onAcknowledge={(id) => acknowledgeAlert.mutate(id)} acknowledging={acknowledgeAlert.isPending} /> : null}
         {directory}
         <VisitDrawer visit={viewing} onClose={() => setViewing(null)} onHostHistory={openHostHistory} canBrowseHistory={canViewAll} />
       </PageFrame>
@@ -146,6 +168,8 @@ export function ReceptionDashboardPage() {
   return (
     <PageFrame width="lg" className="max-w-none">
       {receptionHome ? null : <PageBackLink to="/admin" label="Back to admin dashboard" />}
+
+      <ArrivalAlertsPanel onAcknowledge={(id) => acknowledgeAlert.mutate(id)} acknowledging={acknowledgeAlert.isPending} />
 
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(20rem,2fr)_minmax(0,3fr)]">
         <RegisterGuestCard
@@ -530,6 +554,77 @@ function Detail({ label, value }: { label: string; value: string }) {
       <dd className="font-medium">{value}</dd>
     </div>
   );
+}
+
+function ArrivalAlertsPanel({
+  onAcknowledge,
+  acknowledging,
+}: {
+  onAcknowledge: (alertId: number) => void;
+  acknowledging: boolean;
+}) {
+  const alerts = useQuery({
+    queryKey: ["reception-arrival-alerts"],
+    queryFn: () => apiRequest<ArrivalAlert[]>("/api/reception/arrival-alerts"),
+    refetchInterval: 15_000,
+  });
+
+  const rows = alerts.data ?? [];
+  if (rows.length === 0) return null;
+
+  return (
+    <section className="rounded-xl border border-amber-300 bg-amber-50/80">
+      <div className="flex items-center gap-2 border-b border-amber-200 px-4 py-3">
+        <Bell className="size-4 text-amber-800" />
+        <div>
+          <h2 className="text-sm font-semibold text-amber-950">Guest arrived before host</h2>
+          <p className="text-xs text-amber-900/80">
+            {rows.length} pending notification{rows.length === 1 ? "" : "s"} from members
+          </p>
+        </div>
+      </div>
+      <ul className="divide-y divide-amber-200">
+        {rows.map((alert) => (
+          <li key={alert.alertId} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+            <div className="min-w-0 space-y-1">
+              <p className="font-medium text-amber-950">{alert.guestName}</p>
+              <p className="text-sm text-amber-900/90">
+                Host: {alert.hostMemberName}
+              </p>
+              {alert.message ? (
+                <p className="text-sm text-amber-900/80">{alert.message}</p>
+              ) : null}
+              <p className="text-xs text-amber-900/70">
+                {formatAlertTime(alert.createdAt)}
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="border-amber-300 bg-white hover:bg-amber-100"
+              disabled={acknowledging}
+              onClick={() => onAcknowledge(alert.alertId)}
+            >
+              <Check className="size-3.5" />
+              Acknowledge
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function formatAlertTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function withinDays(value: string, days: number) {

@@ -49,9 +49,9 @@ export function ExistingMembersPage() {
   return (
     <PageFrame width="lg">
       <PageBackLink to="/admin" label="Back to admin dashboard" />
-      <PageHeader
+      {/* <PageHeader
         title="Existing members"
-      />
+      /> */}
       <Tabs
         value={tab}
         onValueChange={(value) => {
@@ -578,11 +578,6 @@ function PrivilegesPanel() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          Tick a privilege to enable the matching <strong>member dashboard</strong> card for that
-          class. Untick to disable it. Profile stays available for all members. Guests card opens if
-          Guests or Reciprocation is ticked. Election follows Vote.
-        </p>
         <Button
           type="button"
           onClick={() => {

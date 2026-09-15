@@ -41,7 +41,8 @@ public record RecordPaymentRequest(
     string? ChequeBankCode = null,
     DateOnly? ChequeDate = null,
     string? ChequeFileName = null,
-    string? ChequeFileUrl = null);
+    string? ChequeFileUrl = null,
+    int? SubscriptionYear = null);
 public record PaymentRowDto(
     long TransactionId,
     string? ReceiptNumber,
@@ -107,6 +108,8 @@ public record ApprovePaymentRequest(
     string? MpesaCode = null,
     decimal? AmountCleared = null);
 public record RejectPaymentRequest(string Reason);
+public record VoidPaymentRequest(string? Reason = null);
+public record RefundPaymentRequest(string Reason);
 public record FinanceDeskSummaryDto(
     int PendingClearance,
     decimal TodaysCollections,
@@ -154,7 +157,8 @@ public record SubscriptionLifecycleResultDto(
     int SubscriptionsGenerated,
     int MembersPosted,
     int MembersRemoved,
-    int TotalUpdated);
+    int TotalUpdated,
+    int FutureYearsCleared = 0);
 
 public record SettlementMemberHitDto(
     long AccountId,
@@ -222,6 +226,23 @@ public interface IFinanceService
     Task<MembershipReceiptDto> GetMembershipReceiptAsync(long transactionId, long? requiredProfileId, CancellationToken cancellationToken);
     Task<PaymentRowDto> ApprovePaymentAsync(long transactionId, long? actorUserId, CancellationToken cancellationToken, ApprovePaymentRequest? request = null);
     Task<PaymentRowDto> RejectPaymentAsync(long transactionId, RejectPaymentRequest request, long? actorUserId, CancellationToken cancellationToken);
+    /// <summary>
+    /// Payer cancels an uncleared payment (PENDING / INITIATED / UNCLEARED) so they can pay again.
+    /// </summary>
+    Task<PaymentRowDto> VoidPaymentAsync(
+        long transactionId,
+        long requiredProfileId,
+        VoidPaymentRequest? request,
+        long? actorUserId,
+        CancellationToken cancellationToken);
+    /// <summary>
+    /// Finance desk refund: uncleared submissions are cancelled; paid payments are reversed on the ledger.
+    /// </summary>
+    Task<PaymentRowDto> RefundPaymentAsync(
+        long transactionId,
+        RefundPaymentRequest request,
+        long? actorUserId,
+        CancellationToken cancellationToken);
     Task<PaymentRowDto?> EnsurePendingFromChequeDocumentAsync(long applicationId, long applicationDocumentId, long? actorUserId, CancellationToken cancellationToken);
     Task<int> SyncPendingChequeDocumentsAsync(CancellationToken cancellationToken);
     Task<FinanceDeskSummaryDto> GetDeskSummaryAsync(int year, CancellationToken cancellationToken);
@@ -237,6 +258,10 @@ public interface IFinanceService
     Task<SettlementContextDto> GetSettlementContextAsync(long accountId, int? year, long? subscriptionId, CancellationToken cancellationToken);
     Task<DirectSettlementResultDto> DirectSettleAsync(DirectSettlementRequest request, long? actorUserId, CancellationToken cancellationToken);
     Task<int> RunPostingAsync(int year, long? actorUserId, CancellationToken cancellationToken);
+    /// <summary>
+    /// Full lifecycle for a chosen year (generate + post/remove when dates allow). Used by Finance demo / ops UI.
+    /// </summary>
+    Task<SubscriptionLifecycleResultDto> RunSubscriptionLifecycleForYearAsync(int year, long? actorUserId, CancellationToken cancellationToken);
     /// <summary>
     /// Background-job entry: enforce Jan 1 generation, Feb 28 posting, and Apr 30 removal for the current year.
     /// </summary>
@@ -658,7 +683,14 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Payment_method WHERE code = N'CLUB_CARD')
                 .Select(f => f.Code)
                 .FirstOrDefaultAsync(cancellationToken);
             if (IsAnnualFee(feeCode))
-                await ApplyPaidAmountToAccountAsync(paidAccountId, request.Amount, request.PaymentDate, tx.TransactionId, actorUserId, cancellationToken);
+                await ApplyPaidAmountToAccountAsync(
+                    paidAccountId,
+                    request.Amount,
+                    request.PaymentDate,
+                    tx.TransactionId,
+                    actorUserId,
+                    cancellationToken,
+                    request.SubscriptionYear);
             else
                 await TryRestoreActiveMembershipAsync(paidAccountId, actorUserId, cancellationToken);
         }
@@ -834,6 +866,153 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Payment_method WHERE code = N'CLUB_CARD')
         });
         await _db.SaveChangesAsync(cancellationToken);
         tx.PaymentStatus = rejected;
+        return await MapApprovedRow(tx, cancellationToken);
+    }
+
+    public async Task<PaymentRowDto> VoidPaymentAsync(
+        long transactionId,
+        long requiredProfileId,
+        VoidPaymentRequest? request,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var tx = await _db.Transactions
+            .Include(t => t.PaymentMethod)
+            .Include(t => t.PaymentStatus)
+            .Include(t => t.FeeType)
+            .Include(t => t.Receipt)
+            .Include(t => t.Profile)
+            .Include(t => t.Account)
+                .ThenInclude(a => a!.Profile)
+            .FirstOrDefaultAsync(t => t.TransactionId == transactionId, cancellationToken)
+            ?? throw new InvalidOperationException("Payment was not found.");
+
+        var ownerProfileId = tx.ProfileId ?? tx.Account?.ProfileId;
+        if (ownerProfileId is null || ownerProfileId.Value != requiredProfileId)
+            throw new InvalidOperationException("You can only void your own payments.");
+
+        if (tx.Receipt is not null)
+            throw new InvalidOperationException("A receipted payment cannot be voided. Contact finance.");
+
+        var current = (tx.PaymentStatus?.Code ?? "").Trim().ToUpperInvariant().Replace("-", "_");
+        if (current is "PAID" or "WAIVED")
+            throw new InvalidOperationException("Settled payments cannot be voided.");
+        if (current is "VOIDED" or "CANCELLED" or "CANCELED")
+            return await MapApprovedRow(tx, cancellationToken);
+        if (current is not ("PENDING" or "INITIATED" or "UNCLEARED"))
+            throw new InvalidOperationException($"Only uncleared payments can be voided (current status: {tx.PaymentStatus?.Name ?? current}).");
+
+        var voided = await _db.PaymentStatuses.FirstOrDefaultAsync(x => x.Code == "VOIDED", cancellationToken);
+        if (voided is null)
+        {
+            voided = new PaymentStatus
+            {
+                Code = "VOIDED",
+                Name = "Voided",
+                SortOrder = 95,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.PaymentStatuses.Add(voided);
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        var reason = string.IsNullOrWhiteSpace(request?.Reason)
+            ? "Voided by payer"
+            : request!.Reason!.Trim();
+        tx.PaymentStatusId = voided.PaymentStatusId;
+        tx.ReferenceNote = string.IsNullOrWhiteSpace(tx.ReferenceNote)
+            ? $"VOIDED: {reason}"
+            : $"{tx.ReferenceNote} | VOIDED: {reason}";
+        tx.UpdatedByUserId = actorUserId;
+        _db.AuditLogs.Add(new AuditLog
+        {
+            TableName = "MTransaction",
+            RecordId = tx.TransactionId,
+            Action = "UPDATE",
+            NewValues = $"status=VOIDED; reason={reason}",
+            ChangedByUserId = actorUserId,
+            ChangedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync(cancellationToken);
+        tx.PaymentStatus = voided;
+        return await MapApprovedRow(tx, cancellationToken);
+    }
+
+    public async Task<PaymentRowDto> RefundPaymentAsync(
+        long transactionId,
+        RefundPaymentRequest request,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            throw new InvalidOperationException("A refund reason is required.");
+
+        var tx = await _db.Transactions
+            .Include(t => t.PaymentMethod)
+            .Include(t => t.PaymentStatus)
+            .Include(t => t.FeeType)
+            .Include(t => t.Receipt)
+            .Include(t => t.Profile)
+            .Include(t => t.Account)
+                .ThenInclude(a => a!.Profile)
+            .FirstOrDefaultAsync(t => t.TransactionId == transactionId, cancellationToken)
+            ?? throw new InvalidOperationException("Payment was not found.");
+
+        var current = (tx.PaymentStatus?.Code ?? "").Trim().ToUpperInvariant().Replace("-", "_");
+        if (current is "REFUNDED")
+            return await MapApprovedRow(tx, cancellationToken);
+        if (current is "VOIDED" or "CANCELLED" or "CANCELED" or "REJECTED")
+            throw new InvalidOperationException($"This payment is already {tx.PaymentStatus?.Name ?? current} and cannot be refunded.");
+        if (current is not ("PENDING" or "INITIATED" or "UNCLEARED" or "PAID" or "WAIVED" or "PARTIALLY_PAID"))
+            throw new InvalidOperationException($"Payment status '{tx.PaymentStatus?.Name ?? current}' cannot be refunded.");
+
+        var wasSettled = current is "PAID" or "WAIVED" or "PARTIALLY_PAID";
+
+        var refunded = await _db.PaymentStatuses.FirstOrDefaultAsync(x => x.Code == "REFUNDED", cancellationToken);
+        if (refunded is null)
+        {
+            refunded = new PaymentStatus
+            {
+                Code = "REFUNDED",
+                Name = "Refunded",
+                SortOrder = 96,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.PaymentStatuses.Add(refunded);
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        if (wasSettled
+            && tx.AccountId is long accountId
+            && IsAnnualFee(tx.FeeType?.Code))
+        {
+            await ReversePaidAmountFromAccountAsync(
+                accountId,
+                tx.Amount,
+                tx.TransactionId,
+                tx.PaymentDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+                cancellationToken);
+        }
+
+        var reason = request.Reason.Trim();
+        tx.PaymentStatusId = refunded.PaymentStatusId;
+        tx.ReferenceNote = string.IsNullOrWhiteSpace(tx.ReferenceNote)
+            ? $"REFUNDED: {reason}"
+            : $"{tx.ReferenceNote} | REFUNDED: {reason}";
+        tx.UpdatedByUserId = actorUserId;
+        _db.AuditLogs.Add(new AuditLog
+        {
+            TableName = "MTransaction",
+            RecordId = tx.TransactionId,
+            Action = "UPDATE",
+            NewValues = $"status=REFUNDED; was={current}; reason={reason}",
+            ChangedByUserId = actorUserId,
+            ChangedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync(cancellationToken);
+        tx.PaymentStatus = refunded;
         return await MapApprovedRow(tx, cancellationToken);
     }
 
@@ -1059,9 +1238,10 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Payment_method WHERE code = N'CLUB_CARD')
         DateOnly paymentDate,
         long transactionId,
         long? actorUserId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int? subscriptionYear = null)
     {
-        var year = paymentDate.Year;
+        var year = subscriptionYear ?? paymentDate.Year;
         var sub = await _db.Subscriptions.FirstOrDefaultAsync(
             s => s.AccountId == accountId && s.SubscriptionYear == year,
             cancellationToken);
@@ -1085,6 +1265,44 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Payment_method WHERE code = N'CLUB_CARD')
         }
         await _db.SaveChangesAsync(cancellationToken);
         await TryRestoreActiveMembershipAsync(accountId, actorUserId, cancellationToken);
+    }
+
+    private async Task ReversePaidAmountFromAccountAsync(
+        long accountId,
+        decimal amount,
+        long transactionId,
+        DateOnly paymentDate,
+        CancellationToken cancellationToken)
+    {
+        var year = paymentDate.Year;
+        var sub = await _db.Subscriptions.FirstOrDefaultAsync(
+            s => s.AccountId == accountId && s.SubscriptionYear == year,
+            cancellationToken);
+        if (sub is not null)
+        {
+            sub.AmountPaid = Math.Max(0, sub.AmountPaid - amount);
+            sub.ArrearsAmount = Math.Max(0, sub.AmountDue - sub.AmountPaid);
+            if (sub.ArrearsAmount > 0)
+            {
+                var unpaid = await _db.MemberStatuses.FirstOrDefaultAsync(
+                    s => s.Code == "UNPAID" || s.Code == "ARREARS" || s.Code == "DUE",
+                    cancellationToken);
+                if (unpaid is not null)
+                    sub.SubscriptionStatusId = unpaid.MemberStatusId;
+            }
+        }
+
+        var settledByTx = await _db.Arrearses
+            .Where(a => a.SettledByTransactionId == transactionId)
+            .ToListAsync(cancellationToken);
+        foreach (var row in settledByTx)
+        {
+            row.Status = "OPEN";
+            row.SettledDate = null;
+            row.SettledByTransactionId = null;
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>
@@ -2180,11 +2398,29 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Payment_method WHERE code = N'CLUB_CARD')
     }
 
     public async Task<SubscriptionLifecycleResultDto> EnforceSubscriptionLifecycleAsync(CancellationToken cancellationToken) =>
-        await RunSubscriptionLifecycleCoreAsync(DateTime.UtcNow.Year, actorUserId: null, cancellationToken);
+        await RunSubscriptionLifecycleCoreAsync(
+            DateTime.UtcNow.Year,
+            actorUserId: null,
+            clearUnpaidFutureYears: false,
+            cancellationToken);
+
+    public async Task<SubscriptionLifecycleResultDto> RunSubscriptionLifecycleForYearAsync(
+        int year,
+        long? actorUserId,
+        CancellationToken cancellationToken) =>
+        await RunSubscriptionLifecycleCoreAsync(
+            year,
+            actorUserId,
+            clearUnpaidFutureYears: true,
+            cancellationToken);
 
     public async Task<int> RunPostingAsync(int year, long? actorUserId, CancellationToken cancellationToken)
     {
-        var result = await RunSubscriptionLifecycleCoreAsync(year, actorUserId, cancellationToken);
+        var result = await RunSubscriptionLifecycleCoreAsync(
+            year,
+            actorUserId,
+            clearUnpaidFutureYears: true,
+            cancellationToken);
         return result.TotalUpdated;
     }
 
@@ -2193,13 +2429,20 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Payment_method WHERE code = N'CLUB_CARD')
     /// 1 Jan — generate unpaid annual subscriptions;
     /// after 28 Feb — POSTED + restrict access;
     /// after 30 Apr — REMOVED.
+    /// When <paramref name="clearUnpaidFutureYears"/> is true (Finance demo button), unpaid rows for
+    /// years after the selected year are removed so the member Payment card can toggle back.
     /// </summary>
     private async Task<SubscriptionLifecycleResultDto> RunSubscriptionLifecycleCoreAsync(
         int year,
         long? actorUserId,
+        bool clearUnpaidFutureYears,
         CancellationToken cancellationToken)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var clearedFuture = clearUnpaidFutureYears
+            ? await ClearUnpaidFutureSubscriptionsBeyondAsync(year, actorUserId, cancellationToken)
+            : 0;
 
         var generated = await GenerateAnnualSubscriptionsForYearAsync(year, actorUserId, cancellationToken);
 
@@ -2215,7 +2458,7 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Payment_method WHERE code = N'CLUB_CARD')
             TableName = "Subscription",
             RecordId = year,
             Action = "UPDATE",
-            NewValues = $"lifecycle:generated={generated};posted={posted};removed={removed}",
+            NewValues = $"lifecycle:generated={generated};posted={posted};removed={removed};futureCleared={clearedFuture}",
             ChangedByUserId = actorUserId,
             ChangedAt = DateTime.UtcNow
         });
@@ -2227,7 +2470,58 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Payment_method WHERE code = N'CLUB_CARD')
             generated,
             posted,
             removed,
-            generated + posted + removed);
+            generated + posted + removed + clearedFuture,
+            clearedFuture);
+    }
+
+    /// <summary>
+    /// Removes unpaid subscription rows for years after <paramref name="year"/> so demos can
+    /// switch focus (generate 2027, then run 2026 to return the member Payment card to 2026).
+    /// Rows with any payment are kept.
+    /// </summary>
+    private async Task<int> ClearUnpaidFutureSubscriptionsBeyondAsync(
+        int year,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var future = await _db.Subscriptions
+            .Where(s => s.SubscriptionYear > year && s.AmountPaid <= 0)
+            .ToListAsync(cancellationToken);
+        if (future.Count == 0) return 0;
+
+        var ids = future.Select(s => s.SubscriptionId).ToList();
+
+        // Do not delete rows that already have payment transactions linked.
+        var linked = await _db.Transactions.AsNoTracking()
+            .Where(t => t.SubscriptionId != null && ids.Contains(t.SubscriptionId.Value))
+            .Select(t => t.SubscriptionId!.Value)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var linkedSet = linked.ToHashSet();
+        var removable = future.Where(s => !linkedSet.Contains(s.SubscriptionId)).ToList();
+        if (removable.Count == 0) return 0;
+
+        var removableIds = removable.Select(s => s.SubscriptionId).ToList();
+        var arrears = await _db.Arrearses
+            .Where(a => a.SubscriptionId != null && removableIds.Contains(a.SubscriptionId.Value))
+            .ToListAsync(cancellationToken);
+        if (arrears.Count > 0)
+            _db.Arrearses.RemoveRange(arrears);
+
+        _db.Subscriptions.RemoveRange(removable);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            TableName = "Subscription",
+            RecordId = year,
+            Action = "DELETE",
+            NewValues = $"demo-clear-future:count={removable.Count};beyond={year}",
+            ChangedByUserId = actorUserId,
+            ChangedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync(cancellationToken);
+        return removable.Count;
     }
 
     /// <summary>

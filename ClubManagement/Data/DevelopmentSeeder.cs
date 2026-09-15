@@ -53,6 +53,8 @@ public static class DevelopmentSeeder
         await EnsurePayment(db, db.PaymentStatuses, "OVERDUE", "Overdue");
         await EnsurePayment(db, db.PaymentStatuses, "WAIVED", "Waived");
         await EnsurePayment(db, db.PaymentStatuses, "REFUNDED", "Refunded");
+        await EnsurePayment(db, db.PaymentStatuses, "REJECTED", "Rejected");
+        await EnsurePayment(db, db.PaymentStatuses, "VOIDED", "Voided");
 
         await EnsureFeeType(db, "JOINING", "Joining fee");
         await EnsureFeeType(db, "ANNUAL", "Annual subscription");

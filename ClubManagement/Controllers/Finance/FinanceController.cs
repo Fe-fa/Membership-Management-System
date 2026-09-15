@@ -105,6 +105,39 @@ public class FinanceController : ControllerBase
     }
 
     [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpPost("payments/{transactionId:long}/refund")]
+    public async Task<ActionResult<PaymentRowDto>> Refund(
+        long transactionId,
+        [FromBody] RefundPaymentRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var row = await _finance.RefundPaymentAsync(transactionId, request, User.UserId(), cancellationToken);
+            try
+            {
+                if (row.ProfileId is long profileId)
+                {
+                    await _managerStage.NotifyApplicantPaymentRejectedAsync(
+                        profileId,
+                        row.ApplicationId,
+                        row.FeeType ?? row.FeeTypeCode ?? "Fee",
+                        $"Refunded: {request.Reason}",
+                        cancellationToken);
+                }
+                if (row.ApplicationId is long applicationId)
+                    await _managerStage.OnApplicantPrerequisitesChangedAsync(applicationId, cancellationToken);
+            }
+            catch
+            {
+                /* refund must succeed even if notification/SMTP fails */
+            }
+            return Ok(row);
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
     [HttpPost("payments/{transactionId:long}/receipt")]
     public async Task<ActionResult<PaymentRowDto>> IssueReceipt(long transactionId, CancellationToken cancellationToken)
     {
@@ -185,12 +218,17 @@ public class FinanceController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Run annual subscription lifecycle for a chosen year (demo / ops):
+    /// generate unpaid rows for that year; apply POSTED after 28 Feb / REMOVED after 30 Apr when as-of date allows.
+    /// </summary>
     [Authorize(Roles = "GENERAL_MANAGER,CHAIRMAN,ADMIN")]
     [HttpPost("posting/{year:int}")]
-    public async Task<ActionResult<object>> Posting(int year, CancellationToken cancellationToken)
+    public async Task<ActionResult<SubscriptionLifecycleResultDto>> Posting(int year, CancellationToken cancellationToken)
     {
-        var count = await _finance.RunPostingAsync(year, User.UserId(), cancellationToken);
-        return Ok(new { updated = count });
+        if (year < 2000 || year > 2100)
+            return BadRequest(new { message = "Year must be between 2000 and 2100." });
+        return Ok(await _finance.RunSubscriptionLifecycleForYearAsync(year, User.UserId(), cancellationToken));
     }
 
     /// <summary>

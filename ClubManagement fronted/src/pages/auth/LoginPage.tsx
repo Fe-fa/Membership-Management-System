@@ -56,9 +56,6 @@ export function LoginPage() {
             <h1 className="text-2xl">Sign in</h1>
           </div>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Applicants: use your email. Members and staff: use your email or membership number.
-        </p>
         <label className="block text-sm">
           Email or membership no.
           <input

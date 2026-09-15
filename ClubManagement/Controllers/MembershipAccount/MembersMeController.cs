@@ -1,4 +1,5 @@
 using ClubManagement.Auth;
+using ClubManagement.DTOs.Common;
 using ClubManagement.DTOs.MembershipAccount;
 using ClubManagement.Services.Finance;
 using ClubManagement.Services.MembershipAccount;
@@ -85,6 +86,29 @@ public class MembersMeController : ControllerBase
         return Ok(await _finance.ListPaymentsAsync(me.AccountId, cancellationToken));
     }
 
+    [HttpPost("payments/{transactionId:long}/void")]
+    public async Task<ActionResult<PaymentRowDto>> VoidPayment(
+        long transactionId,
+        [FromBody] VoidPaymentRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var profileId = User.ProfileId();
+        if (profileId is null) return Unauthorized();
+        try
+        {
+            return Ok(await _finance.VoidPaymentAsync(
+                transactionId,
+                profileId.Value,
+                request,
+                User.UserId(),
+                cancellationToken));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpPost("payments")]
     public async Task<ActionResult<PaymentRowDto>> Pay([FromBody] MemberPayRequest request, CancellationToken cancellationToken)
     {
@@ -122,9 +146,18 @@ public class MembersMeController : ControllerBase
         if (profileId is null) return Unauthorized();
         return Ok(new
         {
-            pending = await _dashboard.ListInvitesAsync(profileId.Value, cancellationToken),
-            history = await _dashboard.ListHistoryAsync(profileId.Value, cancellationToken)
+            pending = await _dashboard.ListInvitesAsync(profileId.Value, cancellationToken)
         });
+    }
+
+    [HttpGet("endorsements/history")]
+    public async Task<ActionResult<PagedResult<EndorsementHistoryDto>>> EndorsementHistory(
+        [FromQuery] PagedRequest paging,
+        CancellationToken cancellationToken)
+    {
+        var profileId = User.ProfileId();
+        if (profileId is null) return Unauthorized();
+        return Ok(await _dashboard.ListHistoryAsync(profileId.Value, paging, cancellationToken));
     }
 
     [HttpGet("endorsements/history/search")]
@@ -203,6 +236,56 @@ public class MembersMeController : ControllerBase
         var profileId = User.ProfileId();
         if (profileId is null) return Unauthorized();
         return Ok(await _dashboard.ListNotificationsAsync(profileId.Value, cancellationToken));
+    }
+
+    [HttpPost("notifications/{notificationId:long}/read")]
+    public async Task<IActionResult> MarkNotificationRead(long notificationId, CancellationToken cancellationToken)
+    {
+        var profileId = User.ProfileId();
+        if (profileId is null) return Unauthorized();
+        try
+        {
+            await _dashboard.MarkNotificationReadAsync(profileId.Value, notificationId, cancellationToken);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("notifications/read-all")]
+    public async Task<IActionResult> MarkAllNotificationsRead(CancellationToken cancellationToken)
+    {
+        var profileId = User.ProfileId();
+        if (profileId is null) return Unauthorized();
+        await _dashboard.MarkAllNotificationsReadAsync(profileId.Value, cancellationToken);
+        return NoContent();
+    }
+
+    [HttpDelete("notifications/{notificationId:long}")]
+    public async Task<IActionResult> DismissNotification(long notificationId, CancellationToken cancellationToken)
+    {
+        var profileId = User.ProfileId();
+        if (profileId is null) return Unauthorized();
+        try
+        {
+            await _dashboard.DismissNotificationAsync(profileId.Value, notificationId, cancellationToken);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpDelete("notifications")]
+    public async Task<IActionResult> DismissAllNotifications(CancellationToken cancellationToken)
+    {
+        var profileId = User.ProfileId();
+        if (profileId is null) return Unauthorized();
+        await _dashboard.DismissAllNotificationsAsync(profileId.Value, cancellationToken);
+        return NoContent();
     }
 
     [HttpPost("endorsements/{applicationId:long}")]

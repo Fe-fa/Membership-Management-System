@@ -9,7 +9,7 @@ import {
   subscribeAuthChanged,
 } from "@/lib/auth";
 import { LoginPage } from "@/pages/auth/LoginPage";
-import { PortalHomePage } from "@/pages/member/PortalHomePage";
+import { PortalHomePage } from "@/pages/applicant/PortalHomePage";
 
 export const Route = createFileRoute("/")({
   beforeLoad: () => {

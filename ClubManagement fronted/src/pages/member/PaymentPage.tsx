@@ -5,7 +5,6 @@ import { toast } from "sonner";
 
 import { PageBackLink, PageFrame, PageHeader } from "@/components/layout/PageFrame";
 import { PageBodyLoading } from "@/components/layout/PageLoading";
-import { ApplicantStageChecklist } from "@/components/admin/ManagerStagePanel";
 import {
   MemberPaymentForm,
   PaymentHistoryTable,
@@ -17,6 +16,8 @@ import {
   useMemberPaymentHistory,
   useMemberSubscription,
   usePaymentMethods,
+  useVoidApplicationPayment,
+  useVoidMemberPayment,
 } from "@/components/payments";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +48,7 @@ function MemberSubscriptionPage() {
   const sub = useMemberSubscription();
   const history = useMemberPaymentHistory();
   const methods = usePaymentMethods();
+  const voidPayment = useVoidMemberPayment();
 
   useEffect(() => {
     if (search.purpose || search.nmId || search.amount) setPayOpen(true);
@@ -70,12 +72,18 @@ function MemberSubscriptionPage() {
   }
 
   const row = sub.data;
+  const memberPaymentDefaults = {
+    ...(search.purpose ? { initialPurpose: search.purpose } : {}),
+    ...(typeof search.amount === "number" ? { initialAmount: search.amount } : {}),
+    ...(search.desc ? { initialLineDescription: search.desc } : {}),
+    ...(typeof search.nmId === "number" ? { nmChargeId: search.nmId } : {}),
+  };
 
   return (
     <PageFrame>
       <PageHeader
         title="Payment"
-        description="Review dues, pay joining or annual fees, accommodation, corkage, and track receipts."
+        description="Review dues, pay joining or annual fees."
         actions={
           <Button type="button" onClick={() => setPayOpen(true)}>
             Make a payment
@@ -92,19 +100,21 @@ function MemberSubscriptionPage() {
         audience="member"
         sub={row}
         methods={methods.data ?? []}
-        initialPurpose={search.purpose}
-        initialAmount={search.amount}
-        initialLineDescription={search.desc}
-        nmChargeId={search.nmId}
+        {...memberPaymentDefaults}
       />
 
       <Card>
         <CardHeader>
           <CardTitle>Recent transactions</CardTitle>
-          <CardDescription>Filter by status, fee type, or payment method.</CardDescription>
         </CardHeader>
         <CardContent>
-          <PaymentHistoryTable rows={history.data ?? []} loading={history.isLoading} showFilters />
+          <PaymentHistoryTable
+            rows={history.data ?? []}
+            loading={history.isLoading}
+            showFilters
+            onVoid={(transactionId) => voidPayment.mutate(transactionId)}
+            voidingId={voidPayment.isPending ? voidPayment.variables ?? null : null}
+          />
         </CardContent>
       </Card>
     </PageFrame>
@@ -130,6 +140,7 @@ function ApplicantPaymentPage() {
 
   const dues = useApplicationDues(applicationId);
   const history = useApplicationPaymentHistory(applicationId);
+  const voidPayment = useVoidApplicationPayment(applicationId);
   const typeOptions = useQuery({
     queryKey: ["membership-types", "applicant"],
     queryFn: () => fetchMembershipTypes({ applicantOnly: true }),
@@ -205,7 +216,7 @@ function ApplicantPaymentPage() {
       <PageBackLink to="/" label="Back to home" />
       <PageHeader
         title="Payment"
-        description="Review dues, pay joining or annual fees, and track receipts — same payment desk as members."
+        description="Review dues, pay joining or annual fees, and track receipts"
         actions={
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={openPaymentDesk}>
@@ -217,13 +228,6 @@ function ApplicantPaymentPage() {
           </div>
         }
       />
-
-      {applicationId > 0 ? (
-        <ApplicantStageChecklist
-          applicationId={applicationId}
-          statusCode={application.data?.status ?? null}
-        />
-      ) : null}
 
       {!hasMembershipClass ? (
         <Card>
@@ -296,12 +300,15 @@ function ApplicantPaymentPage() {
       <Card>
         <CardHeader>
           <CardTitle>Payment history</CardTitle>
-          <CardDescription>
-            From MTransaction, Fee_type, Payment_status, and MReceiptMaster.
-          </CardDescription>
         </CardHeader>
         <CardContent>
-          <PaymentHistoryTable rows={history.data ?? []} loading={history.isLoading} showFilters />
+          <PaymentHistoryTable
+            rows={history.data ?? []}
+            loading={history.isLoading}
+            showFilters
+            onVoid={(transactionId) => voidPayment.mutate(transactionId)}
+            voidingId={voidPayment.isPending ? voidPayment.variables ?? null : null}
+          />
         </CardContent>
       </Card>
     </PageFrame>

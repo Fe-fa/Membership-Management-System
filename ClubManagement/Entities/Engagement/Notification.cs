@@ -49,6 +49,12 @@ namespace ClubManagement.Entities.Engagement
         [Column("updated_by_user_id")]
         public long? UpdatedByUserId { get; set; }
 
+        [Column("read_at")]
+        public DateTime? ReadAt { get; set; }
+
+        [Column("dismissed_at")]
+        public DateTime? DismissedAt { get; set; }
+
         public virtual MAccount? Account { get; set; }
 
         public virtual NotificationType NotificationType { get; set; } = null!;

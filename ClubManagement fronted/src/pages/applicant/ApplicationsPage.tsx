@@ -39,7 +39,6 @@ import { ageOn } from "@/services/membership/schema";
 import { cn } from "@/utils/cn";
 import { readUser } from "@/lib/auth";
 import { displayApplicationStatus } from "@/services/admin/membershipDesk";
-import { ApplicantStageChecklist } from "@/components/admin/ManagerStagePanel";
 
 type ApplicationStatus =
   | "Draft"
@@ -49,12 +48,14 @@ type ApplicationStatus =
   | "EndorsementReview"
   | "Interview"
   | "InterviewReview"
+  | "TemporaryMember"
   | "Waitlist"
   | "ElectionReview"
   | "Committee"
   | "CommitteeReview"
   | "Approved"
   | "Rejected"
+  | "NotElected"
   | "Withdrawn";
 
 type ApplicationListItem = {
@@ -93,13 +94,14 @@ const ACTIVE_STATUSES: readonly ApplicationStatus[] = [
   "EndorsementReview",
   "Interview",
   "InterviewReview",
+  "TemporaryMember",
   "Waitlist",
   "ElectionReview",
   "Committee",
   "CommitteeReview",
   "Approved",
 ];
-const FINAL_STATUSES: readonly ApplicationStatus[] = ["Rejected", "Withdrawn"];
+const FINAL_STATUSES: readonly ApplicationStatus[] = ["Rejected", "NotElected", "Withdrawn"];
 
 type Bucket = {
   key: string;
@@ -137,7 +139,7 @@ const BUCKETS: Bucket[] = [
     key: "Election",
     label: "Election",
     tints: "border-pink-300 bg-pink-50 text-pink-700",
-    matches: ["Waitlist", "ElectionReview"],
+    matches: ["TemporaryMember", "Waitlist", "ElectionReview"],
   },
   {
     key: "Committee",
@@ -160,12 +162,14 @@ const STATUS_OPTIONS: { value: ApplicationStatus; label: string }[] = [
   { value: "EndorsementReview", label: "Endorsement Review" },
   { value: "Interview", label: "Interview" },
   { value: "InterviewReview", label: "Interview Review" },
+  { value: "TemporaryMember", label: "Temporary member / ballot" },
   { value: "Waitlist", label: "Waitlisted" },
   { value: "ElectionReview", label: "Election Review" },
   { value: "Committee", label: "Committee signatures" },
   { value: "CommitteeReview", label: "Committee Review" },
   { value: "Approved", label: "Fully approved" },
   { value: "Rejected", label: "Rejected" },
+  { value: "NotElected", label: "Not elected" },
   { value: "Withdrawn", label: "Withdrawn" },
 ];
 
@@ -190,6 +194,8 @@ function normalizeStatusCode(statusCode?: string | null): ApplicationStatus | nu
       return "Interview";
     case "INTERVIEWREVIEW":
       return "InterviewReview";
+    case "TEMPORARYMEMBER":
+      return "TemporaryMember";
     case "WAITLIST":
     case "ELECTION":
       return "Waitlist";
@@ -203,6 +209,8 @@ function normalizeStatusCode(statusCode?: string | null): ApplicationStatus | nu
       return "Approved";
     case "REJECTED":
       return "Rejected";
+    case "NOTELECTED":
+      return "NotElected";
     case "WITHDRAWN":
     case "EXCLUDED":
       return "Withdrawn";
@@ -356,7 +364,7 @@ export function ApplicationsPage() {
     <PageFrame>
       <PageBackLink to="/" label="Back to dashboard" />
       <PageHeader
-        title="My Applications"
+       
         description="Track and manage your membership applications"
         actions={
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
@@ -665,16 +673,6 @@ function ApplicationCard({
           ) : null}
         </div>
       </div>
-
-      {(app.statusCode === "Endorsement" ||
-        app.statusCode === "EndorsementReview" ||
-        app.statusCode === "Submitted" ||
-        app.statusCode === "UnderReview" ||
-        app.statusCode === "Interview") && (
-        <div className="border-t border-border px-5 py-3" onClick={(e) => e.stopPropagation()}>
-          <ApplicantStageChecklist applicationId={app.applicationId} statusCode={app.statusCode} compact />
-        </div>
-      )}
 
       <div className="flex flex-wrap items-center gap-0.5 border-t border-border px-5 py-3">
         <Button asChild size="icon" variant="ghost" className="size-8" title="View details">

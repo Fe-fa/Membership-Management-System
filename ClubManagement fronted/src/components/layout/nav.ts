@@ -58,7 +58,7 @@ const APPLICANT_NAV: AppNavGroup[] = [
   {
     label: "Applicant",
     items: [
-      { label: "Home", to: "/", icon: LayoutGrid },
+      { label: "Overview", to: "/", icon: LayoutGrid },
       { label: "Application status", to: "/applications", icon: FileClock },
       { label: "Documents", to: "/documents", icon: FileText },
       { label: "Payment", to: "/payment", icon: Receipt },

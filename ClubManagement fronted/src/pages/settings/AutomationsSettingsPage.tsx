@@ -20,7 +20,7 @@ export function AutomationsSettingsPage() {
   return (
     <PageFrame width="sm">
       <PageHeader
-        title="Automations & Schedules"
+        title=""
         description="View and manage background automations, recurring updates, or scheduled actions."
       />
       <form

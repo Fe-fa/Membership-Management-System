@@ -3,6 +3,7 @@ import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { ListPagination } from "@/components/common/ListPagination";
 import { PageFrame, PageHeader } from "@/components/layout/PageFrame";
 import { RejectApplicationDialog } from "@/components/admin/RejectApplicationDialog";
 import {
@@ -29,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { DEFAULT_PAGE_SIZE, emptyPage, pagedQuery, type PagedResult } from "@/lib/pagination";
 import { apiRequest, extractErrorMessage } from "@/services/membership/api";
 
 type Invite = {
@@ -340,20 +342,32 @@ function EndorseForm({
 
 export function EndorsementsPage() {
   const queryClient = useQueryClient();
-  const data = useQuery({
-    queryKey: ["member-endorsements"],
-    queryFn: () =>
-      apiRequest<{ pending: Invite[]; history: HistoryRow[] }>(
-        "/api/members/me/endorsements",
-      ),
-  });
-
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize, setHistoryPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [openId, setOpenId] = useState<number | null>(null);
   const [selected, setSelected] = useState<HistoryRow | null>(null);
   const [retrieveOpen, setRetrieveOpen] = useState(false);
 
-  const pending = data.data?.pending ?? [];
-  const history = data.data?.history ?? [];
+  const pendingQuery = useQuery({
+    queryKey: ["member-endorsements", "pending"],
+    queryFn: () =>
+      apiRequest<{ pending: Invite[] }>("/api/members/me/endorsements"),
+  });
+
+  const historyQuery = useQuery({
+    queryKey: ["member-endorsements", "history", historyPage, historyPageSize],
+    queryFn: () =>
+      apiRequest<PagedResult<HistoryRow>>(
+        `/api/members/me/endorsements/history?${pagedQuery({
+          page: historyPage,
+          pageSize: historyPageSize,
+        })}`,
+      ),
+  });
+
+  const pending = pendingQuery.data?.pending ?? [];
+  const historyPageData = historyQuery.data ?? emptyPage<HistoryRow>(historyPage, historyPageSize);
+  const history = historyPageData.items;
 
   const refreshEndorsements = () => {
     void queryClient.invalidateQueries({ queryKey: ["member-endorsements"] });
@@ -368,17 +382,20 @@ export function EndorsementsPage() {
       <Tabs defaultValue="pending" className="mt-2">
         <TabsList>
           <TabsTrigger value="pending">Requests ({pending.length})</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
+          <TabsTrigger value="history">
+            History
+            {historyPageData.totalCount > 0 ? ` (${historyPageData.totalCount})` : ""}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="pending" className="mt-6 space-y-4">
-          {data.isLoading ? (
+          {pendingQuery.isLoading ? (
             <p className="text-sm text-muted-foreground">
               Loading pending endorsements…
             </p>
-          ) : data.isError ? (
+          ) : pendingQuery.isError ? (
             <div className="surface-card p-5 text-sm text-destructive">
-              {extractErrorMessage(data.error) ?? "Could not load endorsements."}
+              {extractErrorMessage(pendingQuery.error) ?? "Could not load endorsements."}
             </div>
           ) : pending.length === 0 ? (
             <div className="surface-card p-6 text-sm text-muted-foreground">
@@ -459,45 +476,58 @@ export function EndorsementsPage() {
             </Button>
           </div>
 
-          {data.isLoading ? (
+          {historyQuery.isLoading ? (
             <p className="text-sm text-muted-foreground">Loading history…</p>
-          ) : data.isError ? (
+          ) : historyQuery.isError ? (
             <div className="surface-card p-5 text-sm text-destructive">
-              {extractErrorMessage(data.error) ?? "Could not load history."}
+              {extractErrorMessage(historyQuery.error) ?? "Could not load history."}
             </div>
-          ) : history.length === 0 ? (
+          ) : historyPageData.totalCount === 0 ? (
             <div className="surface-card p-6 text-sm text-muted-foreground">
               You have not endorsed an application yet. Use Retrieve if a
               previous applicant is missing from this list.
             </div>
           ) : (
-            history.map((row) => {
-              const when = formatHistoryDate(row.completedAt);
-              return (
-                <button
-                  type="button"
-                  key={`${row.endorsementId ?? "app"}-${row.applicationId}-${row.role}-${row.completedAt}`}
-                  className="surface-card flex w-full items-center gap-4 px-5 py-4 text-left text-sm"
-                  onClick={() => setSelected(row)}
-                >
-                  <ApplicantAvatar
-                    name={row.applicantName}
-                    photoUrl={row.applicantPhotoUrl}
-                    size="sm"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-display text-base font-semibold">
-                      {row.role} for {row.applicantName}
-                    </p>
-                    <p className="mt-0.5 text-muted-foreground">
-                      {row.applicationNo}
-                      {when ? ` · ${when}` : ""}
-                    </p>
-                  </div>
-                  <Badge tone={outcomeTone(row.outcome)}>{row.outcome}</Badge>
-                </button>
-              );
-            })
+            <>
+              {history.map((row) => {
+                const when = formatHistoryDate(row.completedAt);
+                return (
+                  <button
+                    type="button"
+                    key={`${row.endorsementId ?? "app"}-${row.applicationId}-${row.role}-${row.completedAt}`}
+                    className="surface-card flex w-full items-center gap-4 px-5 py-4 text-left text-sm"
+                    onClick={() => setSelected(row)}
+                  >
+                    <ApplicantAvatar
+                      name={row.applicantName}
+                      photoUrl={row.applicantPhotoUrl}
+                      size="sm"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-display text-base font-semibold">
+                        {row.role} for {row.applicantName}
+                      </p>
+                      <p className="mt-0.5 text-muted-foreground">
+                        {row.applicationNo}
+                        {when ? ` · ${when}` : ""}
+                      </p>
+                    </div>
+                    <Badge tone={outcomeTone(row.outcome)}>{row.outcome}</Badge>
+                  </button>
+                );
+              })}
+              <ListPagination
+                page={historyPageData.page}
+                pageSize={historyPageData.pageSize}
+                totalCount={historyPageData.totalCount}
+                totalPages={historyPageData.totalPages}
+                onPageChange={setHistoryPage}
+                onPageSizeChange={(size) => {
+                  setHistoryPageSize(size);
+                  setHistoryPage(1);
+                }}
+              />
+            </>
           )}
         </TabsContent>
       </Tabs>

@@ -50,7 +50,7 @@ export function AccountSettingsPage() {
   return (
     <PageFrame width="sm">
       <PageHeader
-        title="Account & Profile"
+        title=""
         description="View or update your account email, display name, profile photo, and password."
       />
       <form

@@ -111,56 +111,56 @@ type PaymentView = {
   tone: "green" | "amber" | "slate" | "rose";
   status: string;
   received: boolean;
-  amount?: number | null;
-  receiptNumber?: string | null;
-  paymentDate?: string | null;
+  amount: number | null | undefined;
+  receiptNumber: string | null | undefined;
+  paymentDate: string | null | undefined;
   lines: PaymentLineView[];
 };
 
 function toPaymentLineView(payment: PaymentRow): PaymentLineView {
   const source = payment as unknown as Record<string, unknown>;
   const amountValue =
-    typeof source.amount === "number"
-      ? source.amount
-      : Number(source.amount ?? source.paidAmount ?? 0);
+    typeof source["amount"] === "number"
+      ? source["amount"]
+      : Number(source["amount"] ?? source["paidAmount"] ?? 0);
 
   return {
     feeCode:
-      typeof source.feeCode === "string"
-        ? source.feeCode
-        : typeof source.paymentTypeCode === "string"
-          ? source.paymentTypeCode
+      typeof source["feeCode"] === "string"
+        ? source["feeCode"]
+        : typeof source["paymentTypeCode"] === "string"
+          ? source["paymentTypeCode"]
           : null,
     feeLabel:
-      typeof source.feeLabel === "string"
-        ? source.feeLabel
-        : typeof source.paymentTypeName === "string"
-          ? source.paymentTypeName
-          : typeof source.feeName === "string"
-            ? source.feeName
+      typeof source["feeLabel"] === "string"
+        ? source["feeLabel"]
+        : typeof source["paymentTypeName"] === "string"
+          ? source["paymentTypeName"]
+          : typeof source["feeName"] === "string"
+            ? source["feeName"]
             : "Fee",
     amount: Number.isFinite(amountValue) ? amountValue : 0,
     receiptNumber:
-      typeof source.receiptNumber === "string"
-        ? source.receiptNumber
-        : typeof source.receiptNo === "string"
-          ? source.receiptNo
-          : typeof source.referenceNumber === "string"
-            ? source.referenceNumber
+      typeof source["receiptNumber"] === "string"
+        ? source["receiptNumber"]
+        : typeof source["receiptNo"] === "string"
+          ? source["receiptNo"]
+          : typeof source["referenceNumber"] === "string"
+            ? source["referenceNumber"]
             : null,
     paymentDate:
-      typeof source.paymentDate === "string"
-        ? source.paymentDate
-        : typeof source.receivedAt === "string"
-          ? source.receivedAt
-          : typeof source.createdAt === "string"
-            ? source.createdAt
+      typeof source["paymentDate"] === "string"
+        ? source["paymentDate"]
+        : typeof source["receivedAt"] === "string"
+          ? source["receivedAt"]
+          : typeof source["createdAt"] === "string"
+            ? source["createdAt"]
             : null,
     received:
-      typeof source.received === "boolean"
-        ? source.received
-        : typeof source.isPaid === "boolean"
-          ? source.isPaid
+      typeof source["received"] === "boolean"
+        ? source["received"]
+        : typeof source["isPaid"] === "boolean"
+          ? source["isPaid"]
           : true,
   } satisfies PaymentLineView;
 }
@@ -176,8 +176,8 @@ function mergePaymentView(row: ApplicationRow, livePayments: PaymentRow[]): Paym
           {
             feeLabel: "Entrance / joining",
             amount: 0,
-            receiptNumber: row.paymentReceiptNumber,
-            paymentDate: row.paymentDate,
+            receiptNumber: row.paymentReceiptNumber ?? null,
+            paymentDate: row.paymentDate ?? null,
             received: isPaymentOk(row),
           },
           {
@@ -192,29 +192,35 @@ function mergePaymentView(row: ApplicationRow, livePayments: PaymentRow[]): Paym
   const lines = liveLines.length > 0 ? liveLines : fallbackLines;
   const received =
     liveLines.length > 0 ? liveLines.some((line) => line.received !== false) : isPaymentOk(row);
-  const amount =
+  const amountValue =
     liveLines.length > 0
       ? liveLines.reduce((sum, line) => sum + (Number.isFinite(line.amount) ? line.amount : 0), 0)
-      : row.paymentAmount;
+      : Number(row.paymentAmount ?? 0);
   const receiptNumber =
     liveLines.find((line) => line.receiptNumber?.trim())?.receiptNumber ?? row.paymentReceiptNumber;
   const paymentDate = liveLines.find((line) => line.paymentDate)?.paymentDate ?? row.paymentDate;
   const status =
     liveLines.length > 0
       ? received
-        ? amount > 0 && !isPaymentOk(row)
+        ? amountValue > 0 && !isPaymentOk(row)
           ? "Partially paid"
           : "Paid"
         : row.paymentStatus?.trim() || "Pending"
       : row.paymentStatus?.trim() || "Pending";
   const tone =
-    liveLines.length > 0 ? (received ? (amount > 0 && !isPaymentOk(row) ? "amber" : "green") : "slate") : paymentTone(row);
+    liveLines.length > 0
+      ? received
+        ? amountValue > 0 && !isPaymentOk(row)
+          ? "amber"
+          : "green"
+        : "slate"
+      : paymentTone(row);
 
   return {
     tone,
     status,
     received,
-    amount,
+    amount: amountValue,
     receiptNumber,
     paymentDate,
     lines,
@@ -360,10 +366,10 @@ export function PendingApplicationsPage() {
   return (
     <PageFrame width="lg">
       <PageBackLink to="/admin" label="Back to admin dashboard" />
-      <PageHeader
+      {/* <PageHeader
         title={title}
         description={description}
-      />
+      /> */}
       <PendingApplicationsPanel
         authorize={authorize}
         manager={manager}
@@ -1079,9 +1085,9 @@ function PendingApplicationsPanel({
               ) : (
                 <ManagerStagePanel
                   applicationId={String(verifyingRow.applicationId)}
-                  detail={verifyDetail.data}
-                  membershipTypeName={verifyingRow.membershipTypeName}
-                  endorsements={verifyDetail.data?.endorsements}
+                  detail={verifyDetail.data ?? null}
+                  membershipTypeName={verifyingRow.membershipTypeName ?? null}
+                  endorsements={verifyDetail.data?.endorsements ?? null}
                   committeeNote={committeeNote}
                   onCommitteeNoteChange={setCommitteeNote}
                   onViewFull={() => setViewingFullDetails(true)}
@@ -1131,7 +1137,7 @@ function PendingApplicationsPanel({
 
       <RejectApplicationDialog
         open={Boolean(rejectTarget)}
-        applicantLabel={rejectTarget ? applicantDisplayName(rejectTarget) : undefined}
+        applicantLabel={rejectTarget ? applicantDisplayName(rejectTarget) : ""}
         pending={reject.isPending}
         onOpenChange={(open) => {
           if (!open) setRejectTarget(null);
@@ -1414,7 +1420,7 @@ function AuthorizeActions({
         <DropdownMenuContent align="end">
           {canAdvance || sponsorsBlocking ? (
             <DropdownMenuItem
-              disabled={busy || !canAdvance || sponsorsBlocking}
+              disabled={busy || !canAdvance || !!sponsorsBlocking}
               onClick={onAdvance}
               title={
                 sponsorsBlocking

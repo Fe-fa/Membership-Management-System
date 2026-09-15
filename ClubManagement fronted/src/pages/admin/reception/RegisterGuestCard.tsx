@@ -8,7 +8,13 @@ import { apiRequest, extractErrorMessage } from "@/services/membership/api";
 import { cn } from "@/utils/cn";
 import { kenyaTodayISO } from "@/utils/kenyaDate";
 
-import { VISIT_PURPOSES, type ReceptionHost, type ReceptionVisitRow } from "./types";
+import {
+  VISIT_PURPOSES,
+  isOtherVisitPurpose,
+  resolveVisitPurpose,
+  type ReceptionHost,
+  type ReceptionVisitRow,
+} from "./types";
 
 type Props = {
   onRegistered: (visit: ReceptionVisitRow) => void;
@@ -26,6 +32,7 @@ export function RegisterGuestCard({ onRegistered, requestedHost }: Props) {
     email: "",
     visitDate: kenyaTodayISO(),
     purpose: "",
+    purposeOther: "",
     status: "On site",
     signatureName: "",
   });
@@ -60,7 +67,7 @@ export function RegisterGuestCard({ onRegistered, requestedHost }: Props) {
           email: guest.email.trim() || null,
           hostProfileId: host?.profileId,
           visitDate: guest.visitDate,
-          purpose: guest.purpose || null,
+          purpose: resolveVisitPurpose(guest.purpose, guest.purposeOther),
           signature: `typed:${guest.signatureName.trim()}`,
           status: guest.status,
         }),
@@ -73,6 +80,7 @@ export function RegisterGuestCard({ onRegistered, requestedHost }: Props) {
         email: "",
         visitDate: kenyaTodayISO(),
         purpose: "",
+        purposeOther: "",
         status: "On site",
         signatureName: "",
       });
@@ -89,6 +97,9 @@ export function RegisterGuestCard({ onRegistered, requestedHost }: Props) {
     if (guest.email.trim() && !guest.email.includes("@")) next.email = "Enter a valid email.";
     if (!guest.visitDate) next.visitDate = "Required.";
     if (!guest.signatureName.trim()) next.signature = "Type the guest's name.";
+    if (isOtherVisitPurpose(guest.purpose) && !guest.purposeOther.trim()) {
+      next.purposeOther = "Please describe the reason for the visit.";
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -188,11 +199,18 @@ export function RegisterGuestCard({ onRegistered, requestedHost }: Props) {
           <Field label="Email" error={errors.email}>
             <Input type="email" value={guest.email} onChange={(event) => setGuest({ ...guest, email: event.target.value })} placeholder="Optional" />
           </Field>
-          <Field label="Purpose">
+          <Field label="Reason for club visit">
             <select
               className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               value={guest.purpose}
-              onChange={(event) => setGuest({ ...guest, purpose: event.target.value })}
+              onChange={(event) => {
+                const purpose = event.target.value;
+                setGuest({
+                  ...guest,
+                  purpose,
+                  purposeOther: isOtherVisitPurpose(purpose) ? guest.purposeOther : "",
+                });
+              }}
             >
               <option value="">Not specified</option>
               {VISIT_PURPOSES.map((purpose) => (
@@ -200,6 +218,15 @@ export function RegisterGuestCard({ onRegistered, requestedHost }: Props) {
               ))}
             </select>
           </Field>
+          {isOtherVisitPurpose(guest.purpose) ? (
+            <Field label="Please specify" error={errors.purposeOther} className="col-span-2">
+              <Input
+                value={guest.purposeOther}
+                onChange={(event) => setGuest({ ...guest, purposeOther: event.target.value })}
+                placeholder="Describe the reason for the visit"
+              />
+            </Field>
+          ) : null}
           <Field label="Visit date" error={errors.visitDate}>
             <Input type="date" required value={guest.visitDate} onChange={(event) => setGuest({ ...guest, visitDate: event.target.value })} />
           </Field>
@@ -243,9 +270,19 @@ export function RegisterGuestCard({ onRegistered, requestedHost }: Props) {
   );
 }
 
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  error,
+  className,
+  children,
+}: {
+  label: string;
+  error?: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <label className="grid gap-1 text-sm">
+    <label className={cn("grid gap-1 text-sm", className)}>
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
       {children}
       {error ? <span className="text-xs text-destructive">{error}</span> : null}

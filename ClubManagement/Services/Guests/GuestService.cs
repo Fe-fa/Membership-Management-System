@@ -13,7 +13,35 @@ namespace ClubManagement.Services.Guests;
 
 public record GuestVisitRequest(string GuestName, DateOnly VisitDate, TimeOnly? TimeIn, string? GuestBookEntryNo);
 public record ReciprocalVisitRequest(long HomeClubId, DateOnly VisitDate, int DaysUsed, string? Notes);
-public record VisitRowDto(long VisitId, string GuestName, DateOnly VisitDate, TimeOnly? TimeIn, TimeOnly? TimeOut, bool IsCurrent, string? EntryNo);
+public record VisitRowDto(
+    long VisitId,
+    long GuestId,
+    string GuestName,
+    DateOnly VisitDate,
+    TimeOnly? TimeIn,
+    TimeOnly? TimeOut,
+    bool IsCurrent,
+    string? EntryNo,
+    string? Purpose = null,
+    bool HasPendingArrivalAlert = false);
+
+public record GuestPolicyDto(
+    int MaxActiveGuests,
+    int ActiveGuestCount,
+    int MaxVisitsPerGuestMonth,
+    int MaxVisitsPerGuestYear);
+
+public record GuestArrivalAlertDto(
+    long AlertId,
+    long VisitId,
+    long HostProfileId,
+    string GuestName,
+    string HostMemberName,
+    string? Message,
+    DateTime CreatedAt,
+    bool IsAcknowledged);
+
+public record NotifyReceptionRequest(long VisitId, string? Message);
 
 public record ReceptionMemberDto(
     long ProfileId,
@@ -126,6 +154,10 @@ public interface IGuestService
     Task<ReceptionVisitDto?> GetReceptionVisitAsync(long visitId, CancellationToken cancellationToken);
     Task<GuestEligibilityDto> CheckRegistrationEligibilityAsync(GuestEligibilityRequest request, CancellationToken cancellationToken);
     Task<ParentApplicantEligibilityDto> CheckParentApplicantAsync(ParentApplicantRequest request, CancellationToken cancellationToken);
+    Task<GuestPolicyDto> GetGuestPolicyAsync(long profileId, CancellationToken cancellationToken);
+    Task<GuestArrivalAlertDto> NotifyReceptionGuestArrivedAsync(long hostProfileId, long visitId, string? message, long? actorUserId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<GuestArrivalAlertDto>> ListPendingArrivalAlertsAsync(CancellationToken cancellationToken);
+    Task AcknowledgeArrivalAlertAsync(long alertId, long? actorUserId, CancellationToken cancellationToken);
 }
 
 public class GuestService : IGuestService
@@ -181,6 +213,25 @@ AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_MGuest_visit_slip_co
             });
             await _db.SaveChangesAsync(cancellationToken);
         }
+
+        await _db.Database.ExecuteSqlRawAsync(@"
+IF OBJECT_ID(N'dbo.Guest_arrival_alert', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Guest_arrival_alert (
+        guest_arrival_alert_id BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        visit_id BIGINT NOT NULL,
+        host_profile_id BIGINT NOT NULL,
+        guest_name NVARCHAR(200) NOT NULL,
+        host_member_name NVARCHAR(200) NOT NULL,
+        message NVARCHAR(500) NULL,
+        created_at DATETIME2 NOT NULL,
+        created_by_user_id BIGINT NULL,
+        acknowledged_at DATETIME2 NULL,
+        acknowledged_by_user_id BIGINT NULL,
+        CONSTRAINT FK_Guest_arrival_alert_visit FOREIGN KEY (visit_id) REFERENCES dbo.MVisit(visit_id) ON DELETE CASCADE
+    );
+    CREATE INDEX IX_Guest_arrival_alert_pending ON dbo.Guest_arrival_alert(acknowledged_at, created_at);
+END", cancellationToken);
     }
 
     public async Task<VisitRowDto> SignInGuestAsync(long visitingProfileId, GuestVisitRequest request, long? actorUserId, CancellationToken cancellationToken)
@@ -221,7 +272,16 @@ AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_MGuest_visit_slip_co
         };
         _db.Visits.Add(visit);
         await _db.SaveChangesAsync(cancellationToken);
-        return new VisitRowDto(visit.VisitId, guest.GuestName, visit.VisitDate, visit.TimeIn, visit.TimeOut, visit.IsCurrentFlag, visit.GuestBookEntryNo);
+        return new VisitRowDto(
+            visit.VisitId,
+            guest.GuestId,
+            guest.GuestName,
+            visit.VisitDate,
+            visit.TimeIn,
+            visit.TimeOut,
+            visit.IsCurrentFlag,
+            visit.GuestBookEntryNo,
+            visit.Purpose);
     }
 
     public async Task SignOutAsync(long visitId, TimeOnly timeOut, CancellationToken cancellationToken)
@@ -240,7 +300,17 @@ AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_MGuest_visit_slip_co
             .Include(v => v.Guest)
             .OrderByDescending(v => v.VisitDate)
             .Take(50)
-            .Select(v => new VisitRowDto(v.VisitId, v.Guest.GuestName, v.VisitDate, v.TimeIn, v.TimeOut, v.IsCurrentFlag, v.GuestBookEntryNo))
+            .Select(v => new VisitRowDto(
+                v.VisitId,
+                v.GuestId,
+                v.Guest.GuestName,
+                v.VisitDate,
+                v.TimeIn,
+                v.TimeOut,
+                v.IsCurrentFlag,
+                v.GuestBookEntryNo,
+                v.Purpose,
+                _db.GuestArrivalAlerts.Any(a => a.VisitId == v.VisitId && a.AcknowledgedAt == null)))
             .ToListAsync(cancellationToken);
     }
 
@@ -384,11 +454,12 @@ AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_MGuest_visit_slip_co
             }
         }
 
+        await RejectIfFrequencyExceededAsync(guest.GuestId, visitDate, cancellationToken);
+
         if (onSite)
         {
             await RejectIfAlreadyOnSiteAsync(guest, cancellationToken);
             await EnsureActiveGuestCapacityAsync(request.HostProfileId, cancellationToken);
-            await RejectIfFrequencyExceededAsync(guest.GuestId, visitDate, cancellationToken);
         }
 
         if (string.IsNullOrWhiteSpace(guest.VisitSlipCode))
@@ -744,6 +815,97 @@ AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_MGuest_visit_slip_co
             recordedDob,
             age);
     }
+
+    public async Task<GuestPolicyDto> GetGuestPolicyAsync(long profileId, CancellationToken cancellationToken)
+    {
+        var maxActive = await _policy.GetIntAsync("MAX_ACTIVE_GUESTS", 6, cancellationToken);
+        var maxMonth = await _policy.GetIntAsync("MAX_GUEST_INTRODUCTIONS_PER_MONTH", 2, cancellationToken);
+        var maxYear = await _policy.GetIntAsync("MAX_GUEST_INTRODUCTIONS_PER_YEAR", 12, cancellationToken);
+        var activeCount = await _db.Visits.CountAsync(v => v.VisitingProfileId == profileId && v.IsCurrentFlag, cancellationToken);
+        return new GuestPolicyDto(maxActive, activeCount, maxMonth, maxYear);
+    }
+
+    public async Task<GuestArrivalAlertDto> NotifyReceptionGuestArrivedAsync(
+        long hostProfileId,
+        long visitId,
+        string? message,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        await EnsureSchemaAsync(cancellationToken);
+
+        var visit = await _db.Visits.AsNoTracking()
+            .Include(v => v.Guest)
+            .Include(v => v.Visitor)
+            .FirstOrDefaultAsync(v => v.VisitId == visitId, cancellationToken)
+            ?? throw new InvalidOperationException("Visit not found.");
+
+        if (visit.VisitingProfileId != hostProfileId)
+            throw new InvalidOperationException("You can only notify reception about your own guests.");
+
+        if (!visit.IsCurrentFlag)
+            throw new InvalidOperationException("This guest is not currently signed in.");
+
+        var pending = await _db.GuestArrivalAlerts.AnyAsync(
+            a => a.VisitId == visitId && a.AcknowledgedAt == null,
+            cancellationToken);
+        if (pending)
+            throw new InvalidOperationException("Reception has already been notified about this guest.");
+
+        var hostName = $"{visit.Visitor.FirstName} {visit.Visitor.LastName}".Trim();
+        var note = string.IsNullOrWhiteSpace(message)
+            ? "Guest arrived before host member."
+            : message.Trim();
+        if (note.Length > 500)
+            throw new InvalidOperationException("Message must be under 500 characters.");
+
+        var alert = new GuestArrivalAlert
+        {
+            VisitId = visitId,
+            HostProfileId = hostProfileId,
+            GuestName = visit.Guest.GuestName,
+            HostMemberName = hostName,
+            Message = note,
+            CreatedAt = DateTime.UtcNow,
+            CreatedByUserId = actorUserId
+        };
+        _db.GuestArrivalAlerts.Add(alert);
+        await _db.SaveChangesAsync(cancellationToken);
+        return MapArrivalAlert(alert);
+    }
+
+    public async Task<IReadOnlyList<GuestArrivalAlertDto>> ListPendingArrivalAlertsAsync(CancellationToken cancellationToken)
+    {
+        await EnsureSchemaAsync(cancellationToken);
+        var rows = await _db.GuestArrivalAlerts.AsNoTracking()
+            .Where(a => a.AcknowledgedAt == null)
+            .OrderByDescending(a => a.CreatedAt)
+            .Take(50)
+            .ToListAsync(cancellationToken);
+        return rows.Select(MapArrivalAlert).ToList();
+    }
+
+    public async Task AcknowledgeArrivalAlertAsync(long alertId, long? actorUserId, CancellationToken cancellationToken)
+    {
+        await EnsureSchemaAsync(cancellationToken);
+        var alert = await _db.GuestArrivalAlerts.FirstOrDefaultAsync(a => a.GuestArrivalAlertId == alertId, cancellationToken)
+            ?? throw new InvalidOperationException("Alert not found.");
+        if (alert.AcknowledgedAt is not null) return;
+        alert.AcknowledgedAt = DateTime.UtcNow;
+        alert.AcknowledgedByUserId = actorUserId;
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static GuestArrivalAlertDto MapArrivalAlert(GuestArrivalAlert alert) =>
+        new(
+            alert.GuestArrivalAlertId,
+            alert.VisitId,
+            alert.HostProfileId,
+            alert.GuestName,
+            alert.HostMemberName,
+            alert.Message,
+            alert.CreatedAt,
+            alert.AcknowledgedAt is not null);
 
     private readonly record struct ChildLink(ChildLinkResult Result, DateOnly? DateOfBirth);
 

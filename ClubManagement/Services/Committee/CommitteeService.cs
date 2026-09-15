@@ -297,7 +297,7 @@ IF COL_LENGTH(N'dbo.Committee_meeting', N'meeting_time') IS NULL
                 .ToListAsync(cancellationToken);
             if (currentNonOfficerIds.Count >= 8)
                 throw new InvalidOperationException(
-                    "Article 19: the committee already has 8 non-officer Committee Members.");
+                    "The committee already has 8 non-officer Committee Members.");
 
             var nextIds = currentNonOfficerIds.Append(request.ProfileId).Distinct().ToList();
             if (nextIds.Count == 8)
@@ -309,7 +309,7 @@ IF COL_LENGTH(N'dbo.Committee_meeting', N'meeting_time') IS NULL
                     .CountAsync(cancellationToken);
                 if (aviationCount < 6)
                     throw new InvalidOperationException(
-                        "Article 19: at least 6 of the 8 non-officer Committee Members must be aviation-affiliated.");
+                        "At least 6 of the 8 non-officer Committee Members must be aviation-affiliated.");
             }
         }
         else if (!isOfficer)

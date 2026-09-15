@@ -735,6 +735,42 @@
   },
   {
     "ContainingType": "ClubManagement.Controllers.MembershipApplication.ApplicationsController",
+    "Method": "VoidPayment",
+    "RelativePath": "api/applications/{applicationId}/payments/{transactionId}/void",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "applicationId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "transactionId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "ClubManagement.Services.Finance.VoidPaymentRequest",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "ClubManagement.Services.Finance.PaymentRowDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.MembershipApplication.ApplicationsController",
     "Method": "StartReview",
     "RelativePath": "api/applications/{applicationId}/review",
     "HttpMethod": "POST",
@@ -3160,6 +3196,37 @@
   },
   {
     "ContainingType": "ClubManagement.Controllers.Finance.FinanceController",
+    "Method": "Refund",
+    "RelativePath": "api/finance/payments/{transactionId}/refund",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "transactionId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "ClubManagement.Services.Finance.RefundPaymentRequest",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "ClubManagement.Services.Finance.PaymentRowDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.Finance.FinanceController",
     "Method": "Reject",
     "RelativePath": "api/finance/payments/{transactionId}/reject",
     "HttpMethod": "POST",
@@ -3203,7 +3270,17 @@
         "IsRequired": true
       }
     ],
-    "ReturnTypes": []
+    "ReturnTypes": [
+      {
+        "Type": "ClubManagement.Services.Finance.SubscriptionLifecycleResultDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
   },
   {
     "ContainingType": "ClubManagement.Controllers.Finance.FinanceController",
@@ -3490,6 +3567,26 @@
   },
   {
     "ContainingType": "ClubManagement.Controllers.Guests.GuestsController",
+    "Method": "Policy",
+    "RelativePath": "api/guests/policy",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "ClubManagement.Services.Guests.GuestPolicyDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.Guests.GuestsController",
     "Method": "Reciprocal",
     "RelativePath": "api/guests/reciprocal",
     "HttpMethod": "POST",
@@ -3503,6 +3600,32 @@
       }
     ],
     "ReturnTypes": []
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.Guests.GuestsController",
+    "Method": "Register",
+    "RelativePath": "api/guests/register",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "ClubManagement.Controllers.Guests.MemberRegisterGuestRequest",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "ClubManagement.Services.Guests.ReceptionVisitDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
   },
   {
     "ContainingType": "ClubManagement.Controllers.Guests.GuestsController",
@@ -3541,6 +3664,37 @@
     "ReturnTypes": [
       {
         "Type": "ClubManagement.Services.Guests.VisitRowDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.Guests.GuestsController",
+    "Method": "NotifyReception",
+    "RelativePath": "api/guests/visits/{visitId}/notify-reception",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "visitId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "ClubManagement.Controllers.Guests.NotifyReceptionBody",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "ClubManagement.Services.Guests.GuestArrivalAlertDto",
         "MediaTypes": [
           "text/plain",
           "application/json",
@@ -4074,6 +4228,42 @@
   },
   {
     "ContainingType": "ClubManagement.Controllers.MembershipAccount.MembersMeController",
+    "Method": "EndorsementHistory",
+    "RelativePath": "api/members/me/endorsements/history",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "Page",
+        "Type": "System.Int32",
+        "IsRequired": false
+      },
+      {
+        "Name": "PageSize",
+        "Type": "System.Int32",
+        "IsRequired": false
+      },
+      {
+        "Name": "Skip",
+        "Type": "System.Int32",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "ClubManagement.DTOs.Common.PagedResult\u00601[[ClubManagement.DTOs.MembershipAccount.EndorsementHistoryDto, ClubManagement, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.MembershipAccount.MembersMeController",
     "Method": "GetEndorsementHistory",
     "RelativePath": "api/members/me/endorsements/history/{endorsementId}",
     "HttpMethod": "GET",
@@ -4209,6 +4399,58 @@
   },
   {
     "ContainingType": "ClubManagement.Controllers.MembershipAccount.MembersMeController",
+    "Method": "DismissAllNotifications",
+    "RelativePath": "api/members/me/notifications",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.MembershipAccount.MembersMeController",
+    "Method": "DismissNotification",
+    "RelativePath": "api/members/me/notifications/{notificationId}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "notificationId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.MembershipAccount.MembersMeController",
+    "Method": "MarkNotificationRead",
+    "RelativePath": "api/members/me/notifications/{notificationId}/read",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "notificationId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.MembershipAccount.MembersMeController",
+    "Method": "MarkAllNotificationsRead",
+    "RelativePath": "api/members/me/notifications/read-all",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.MembershipAccount.MembersMeController",
     "Method": "Payments",
     "RelativePath": "api/members/me/payments",
     "HttpMethod": "GET",
@@ -4239,6 +4481,37 @@
         "Name": "request",
         "Type": "ClubManagement.DTOs.MembershipAccount.MemberPayRequest",
         "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "ClubManagement.Services.Finance.PaymentRowDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.MembershipAccount.MembersMeController",
+    "Method": "VoidPayment",
+    "RelativePath": "api/members/me/payments/{transactionId}/void",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "transactionId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "ClubManagement.Services.Finance.VoidPaymentRequest",
+        "IsRequired": false
       }
     ],
     "ReturnTypes": [
@@ -4907,6 +5180,42 @@
         "StatusCode": 200
       }
     ]
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.Guests.ReceptionController",
+    "Method": "ArrivalAlerts",
+    "RelativePath": "api/reception/arrival-alerts",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[ClubManagement.Services.Guests.GuestArrivalAlertDto, ClubManagement, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.Guests.ReceptionController",
+    "Method": "AcknowledgeArrivalAlert",
+    "RelativePath": "api/reception/arrival-alerts/{alertId}/acknowledge",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "alertId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
   },
   {
     "ContainingType": "ClubManagement.Controllers.Guests.ReceptionController",

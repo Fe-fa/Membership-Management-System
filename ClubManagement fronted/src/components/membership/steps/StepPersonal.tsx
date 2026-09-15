@@ -292,15 +292,15 @@ export const StepPersonal = memo(function StepPersonal({
       </section>
 
       <section className="space-y-4">
-        <SectionTitle
+        {/* <SectionTitle
           note={
             hidePhotoField
               ? "CV and ID / Passport copy. Attach separate cheques for annual subscription and joining / entrance fee if paying by cheque."
               : "Passport-size photo, CV and ID / Passport copy are required. Attach separate cheques for annual subscription and joining / entrance fee if paying by cheque."
           }
-        >
-          Attachments
-        </SectionTitle>
+        > */}
+         <h3> Attachments</h3>
+        {/* </SectionTitle> */}
         <Grid cols={2}>
           {hidePhotoField ? null : (
             <FileField
@@ -335,7 +335,7 @@ export const StepPersonal = memo(function StepPersonal({
             hint="PDF or image of your national ID or passport."
           />
           <FileField
-            label="1. Annual subscription cheque"
+            label="Annual subscription"
             purpose="chequeAnnual"
             accept="application/pdf,image/png,image/jpeg,image/webp,.doc,.docx"
             value={value.annualCheque ?? null}
@@ -344,7 +344,7 @@ export const StepPersonal = memo(function StepPersonal({
             hint="Cheque image, PDF or Word for the annual subscription fee."
           />
           <FileField
-            label="2. Joining fee / entrance fee cheque"
+            label="Joining fee"
             purpose="chequeJoining"
             accept="application/pdf,image/png,image/jpeg,image/webp,.doc,.docx"
             value={value.joiningCheque ?? null}

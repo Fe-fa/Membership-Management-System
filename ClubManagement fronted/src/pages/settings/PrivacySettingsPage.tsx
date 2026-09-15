@@ -13,7 +13,7 @@ export function PrivacySettingsPage() {
   return (
     <PageFrame width="sm">
       <PageHeader
-        title="Privacy & Data Controls"
+        title=""
         description="Manage conversation history retention, toggle search or personal context permissions, and export or clear your data."
       />
       <div className="space-y-4 rounded-xl border bg-card p-4">

@@ -24,7 +24,7 @@ export function AppearanceSettingsPage() {
   return (
     <PageFrame width="sm">
       <PageHeader
-        title="Interface & Personalization"
+        title=""
         description="Set theme preferences (Dark, Light, or System default), default language, and custom instructions."
       />
       <div className="space-y-4 rounded-xl border bg-card p-4">

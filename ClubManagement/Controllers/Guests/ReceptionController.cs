@@ -100,6 +100,23 @@ public class ReceptionController : ControllerBase
         try { return Ok(await _guests.ReceptionSignOutAsync(visitId, cancellationToken)); }
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
+
+    [HttpGet("arrival-alerts")]
+    [Authorize(Roles = "RECEPTIONIST")]
+    public async Task<ActionResult<IReadOnlyList<GuestArrivalAlertDto>>> ArrivalAlerts(CancellationToken cancellationToken) =>
+        Ok(await _guests.ListPendingArrivalAlertsAsync(cancellationToken));
+
+    [HttpPost("arrival-alerts/{alertId:long}/acknowledge")]
+    [Authorize(Roles = "RECEPTIONIST")]
+    public async Task<IActionResult> AcknowledgeArrivalAlert(long alertId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _guests.AcknowledgeArrivalAlertAsync(alertId, User.UserId(), cancellationToken);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
 }
 
 [ApiController]

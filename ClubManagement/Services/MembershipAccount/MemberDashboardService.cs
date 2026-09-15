@@ -1,4 +1,5 @@
 using ClubManagement.Data.MembershipApplication;
+using ClubManagement.DTOs.Common;
 using ClubManagement.DTOs.MembershipAccount;
 using ClubManagement.Entities;
 using ClubManagement.Entities.Facilities;
@@ -19,7 +20,11 @@ public interface IMemberDashboardService
     Task<MpesaStkPushResultDto> InitiateMpesaStkAsync(long profileId, MpesaStkPushRequest request, CancellationToken cancellationToken);
     Task<IReadOnlyList<EndorsementInviteDto>> ListInvitesAsync(long profileId, CancellationToken cancellationToken);
     Task<IReadOnlyList<MemberNotificationDto>> ListNotificationsAsync(long profileId, CancellationToken cancellationToken);
-    Task<IReadOnlyList<EndorsementHistoryDto>> ListHistoryAsync(long profileId, CancellationToken cancellationToken);
+    Task MarkNotificationReadAsync(long profileId, long notificationId, CancellationToken cancellationToken);
+    Task MarkAllNotificationsReadAsync(long profileId, CancellationToken cancellationToken);
+    Task DismissNotificationAsync(long profileId, long notificationId, CancellationToken cancellationToken);
+    Task DismissAllNotificationsAsync(long profileId, CancellationToken cancellationToken);
+    Task<PagedResult<EndorsementHistoryDto>> ListHistoryAsync(long profileId, PagedRequest paging, CancellationToken cancellationToken);
     Task<IReadOnlyList<EndorsementHistoryDto>> SearchHistoryAsync(long profileId, string? query, CancellationToken cancellationToken);
     Task<EndorsementHistoryDto> GetHistoryAsync(long profileId, long endorsementId, CancellationToken cancellationToken);
     Task<EndorsementHistoryDto> UpdateHistoryAsync(long profileId, long endorsementId, UpdateEndorsementHistoryRequest request, long? actorUserId, CancellationToken cancellationToken);
@@ -229,7 +234,24 @@ public class MemberDashboardService : IMemberDashboardService
         }
 
         var clubCredit = Math.Max(0, joining.Paid - joining.Due) + Math.Max(0, amountPaid - amountDue);
-        var duesBalance = outstanding + joining.Outstanding;
+        var upcomingYear = (int?)null;
+        decimal upcomingDue = 0, upcomingPaid = 0, upcomingOutstanding = 0;
+        if (pays && !isLifeExempt)
+        {
+            var upcoming = await _db.Subscriptions.AsNoTracking()
+                .Where(s => s.AccountId == account.AccountId && s.SubscriptionYear > year)
+                .OrderBy(s => s.SubscriptionYear)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (upcoming is not null)
+            {
+                upcomingYear = upcoming.SubscriptionYear;
+                upcomingDue = upcoming.AmountDue;
+                upcomingPaid = upcoming.AmountPaid;
+                upcomingOutstanding = Math.Max(0, upcoming.AmountDue - upcoming.AmountPaid);
+            }
+        }
+
+        var duesBalance = outstanding + joining.Outstanding + upcomingOutstanding;
         var canVote = account.MembershipType.CanVote;
         var votingBlocked = canVote && duesBalance > 0;
 
@@ -254,6 +276,10 @@ public class MemberDashboardService : IMemberDashboardService
                 standingCode = "InGoodStanding";
                 detail = "Joining fee and current-year subscription are settled.";
             }
+        }
+        else if (upcomingOutstanding > 0 && outstanding <= 0 && joining.Outstanding <= 0)
+        {
+            detail = $"{upcomingYear} annual subscription has been generated and is unpaid ({upcomingOutstanding:0.##} KES).";
         }
 
         return new MemberSubscriptionDto
@@ -286,7 +312,11 @@ public class MemberDashboardService : IMemberDashboardService
             ClubCreditBalance = clubCredit,
             ContinuousMembershipYears = years,
             AgeYears = age,
-            StatusCode = account.CurrentMemberStatus?.Code ?? ""
+            StatusCode = account.CurrentMemberStatus?.Code ?? "",
+            UpcomingYear = upcomingYear,
+            UpcomingAmountDue = upcomingDue,
+            UpcomingAmountPaid = upcomingPaid,
+            UpcomingOutstanding = upcomingOutstanding
         };
     }
 
@@ -418,7 +448,8 @@ public class MemberDashboardService : IMemberDashboardService
             request.ChequeBankCode,
             request.ChequeDate,
             request.ChequeFileName,
-            request.ChequeFileUrl), actorUserId, cancellationToken);
+            request.ChequeFileUrl,
+            request.SubscriptionYear), actorUserId, cancellationToken);
 
         var statusCode = (row.StatusCode ?? row.Status ?? "").Trim().ToUpperInvariant().Replace("-", "_").Replace(" ", "_");
         if (statusCode is "PAID" or "SETTLED" or "WAIVED"
@@ -539,14 +570,17 @@ public class MemberDashboardService : IMemberDashboardService
         return pending;
     }
 
-    public async Task<IReadOnlyList<EndorsementHistoryDto>> ListHistoryAsync(long profileId, CancellationToken cancellationToken)
+    public async Task<PagedResult<EndorsementHistoryDto>> ListHistoryAsync(
+        long profileId,
+        PagedRequest paging,
+        CancellationToken cancellationToken)
     {
         var rows = await LoadHistoryRowsAsync(profileId, includeHidden: false, cancellationToken);
-        return rows
+        var ordered = rows
             .Where(r => !r.Hidden)
             .OrderByDescending(r => r.CompletedAt)
-            .Take(200)
             .ToList();
+        return Paging.FromList(ordered, paging);
     }
 
     public async Task<IReadOnlyList<EndorsementHistoryDto>> SearchHistoryAsync(long profileId, string? query, CancellationToken cancellationToken)
@@ -820,6 +854,8 @@ public class MemberDashboardService : IMemberDashboardService
 
     public async Task<IReadOnlyList<MemberNotificationDto>> ListNotificationsAsync(long profileId, CancellationToken cancellationToken)
     {
+        await EnsureNotificationFlagsAsync(cancellationToken);
+
         var accountId = await _db.Accounts.AsNoTracking()
             .Where(a => a.ProfileId == profileId && !a.IsDeleted)
             .Select(a => (long?)a.AccountId)
@@ -854,6 +890,7 @@ public class MemberDashboardService : IMemberDashboardService
 
         var query = _db.Notifications.AsNoTracking()
             .Include(n => n.NotificationType)
+            .Where(n => n.DismissedAt == null)
             .Where(n =>
                 (accountId != null && n.AccountId == accountId)
                 || (!string.IsNullOrWhiteSpace(email) && n.Recipient == email)
@@ -880,7 +917,8 @@ public class MemberDashboardService : IMemberDashboardService
                 SentDate = n.SentDate ?? n.CreatedAt,
                 n.CreatedAt,
                 n.RelatedEntityType,
-                n.RelatedEntityId
+                n.RelatedEntityId,
+                n.ReadAt
             })
             .ToListAsync(cancellationToken);
 
@@ -960,11 +998,103 @@ public class MemberDashboardService : IMemberDashboardService
                 Channel = n.Channel,
                 SentDate = n.SentDate,
                 CreatedAtUtc = n.CreatedAt,
-                IsRead = false,
+                IsRead = n.ReadAt is not null,
                 RelatedEntityType = n.RelatedEntityType,
                 RelatedEntityId = n.RelatedEntityId
             };
         }).ToList();
+    }
+
+    public async Task MarkNotificationReadAsync(long profileId, long notificationId, CancellationToken cancellationToken)
+    {
+        await EnsureNotificationFlagsAsync(cancellationToken);
+        var row = await FindOwnedNotificationAsync(profileId, notificationId, cancellationToken)
+            ?? throw new InvalidOperationException("Notification not found.");
+        if (row.ReadAt is null)
+        {
+            row.ReadAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    public async Task DismissNotificationAsync(long profileId, long notificationId, CancellationToken cancellationToken)
+    {
+        await EnsureNotificationFlagsAsync(cancellationToken);
+        var row = await FindOwnedNotificationAsync(profileId, notificationId, cancellationToken)
+            ?? throw new InvalidOperationException("Notification not found.");
+        row.DismissedAt = DateTime.UtcNow;
+        row.ReadAt ??= row.DismissedAt;
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<IQueryable<Entities.Engagement.Notification>> OwnedNotificationsQueryAsync(
+        long profileId,
+        CancellationToken cancellationToken)
+    {
+        var accountId = await _db.Accounts.AsNoTracking()
+            .Where(a => a.ProfileId == profileId && !a.IsDeleted)
+            .Select(a => (long?)a.AccountId)
+            .FirstOrDefaultAsync(cancellationToken);
+        var email = await _db.Profiles.AsNoTracking()
+            .Where(p => p.ProfileId == profileId)
+            .Select(p => p.Email)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return _db.Notifications.Where(n =>
+            (accountId != null && n.AccountId == accountId)
+            || (!string.IsNullOrWhiteSpace(email) && n.Recipient == email)
+            || n.Recipient == profileId.ToString());
+    }
+
+    private async Task<Entities.Engagement.Notification?> FindOwnedNotificationAsync(
+        long profileId,
+        long notificationId,
+        CancellationToken cancellationToken)
+    {
+        var query = await OwnedNotificationsQueryAsync(profileId, cancellationToken);
+        return await query.FirstOrDefaultAsync(n => n.NotificationId == notificationId, cancellationToken);
+    }
+
+    public async Task MarkAllNotificationsReadAsync(long profileId, CancellationToken cancellationToken)
+    {
+        await EnsureNotificationFlagsAsync(cancellationToken);
+        var query = await OwnedNotificationsQueryAsync(profileId, cancellationToken);
+        var rows = await query
+            .Where(n => n.DismissedAt == null && n.ReadAt == null)
+            .ToListAsync(cancellationToken);
+        if (rows.Count == 0) return;
+        var now = DateTime.UtcNow;
+        foreach (var row in rows) row.ReadAt = now;
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task DismissAllNotificationsAsync(long profileId, CancellationToken cancellationToken)
+    {
+        await EnsureNotificationFlagsAsync(cancellationToken);
+        var query = await OwnedNotificationsQueryAsync(profileId, cancellationToken);
+        var rows = await query
+            .Where(n => n.DismissedAt == null)
+            .ToListAsync(cancellationToken);
+        if (rows.Count == 0) return;
+        var now = DateTime.UtcNow;
+        foreach (var row in rows)
+        {
+            row.DismissedAt = now;
+            row.ReadAt ??= now;
+        }
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task EnsureNotificationFlagsAsync(CancellationToken cancellationToken)
+    {
+        await _db.Database.ExecuteSqlRawAsync(
+            """
+            IF COL_LENGTH(N'dbo.Notification', N'read_at') IS NULL
+                ALTER TABLE dbo.Notification ADD read_at DATETIME2 NULL;
+            IF COL_LENGTH(N'dbo.Notification', N'dismissed_at') IS NULL
+                ALTER TABLE dbo.Notification ADD dismissed_at DATETIME2 NULL;
+            """,
+            cancellationToken);
     }
 
     private static readonly HashSet<string> ManagerActionTypes = new(StringComparer.OrdinalIgnoreCase)

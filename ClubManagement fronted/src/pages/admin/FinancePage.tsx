@@ -19,9 +19,20 @@ import {
 } from "@/components/finance/VerifyIssueReceiptDrawer";
 import { PageFrame, PageHeader } from "@/components/layout/PageFrame";
 import { PageBodyLoading } from "@/components/layout/PageLoading";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { hasAnyRole, readUser } from "@/lib/auth";
 import { apiRequest, extractErrorMessage } from "@/services/membership/api";
 import { useLookup } from "@/services/membership/lookups";
@@ -82,6 +93,16 @@ type DeskSummary = {
 };
 
 type DeskTab = "pending" | "settled" | "arrears";
+
+type RenewalRunResult = {
+  year: number;
+  asOf: string;
+  subscriptionsGenerated: number;
+  membersPosted: number;
+  membersRemoved: number;
+  totalUpdated: number;
+  futureYearsCleared?: number;
+};
 
 function methodKey(row: PaymentRow) {
   return `${row.methodCode ?? ""} ${row.method ?? ""}`.toUpperCase().replace(/[-\s]/g, "_");
@@ -171,6 +192,8 @@ export function FinancePage() {
   const membershipTypes = useLookup("membership-types");
   const [busyId, setBusyId] = useState<number | null>(null);
   const [reviewRow, setReviewRow] = useState<PaymentRow | null>(null);
+  const [refundRow, setRefundRow] = useState<PaymentRow | null>(null);
+  const [refundReason, setRefundReason] = useState("");
   const [receiptTxId, setReceiptTxId] = useState<number | null>(null);
   const [desk, setDesk] = useState<DeskTab>("pending");
   const [year, setYear] = useState(String(currentYear));
@@ -187,6 +210,8 @@ export function FinancePage() {
   const [selectedSubIds, setSelectedSubIds] = useState<number[]>([]);
   const [exportBusy, setExportBusy] = useState(false);
   const [settlementOpen, setSettlementOpen] = useState(false);
+  const [renewalBusy, setRenewalBusy] = useState(false);
+  const [lastRenewal, setLastRenewal] = useState<RenewalRunResult | null>(null);
 
   const yearNum = Number(year) || currentYear;
 
@@ -326,13 +351,53 @@ export function FinancePage() {
     onSettled: () => setBusyId(null),
   });
 
-  async function runPosting() {
-    try {
-      const result = await apiRequest<{ updated: number }>(`/api/finance/posting/${yearNum}`, { method: "POST" });
-      toast.success(`Posting run updated ${result.updated} accounts.`);
+  const refund = useMutation({
+    mutationFn: ({ transactionId, reason }: { transactionId: number; reason: string }) =>
+      apiRequest<PaymentRow>(`/api/finance/payments/${transactionId}/refund`, {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      }),
+    onMutate: ({ transactionId }) => setBusyId(transactionId),
+    onSuccess: async () => {
+      toast.success("Payment refunded. Ledger and clearance queues were updated.");
+      setRefundRow(null);
+      setRefundReason("");
+      setReviewRow(null);
       await refreshDesk();
+    },
+    onError: (err) => toast.error(extractErrorMessage(err)),
+    onSettled: () => setBusyId(null),
+  });
+
+  async function runAnnualRenewal() {
+    try {
+      setRenewalBusy(true);
+      const result = await apiRequest<RenewalRunResult>(`/api/finance/posting/${yearNum}`, { method: "POST" });
+      setLastRenewal(result);
+      const parts = [
+        `${result.subscriptionsGenerated} subscription(s) generated`,
+        result.futureYearsCleared
+          ? `${result.futureYearsCleared} later-year demo row(s) cleared`
+          : null,
+        result.membersPosted > 0 ? `${result.membersPosted} posted` : null,
+        result.membersRemoved > 0 ? `${result.membersRemoved} removed` : null,
+      ].filter(Boolean);
+      toast.success(`Annual renewal for ${result.year}: ${parts.join(" · ") || "no changes"}.`);
+      if ((result.futureYearsCleared ?? 0) > 0) {
+        toast.message(`Member Payment cards return to ${result.year} (unpaid later years removed).`);
+      } else if (result.year > currentYear) {
+        toast.message(`Member Payment will show ${result.year} dues after refresh.`);
+      }
+      setDesk("arrears");
+      await refreshDesk();
+      void queryClient.invalidateQueries({ queryKey: ["member-subscription"] });
+      void queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
+      void queryClient.invalidateQueries({ queryKey: ["member-dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["member-payments"] });
     } catch (err) {
       toast.error(extractErrorMessage(err));
+    } finally {
+      setRenewalBusy(false);
     }
   }
 
@@ -469,7 +534,7 @@ export function FinancePage() {
     },
   ];
 
-  const busy = approve.isPending || reject.isPending;
+  const busy = approve.isPending || reject.isPending || refund.isPending;
 
   return (
     <PageFrame width="lg">
@@ -478,10 +543,37 @@ export function FinancePage() {
         description="Verify payments, issue official membership receipts, and track arrears."
         actions={
           canRunPosting ? (
-            <Button onClick={() => void runPosting()}>Run posting</Button>
+            <Button
+              type="button"
+              disabled={renewalBusy}
+              onClick={() => void runAnnualRenewal()}
+            >
+              {renewalBusy ? <Loader2 className="size-4 animate-spin" /> : null}
+              Run annual renewal · {yearNum}
+            </Button>
           ) : undefined
         }
       />
+
+      {/* {canRunPosting ? (
+        <section className="rounded-xl border border-dashed border-amber-300 bg-amber-50/70 px-4 py-3 text-sm text-amber-950">
+          <p className="font-medium">Demo: annual renewal</p>
+          <p className="mt-1 text-amber-900/90">
+            Demo toggle: set <span className="font-medium">Year</span> to{" "}
+            <span className="font-medium">{currentYear + 1}</span> and run renewal → member Payment shows{" "}
+            {currentYear + 1}. Set Year to <span className="font-medium">{currentYear}</span> and run again →
+            unpaid later years are cleared and Payment returns to {currentYear}. Posting / removal still only
+            apply when today is past 28 Feb / 30 Apr of that year.
+          </p>
+          {lastRenewal ? (
+            <p className="mt-2 text-xs text-amber-900/80">
+              Last run · {lastRenewal.year}: generated {lastRenewal.subscriptionsGenerated}, cleared later{" "}
+              {lastRenewal.futureYearsCleared ?? 0}, posted {lastRenewal.membersPosted}, removed{" "}
+              {lastRenewal.membersRemoved} (as of {lastRenewal.asOf}).
+            </p>
+          ) : null}
+        </section>
+      ) : null} */}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
@@ -661,6 +753,10 @@ export function FinancePage() {
                   setSelectedPaymentIds(checked ? pendingRows.map((r) => r.transactionId) : []);
                 }}
                 onVerify={(row) => setReviewRow(row)}
+                onRefund={(row) => {
+                  setRefundRow(row);
+                  setRefundReason("");
+                }}
                 onPrint={(row) => printPaymentRows([row], `Payment · ${payerLabel(row)}`)}
               />
               <div className="mt-3">
@@ -701,6 +797,10 @@ export function FinancePage() {
                   );
                 }}
                 onViewReceipt={(row) => setReceiptTxId(row.transactionId)}
+                onRefund={(row) => {
+                  setRefundRow(row);
+                  setRefundReason("");
+                }}
                 onIssueReceipt={async (row) => {
                   try {
                     setBusyId(row.transactionId);
@@ -738,15 +838,36 @@ export function FinancePage() {
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-muted-foreground">
               Outstanding annual subscriptions for {yearNum}. Record payments to clear arrears and reactivate members.
+              {canRunPosting ? (
+                <>
+                  {" "}
+                  Use <span className="font-medium text-foreground">Run annual renewal · {yearNum}</span> above to
+                  generate this year&apos;s dues for demos.
+                </>
+              ) : null}
             </p>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => setSettlementOpen(true)}
-            >
-              <Plus className="size-4" />
-              Quick Payment Settlement
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {canRunPosting ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={renewalBusy}
+                  onClick={() => void runAnnualRenewal()}
+                >
+                  {renewalBusy ? <Loader2 className="size-4 animate-spin" /> : null}
+                  Run annual renewal · {yearNum}
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setSettlementOpen(true)}
+              >
+                <Plus className="size-4" />
+                Quick Payment Settlement
+              </Button>
+            </div>
           </div>
           {subs.isLoading ? (
             <PageBodyLoading label="Loading arrears…" minHeightClassName="min-h-[14rem]" />
@@ -856,6 +977,54 @@ export function FinancePage() {
         onReject={(payload) => reject.mutate(payload)}
       />
 
+      <AlertDialog
+        open={refundRow != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRefundRow(null);
+            setRefundReason("");
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Refund payment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {refundRow
+                ? `This marks ${formatKes(refundRow.amount)} (${refundRow.feeType || refundRow.feeTypeCode || "fee"}) for ${payerLabel(refundRow)} as refunded. Pending items leave clearance; settled annual amounts are reversed on the subscription ledger.`
+                : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="finance-refund-reason">Reason</Label>
+            <Textarea
+              id="finance-refund-reason"
+              value={refundReason}
+              onChange={(e) => setRefundReason(e.target.value)}
+              placeholder="Why is this payment being refunded?"
+              rows={3}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={!refundReason.trim() || refund.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (!refundRow || !refundReason.trim()) return;
+                refund.mutate({
+                  transactionId: refundRow.transactionId,
+                  reason: refundReason.trim(),
+                });
+              }}
+            >
+              {refund.isPending ? "Refunding…" : "Confirm refund"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <MembershipReceiptDialog
         open={receiptTxId != null}
         transactionId={receiptTxId}
@@ -923,6 +1092,7 @@ function PendingClearanceTable({
   onToggleSelect,
   onToggleSelectAll,
   onVerify,
+  onRefund,
   onPrint,
 }: {
   rows: PaymentRow[];
@@ -932,6 +1102,7 @@ function PendingClearanceTable({
   onToggleSelect: (id: number, checked: boolean) => void;
   onToggleSelectAll: (checked: boolean) => void;
   onVerify: (row: PaymentRow) => void;
+  onRefund: (row: PaymentRow) => void;
   onPrint: (row: PaymentRow) => void;
 }) {
   const allSelected = rows.length > 0 && rows.every((r) => selectedIds.includes(r.transactionId));
@@ -995,7 +1166,7 @@ function PendingClearanceTable({
               </td>
               <td className="p-2">{formatKes(row.amount)}</td>
               <td className="p-2 text-right">
-                <div className="inline-flex items-center gap-1.5">
+                <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
                   <Button
                     type="button"
                     size="icon"
@@ -1008,6 +1179,22 @@ function PendingClearanceTable({
                     }}
                   >
                     <Printer className="size-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    disabled={busy}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRefund(row);
+                    }}
+                  >
+                    {busyId === row.transactionId && busy ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : null}
+                    Refund
                   </Button>
                   <Button
                     type="button"
@@ -1039,6 +1226,7 @@ function SettledTable({
   onToggleSelectAll,
   onViewReceipt,
   onIssueReceipt,
+  onRefund,
   onPrint,
 }: {
   rows: PaymentRow[];
@@ -1048,6 +1236,7 @@ function SettledTable({
   onToggleSelectAll: (checked: boolean) => void;
   onViewReceipt: (row: PaymentRow) => void;
   onIssueReceipt: (row: PaymentRow) => void;
+  onRefund: (row: PaymentRow) => void;
   onPrint: (row: PaymentRow) => void;
 }) {
   const allSelected = rows.length > 0 && rows.every((r) => selectedIds.includes(r.transactionId));
@@ -1123,7 +1312,7 @@ function SettledTable({
                   </span>
                 </td>
                 <td className="p-2 text-right">
-                  <div className="inline-flex items-center gap-1.5">
+                  <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
                     <Button
                       type="button"
                       size="icon"
@@ -1156,6 +1345,16 @@ function SettledTable({
                         Issue &amp; view
                       </Button>
                     )}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      disabled={busyId === row.transactionId}
+                      onClick={() => onRefund(row)}
+                    >
+                      Refund
+                    </Button>
                   </div>
                 </td>
               </tr>

@@ -13,6 +13,13 @@ public class GuestsController : ControllerBase
     private readonly IGuestService _guests;
     public GuestsController(IGuestService guests) => _guests = guests;
 
+    [HttpGet("policy")]
+    public async Task<ActionResult<GuestPolicyDto>> Policy(CancellationToken cancellationToken)
+    {
+        var profileId = User.ProfileId() ?? throw new InvalidOperationException("Profile is missing from the token.");
+        return Ok(await _guests.GetGuestPolicyAsync(profileId, cancellationToken));
+    }
+
     [HttpGet("visits")]
     public async Task<ActionResult<IReadOnlyList<VisitRowDto>>> List(CancellationToken cancellationToken)
     {
@@ -27,6 +34,48 @@ public class GuestsController : ControllerBase
         {
             var profileId = User.ProfileId() ?? throw new InvalidOperationException("Profile is missing from the token.");
             return Ok(await _guests.SignInGuestAsync(profileId, request, User.UserId(), cancellationToken));
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    /// <summary>
+    /// Full guest-book entry for the signed-in member. Host is always the caller's profile
+    /// (members cannot introduce guests under another member).
+    /// </summary>
+    [HttpPost("register")]
+    public async Task<ActionResult<ReceptionVisitDto>> Register(
+        [FromBody] MemberRegisterGuestRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var profileId = User.ProfileId() ?? throw new InvalidOperationException("Profile is missing from the token.");
+            var full = new RegisterGuestVisitRequest(
+                request.FirstName,
+                request.Surname,
+                request.Email,
+                profileId,
+                request.VisitDate,
+                request.Purpose,
+                request.Signature,
+                request.Status,
+                request.Phone);
+            return Ok(await _guests.RegisterGuestVisitAsync(full, User.UserId(), cancellationToken));
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [HttpPost("visits/{visitId:long}/notify-reception")]
+    public async Task<ActionResult<GuestArrivalAlertDto>> NotifyReception(
+        long visitId,
+        [FromBody] NotifyReceptionBody? request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var profileId = User.ProfileId() ?? throw new InvalidOperationException("Profile is missing from the token.");
+            return Ok(await _guests.NotifyReceptionGuestArrivedAsync(
+                profileId, visitId, request?.Message, User.UserId(), cancellationToken));
         }
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
@@ -52,3 +101,15 @@ public class GuestsController : ControllerBase
 }
 
 public record SignOutRequest(TimeOnly TimeOut);
+
+public record NotifyReceptionBody(string? Message);
+
+public record MemberRegisterGuestRequest(
+    string FirstName,
+    string Surname,
+    string? Email,
+    DateOnly? VisitDate,
+    string? Purpose,
+    string? Signature,
+    string? Status,
+    string? Phone);

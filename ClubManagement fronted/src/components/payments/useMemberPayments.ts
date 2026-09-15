@@ -43,6 +43,38 @@ export function useApplicationPaymentHistory(applicationId: number) {
   });
 }
 
+export function useVoidApplicationPayment(applicationId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (transactionId: number) =>
+      apiRequest<PaymentHistoryRow>(`/api/applications/${applicationId}/payments/${transactionId}/void`, {
+        method: "POST",
+        body: JSON.stringify({ reason: "Voided by applicant" }),
+      }),
+    onSuccess: async () => {
+      toast.success("Payment voided. You can submit a new payment.");
+      await invalidateAfterApplicationPayment(queryClient, applicationId);
+    },
+    onError: (err) => toast.error(extractErrorMessage(err)),
+  });
+}
+
+export function useVoidMemberPayment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (transactionId: number) =>
+      apiRequest<PaymentHistoryRow>(`/api/members/me/payments/${transactionId}/void`, {
+        method: "POST",
+        body: JSON.stringify({ reason: "Voided by member" }),
+      }),
+    onSuccess: async () => {
+      toast.success("Payment voided. You can submit a new payment.");
+      await invalidateAfterMemberPayment(queryClient);
+    },
+    onError: (err) => toast.error(extractErrorMessage(err)),
+  });
+}
+
 export function usePaymentMethods() {
   return useQuery({
     queryKey: ["lookups", "payment-methods"],

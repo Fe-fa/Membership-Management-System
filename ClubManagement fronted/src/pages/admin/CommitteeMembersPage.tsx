@@ -151,10 +151,6 @@ export function CommitteeMembersPage() {
   return (
     <PageFrame width="lg" className="max-w-[1280px]">
       <PageBackLink to="/admin" label="Back to admin dashboard" />
-      <PageHeader
-        title="Committee members"
-        description="Sitting members for the current term. Search, filter, and open a quick profile."
-      />
       {!committee ? (
         <Card>
           <CardContent className="pt-6 text-sm text-muted-foreground">

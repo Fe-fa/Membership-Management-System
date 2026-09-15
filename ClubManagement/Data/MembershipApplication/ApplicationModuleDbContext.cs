@@ -77,6 +77,7 @@ public partial class ApplicationModuleDbContext : DbContext
 
     public DbSet<MVisit> Visits => Set<MVisit>();
     public DbSet<ReciprocalUsage> ReciprocalUsages => Set<ReciprocalUsage>();
+    public DbSet<GuestArrivalAlert> GuestArrivalAlerts => Set<GuestArrivalAlert>();
     public DbSet<MGuest> Guests => Set<MGuest>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<MTransaction> Transactions => Set<MTransaction>();
@@ -583,6 +584,13 @@ public partial class ApplicationModuleDbContext : DbContext
             entity.HasKey(x => x.VisitId);
             entity.HasOne(x => x.Guest).WithMany(x => x.MVisits).HasForeignKey(x => x.GuestId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Visitor).WithMany(x => x.MVisits).HasForeignKey(x => x.VisitingProfileId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<GuestArrivalAlert>(entity =>
+        {
+            entity.HasKey(x => x.GuestArrivalAlertId);
+            entity.HasOne(x => x.Visit).WithMany().HasForeignKey(x => x.VisitId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.AcknowledgedAt, x.CreatedAt });
         });
 
         modelBuilder.Entity<ReciprocalUsage>(entity =>

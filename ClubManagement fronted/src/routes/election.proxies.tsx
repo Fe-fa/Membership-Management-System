@@ -12,7 +12,7 @@ export const Route = createFileRoute("/election/proxies")({
     }
   },
   head: () => ({
-    meta: [{ title: "Lodged proxies — Aero Club of East Africa" }],
+    meta: [{ title: "Lodged proxies" }],
   }),
   component: ProxiesRoute,
 });

@@ -3,7 +3,7 @@ import { MeetingPendingPage } from "@/pages/admin/CommitteeMeetingsPage";
 
 export const Route = createFileRoute("/manage-committee/meetings/pending")({
   head: () => ({
-    meta: [{ title: "Pending application — Aero Club of East Africa" }],
+    meta: [{ title: "Pending application" }],
   }),
   component: MeetingPendingPage,
 });

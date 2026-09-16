@@ -6,7 +6,7 @@ export const Route = createFileRoute("/existing-members/$accountId")({
     mode: search.mode === "edit" ? ("edit" as const) : ("view" as const),
   }),
   head: () => ({
-    meta: [{ title: "Member profile — Aero Club of East Africa" }],
+    meta: [{ title: "Member profile" }],
   }),
   component: ExistingMemberDetailPage,
 });

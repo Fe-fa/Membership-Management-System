@@ -3,7 +3,7 @@ import { BallotSignaturesPage } from "@/pages/admin/CommitteeBallotAdmissionPage
 
 export const Route = createFileRoute("/committee-ballot/signatures")({
   head: () => ({
-    meta: [{ title: "Signatures — Committee Ballot — Aero Club of East Africa" }],
+    meta: [{ title: "Signatures" }],
   }),
   component: BallotSignaturesPage,
 });

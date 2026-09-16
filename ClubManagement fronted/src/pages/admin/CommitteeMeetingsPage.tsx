@@ -423,7 +423,7 @@ export function MeetingWaitingPage() {
   const invalidate = useInvalidateCommittee();
   return (
     <MeetingDeskShell
-      title="Waiting for meeting"
+      title=""
       description="Interview sittings that still need an outcome."
     >
       {(desk) => {
@@ -445,13 +445,23 @@ export function MeetingWaitingPage() {
 
 export function MeetingInterviewPage() {
   const invalidate = useInvalidateCommittee();
+  const current = useCurrentCommittee();
+  const committee = current.data;
+
   return (
-    <MeetingDeskShell
-      title="Interview"
-      description=""
-    >
-      {(desk) => <ShortInterviewStage meetings={desk.meetings} onChanged={invalidate} />}
-    </MeetingDeskShell>
+    <PageFrame width="lg">
+      <ShortInterviewStage
+        meetings={committee?.meetings ?? []}
+        onChanged={invalidate}
+        unavailableMessage={
+          current.isLoading
+            ? "Loading…"
+            : committee
+              ? undefined
+              : "Create a committee term first to schedule meetings."
+        }
+      />
+    </PageFrame>
   );
 }
 

@@ -3,7 +3,7 @@ import { MemberCorkagePage } from "@/pages/member/MemberCorkagePage";
 
 export const Route = createFileRoute("/corkage")({
   head: () => ({
-    meta: [{ title: "Corkage — Aero Club of East Africa" }],
+    meta: [{ title: "Corkage" }],
   }),
   component: MemberCorkagePage,
 });

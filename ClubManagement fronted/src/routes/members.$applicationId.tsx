@@ -16,7 +16,7 @@ export const Route = createFileRoute("/members/$applicationId")({
     };
   },
   head: () => ({
-    meta: [{ title: "Applicant details — Aero Club of East Africa" }],
+    meta: [{ title: "Applicant details" }],
   }),
   component: ApplicantDetailPage,
 });

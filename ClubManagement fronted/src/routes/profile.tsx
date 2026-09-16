@@ -3,7 +3,7 @@ import { ProfilePage } from "@/pages/member/ProfilePage";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
-    meta: [{ title: "My Profile — Aero Club of East Africa" }],
+    meta: [{ title: "My Profile" }],
   }),
   component: ProfilePage,
 });

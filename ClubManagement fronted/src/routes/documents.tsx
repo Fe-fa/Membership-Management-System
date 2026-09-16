@@ -4,7 +4,7 @@ import { DocumentsPage } from "@/pages/member/DocumentsPage";
 export const Route = createFileRoute("/documents")({
   head: () => ({
     meta: [
-      { title: "Documents & History — Aero Club of East Africa" },
+      { title: "Documents & History " },
       {
         name: "description",
         content:

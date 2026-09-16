@@ -68,11 +68,20 @@ export type InterviewCandidate = {
   form?: InterviewFormPayload;
 };
 
+export type InterviewDocument = {
+  code?: string | null;
+  label?: string | null;
+  onFile?: boolean;
+  fileName?: string | null;
+  fileUrl?: string | null;
+};
+
 export type MeetingInterview = {
   interviewId: number;
   applicationId: number;
   applicationNo: string;
   applicantName: string;
+  photoUrl?: string | null;
   statusName?: string | null;
   statusCode?: string | null;
   outcome?: string | null;
@@ -82,7 +91,11 @@ export type MeetingInterview = {
   form?: InterviewFormPayload;
   committeeMeetingId?: number | null;
   sittingLabel?: string | null;
+  scheduledAt?: string | null;
   conductedAt?: string | null;
+  interviewerProfileId?: number | null;
+  interviewerName?: string | null;
+  documents?: InterviewDocument[];
   canRetrieve?: boolean;
   canAmendHistory?: boolean;
   hasClubMembership?: boolean;

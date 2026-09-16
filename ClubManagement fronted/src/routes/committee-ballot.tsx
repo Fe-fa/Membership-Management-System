@@ -11,7 +11,7 @@ export const Route = createFileRoute("/committee-ballot")({
     }
   },
   head: () => ({
-    meta: [{ title: "Committee Ballot — Aero Club of East Africa" }],
+    meta: [{ title: "Committee Ballot" }],
   }),
   component: CommitteeBallotLayout,
 });

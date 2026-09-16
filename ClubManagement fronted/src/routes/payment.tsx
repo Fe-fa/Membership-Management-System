@@ -24,7 +24,7 @@ export const Route = createFileRoute("/payment")({
   }),
   head: () => ({
     meta: [
-      { title: "Payment — Aero Club of East Africa" },
+      { title: "Payment" },
       {
         name: "description",
         content: "Record and review your membership payments in one place.",

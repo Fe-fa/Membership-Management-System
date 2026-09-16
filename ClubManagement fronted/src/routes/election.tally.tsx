@@ -12,7 +12,7 @@ export const Route = createFileRoute("/election/tally")({
     }
   },
   head: () => ({
-    meta: [{ title: "Live tally — Aero Club of East Africa" }],
+    meta: [{ title: "Live tally" }],
   }),
   component: TallyRoute,
 });

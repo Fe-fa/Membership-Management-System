@@ -3,7 +3,7 @@ import { UserDetailPage } from "@/pages/admin/UserDetailPage";
 
 export const Route = createFileRoute("/user-management/$userAccountId")({
   head: () => ({
-    meta: [{ title: "User details — Aero Club of East Africa" }],
+    meta: [{ title: "User details" }],
   }),
   component: UserDetailPage,
 });

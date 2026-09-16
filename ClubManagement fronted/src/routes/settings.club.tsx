@@ -10,6 +10,6 @@ export const Route = createFileRoute("/settings/club")({
       throw redirect({ to: homePathForUser(user) });
     }
   },
-  head: () => ({ meta: [{ title: "Club preferences — Aero Club of East Africa" }] }),
+  head: () => ({ meta: [{ title: "Club preferences" }] }),
   component: ClubPreferencesPage,
 });

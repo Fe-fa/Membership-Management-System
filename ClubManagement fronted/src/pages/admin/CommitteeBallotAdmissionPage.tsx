@@ -423,7 +423,7 @@ export function BallotCandidatesPage() {
         return (
           <div className="grid gap-4">
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight">Ballot</h1>
+              {/* <h1 className="text-2xl font-semibold tracking-tight">Ballot</h1> */}
             </div>
 
             <InterviewDetailsCard data={data!} />

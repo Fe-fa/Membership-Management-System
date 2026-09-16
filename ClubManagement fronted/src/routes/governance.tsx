@@ -16,7 +16,7 @@ export const Route = createFileRoute("/governance")({
     }
   },
   head: () => ({
-    meta: [{ title: "Committee — Aero Club of East Africa" }],
+    meta: [{ title: "Committee" }],
   }),
   component: GovernancePage,
 });

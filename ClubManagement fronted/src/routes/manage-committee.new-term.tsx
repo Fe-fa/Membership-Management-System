@@ -3,7 +3,7 @@ import { CommitteeTermPage } from "@/pages/admin/CommitteeTermPage";
 
 export const Route = createFileRoute("/manage-committee/new-term")({
   head: () => ({
-    meta: [{ title: "Committee term — Aero Club of East Africa" }],
+    meta: [{ title: "Committee term" }],
   }),
   component: CommitteeTermPage,
 });

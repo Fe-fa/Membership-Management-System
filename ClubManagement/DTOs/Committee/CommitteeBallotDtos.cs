@@ -66,6 +66,7 @@ public class CommitteeBallotItemDto
     public long ApplicationId { get; set; }
     public string ApplicationNo { get; set; } = string.Empty;
     public string ApplicantName { get; set; } = string.Empty;
+    public string? PhotoUrl { get; set; }
     public string? ApplicationStatusCode { get; set; }
     public string ItemStatus { get; set; } = "OPEN";
     public int ForCount { get; set; }

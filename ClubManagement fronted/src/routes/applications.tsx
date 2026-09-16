@@ -12,7 +12,7 @@ export const Route = createFileRoute("/applications")({
   },
   head: () => ({
     meta: [
-      { title: "My Applications — Aero Club of East Africa" },
+      { title: "My Applications" },
       {
         name: "description",
         content:

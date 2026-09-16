@@ -103,6 +103,7 @@ public class InterviewConductService : IInterviewConductService
             .Include(i => i.Application).ThenInclude(a => a.AplicationDocuments).ThenInclude(d => d.DocumentType)
             .Include(i => i.Application).ThenInclude(a => a.ClubVisits)
             .Include(i => i.CommitteeMeeting)
+            .Include(i => i.Interviewer)
             .Where(i => i.CommitteeMeetingId == meetingId)
             .OrderBy(i => i.Outcome == null || i.Outcome == "")
             .ThenBy(i => i.ScheduledAt)
@@ -186,7 +187,6 @@ public class InterviewConductService : IInterviewConductService
                 ScheduledAt = scheduledAt,
                 CreatedAt = DateTime.UtcNow,
                 CreatedByUserId = actorUserId,
-                Notes = $"Linked to meeting {meeting.MeetingName ?? meeting.CommitteeMeetingId.ToString()}."
             };
             _db.Interviews.Add(interview);
         }
@@ -195,8 +195,6 @@ public class InterviewConductService : IInterviewConductService
             interview.CommitteeMeetingId = meetingId;
             interview.ScheduledAt = scheduledAt;
             interview.UpdatedByUserId = actorUserId;
-            if (string.IsNullOrWhiteSpace(interview.Notes))
-                interview.Notes = $"Linked to meeting {meeting.MeetingName ?? meeting.CommitteeMeetingId.ToString()}.";
         }
 
         // Move into Interview status if still earlier.
@@ -1009,7 +1007,9 @@ public class InterviewConductService : IInterviewConductService
             .AsTracking()
             .Include(i => i.Application).ThenInclude(a => a.Applicant)
             .Include(i => i.Application).ThenInclude(a => a.Status)
+            .Include(i => i.Application).ThenInclude(a => a.AplicationDocuments).ThenInclude(d => d.DocumentType)
             .Include(i => i.CommitteeMeeting)
+            .Include(i => i.Interviewer)
             .FirstAsync(i => i.InterviewId == interviewId, cancellationToken);
 
     private static MeetingInterviewDto Map(Interview i)
@@ -1023,12 +1023,14 @@ public class InterviewConductService : IInterviewConductService
             ApplicationId = i.ApplicationId,
             ApplicationNo = i.Application.ApplicationNo,
             ApplicantName = name,
+            PhotoUrl = string.IsNullOrWhiteSpace(i.Application.Applicant?.PhotoUrl) ? null : i.Application.Applicant.PhotoUrl,
             StatusCode = code,
             StatusName = i.Application.Status?.Name ?? code,
             CommitteeMeetingId = i.CommitteeMeetingId,
             ScheduledAt = i.ScheduledAt,
             ConductedAt = i.ConductedAt,
             InterviewerProfileId = i.InterviewerProfileId,
+            InterviewerName = ProfileDisplayName(i.Interviewer),
             AttendedFlag = i.AttendedFlag,
             Outcome = i.Outcome,
             FormOutcome = ReadForm(i.FormJson).FormOutcome,
@@ -1040,8 +1042,35 @@ public class InterviewConductService : IInterviewConductService
                 ? null
                 : $"{i.CommitteeMeeting.MeetingName ?? "Sitting"} · {i.CommitteeMeeting.MeetingDate:yyyy-MM-dd}"
                   + (string.IsNullOrWhiteSpace(i.CommitteeMeeting.MeetingTime) ? "" : $" {i.CommitteeMeeting.MeetingTime}"),
+            Documents = MapDocuments(i.Application),
             Form = ReadForm(i.FormJson)
         };
+    }
+
+    private static string? ProfileDisplayName(MProfile? profile)
+    {
+        if (profile is null) return null;
+        var name = string.Join(" ", new[] { profile.Title, profile.FirstName, profile.LastName }
+            .Where(v => !string.IsNullOrWhiteSpace(v)));
+        return string.IsNullOrWhiteSpace(name) ? null : name;
+    }
+
+    private static List<InterviewDocumentDto> MapDocuments(MApplication? application)
+    {
+        if (application?.AplicationDocuments is null || application.AplicationDocuments.Count == 0)
+            return [];
+        return application.AplicationDocuments
+            .OrderBy(d => d.DocumentType?.SortOrder ?? 99)
+            .ThenBy(d => d.ApplicationDocumentId)
+            .Select(d => new InterviewDocumentDto
+            {
+                Code = d.DocumentType?.Code ?? "",
+                Label = string.IsNullOrWhiteSpace(d.DocumentType?.Name) ? "Application document" : d.DocumentType!.Name,
+                OnFile = !string.IsNullOrWhiteSpace(d.FileUrl),
+                FileName = d.FileName,
+                FileUrl = string.IsNullOrWhiteSpace(d.FileUrl) ? null : d.FileUrl
+            })
+            .ToList();
     }
 
     private static bool CanRetrieveDeferred(Interview i)

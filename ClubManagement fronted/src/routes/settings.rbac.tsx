@@ -11,7 +11,7 @@ export const Route = createFileRoute("/settings/rbac")({
     }
   },
   head: () => ({
-    meta: [{ title: "RBAC — Aero Club of East Africa" }],
+    meta: [{ title: "RBAC" }],
   }),
   component: RbacSettingsPage,
 });

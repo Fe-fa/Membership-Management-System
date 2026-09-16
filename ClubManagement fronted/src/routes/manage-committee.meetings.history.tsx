@@ -3,7 +3,7 @@ import { MeetingHistoryPage } from "@/pages/admin/CommitteeMeetingsPage";
 
 export const Route = createFileRoute("/manage-committee/meetings/history")({
   head: () => ({
-    meta: [{ title: "Interview history — Aero Club of East Africa" }],
+    meta: [{ title: "Interview history" }],
   }),
   component: MeetingHistoryPage,
 });

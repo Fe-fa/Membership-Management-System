@@ -11,7 +11,7 @@ export const Route = createFileRoute("/reception")({
   },
   head: () => ({
     meta: [
-      { title: "Reception dashboard — Aero Club of East Africa" },
+      { title: "Reception dashboard" },
       { name: "description", content: "Register guests against an existing member and keep the digital guest book." },
     ],
   }),

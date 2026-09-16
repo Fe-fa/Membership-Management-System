@@ -7,7 +7,7 @@ export const Route = createFileRoute("/existing-members/")({
     return { tab: "register" } as const;
   },
   head: () => ({
-    meta: [{ title: "Existing members — Aero Club of East Africa" }],
+    meta: [{ title: "Existing members" }],
   }),
   component: ExistingMembersPage,
 });

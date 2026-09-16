@@ -137,15 +137,15 @@ export function RegisterPage() {
       }));
       saveApplicantPath({
         category: "CHILD_OF_MEMBER",
-        parentAccountId: data.parentAccountId,
-        parentProfileId: data.parentProfileId,
-        parentMembershipNo: data.parentMembershipNo,
-        parentName: data.parentName,
+        parentAccountId: data.parentAccountId ?? null,
+        parentProfileId: data.parentProfileId ?? null,
+        parentMembershipNo: data.parentMembershipNo ?? null,
+        parentName: data.parentName ?? null,
         parentContinuousYears: data.parentContinuousYears,
         entranceFeeWaiverEligible: data.entranceFeeWaived,
-        parentEmail: data.parentEmail,
-        parentPhone: data.parentPhone,
-        yearOfJoining: data.yearOfJoining,
+        parentEmail: data.parentEmail ?? null,
+        parentPhone: data.parentPhone ?? null,
+        yearOfJoining: data.yearOfJoining ?? null,
         dateOfBirth: data.recordedDateOfBirth?.slice(0, 10) || null,
       });
       setStep("account");

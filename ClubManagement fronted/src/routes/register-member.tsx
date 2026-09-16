@@ -3,7 +3,7 @@ import { RegisterMemberPage } from "@/pages/admin/RegisterMemberPage";
 
 export const Route = createFileRoute("/register-member")({
   head: () => ({
-    meta: [{ title: "Register existing member — Aero Club of East Africa" }],
+    meta: [{ title: "Register existing member" }],
   }),
   component: RegisterMemberPage,
 });

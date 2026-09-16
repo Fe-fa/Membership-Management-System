@@ -11,7 +11,7 @@ export const Route = createFileRoute("/settings")({
     }
   },
   head: () => ({
-    meta: [{ title: "Settings — Aero Club of East Africa" }],
+    meta: [{ title: "Settings" }],
   }),
   component: SettingsLayout,
 });

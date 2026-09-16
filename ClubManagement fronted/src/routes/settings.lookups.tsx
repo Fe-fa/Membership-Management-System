@@ -10,6 +10,6 @@ export const Route = createFileRoute("/settings/lookups")({
       throw redirect({ to: homePathForUser(user) });
     }
   },
-  head: () => ({ meta: [{ title: "Lookups — Aero Club of East Africa" }] }),
+  head: () => ({ meta: [{ title: "Lookups" }] }),
   component: LookupsSettingsPage,
 });

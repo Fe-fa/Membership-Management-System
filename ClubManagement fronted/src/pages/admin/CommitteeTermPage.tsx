@@ -84,10 +84,10 @@ export function CommitteeTermPage() {
   return (
     <PageFrame>
       <PageBackLink to="/admin" label="Back to admin dashboard" />
-      <PageHeader
+      {/* <PageHeader
         title="Committee term"
         description="Edit the active term, or create a new one. Creating a new term deactivates the previous active committee of the same type."
-      />
+      /> */}
 
       <div className="space-y-8">
         <section className="space-y-3">

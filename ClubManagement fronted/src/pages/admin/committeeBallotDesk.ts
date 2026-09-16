@@ -30,6 +30,7 @@ export type BallotItem = {
   applicationId: number;
   applicationNo: string;
   applicantName: string;
+  photoUrl?: string | null;
   applicationStatusCode?: string | null;
   itemStatus: string;
   forCount: number;

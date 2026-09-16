@@ -857,6 +857,9 @@ END
             ApplicantName = item.Application.Applicant is null
                 ? item.Application.ApplicationNo
                 : NameOf(item.Application.Applicant.FirstName, item.Application.Applicant.LastName),
+            PhotoUrl = string.IsNullOrWhiteSpace(item.Application.Applicant?.PhotoUrl)
+                ? null
+                : item.Application.Applicant.PhotoUrl,
             ApplicationStatusCode = Normalize(item.Application.Status?.Code),
             ItemStatus = item.Status,
             ForCount = forCount,

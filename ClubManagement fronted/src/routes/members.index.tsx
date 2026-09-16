@@ -3,7 +3,7 @@ import { PendingApplicationsPage } from "@/pages/admin/PendingApplicationsPage";
 
 export const Route = createFileRoute("/members/")({
   head: () => ({
-    meta: [{ title: "Pending applications — Aero Club of East Africa" }],
+    meta: [{ title: "Pending applications" }],
   }),
   component: PendingApplicationsPage,
 });

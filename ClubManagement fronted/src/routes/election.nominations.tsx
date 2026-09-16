@@ -12,7 +12,7 @@ export const Route = createFileRoute("/election/nominations")({
     }
   },
   head: () => ({
-    meta: [{ title: "Nominations — Aero Club of East Africa" }],
+    meta: [{ title: "Nominations" }],
   }),
   component: NominationsRoute,
 });

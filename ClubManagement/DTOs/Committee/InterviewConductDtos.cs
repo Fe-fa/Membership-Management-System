@@ -63,6 +63,7 @@ public class InterviewDocumentDto
     public string Label { get; set; } = string.Empty;
     public bool OnFile { get; set; }
     public string? FileName { get; set; }
+    public string? FileUrl { get; set; }
 }
 
 public class InterviewVisitDto
@@ -88,12 +89,14 @@ public class MeetingInterviewDto
     public long ApplicationId { get; set; }
     public string ApplicationNo { get; set; } = string.Empty;
     public string ApplicantName { get; set; } = string.Empty;
+    public string? PhotoUrl { get; set; }
     public string? StatusCode { get; set; }
     public string? StatusName { get; set; }
     public long? CommitteeMeetingId { get; set; }
     public DateTime? ScheduledAt { get; set; }
     public DateTime? ConductedAt { get; set; }
     public long? InterviewerProfileId { get; set; }
+    public string? InterviewerName { get; set; }
     public bool AttendedFlag { get; set; }
     public string? Outcome { get; set; }
     public string? FormOutcome { get; set; }

@@ -3,7 +3,7 @@ import { AccommodationPage } from "@/pages/member/AccommodationPage";
 
 export const Route = createFileRoute("/accommodation")({
   head: () => ({
-    meta: [{ title: "Accommodation & Facilities — Aero Club of East Africa" }],
+    meta: [{ title: "Accommodation & Facilities" }],
   }),
   component: AccommodationPage,
 });

@@ -151,6 +151,8 @@ using (var scope = app.Services.CreateScope())
         await elections.EnsureSchemaAsync(CancellationToken.None);
         var nmBilling = scope.ServiceProvider.GetRequiredService<INonMembershipBillingService>();
         await nmBilling.EnsureSchemaAsync(CancellationToken.None);
+        var finance = scope.ServiceProvider.GetRequiredService<IFinanceService>();
+        await finance.EnsureSchemaAsync(CancellationToken.None);
         await db.Database.ExecuteSqlRawAsync(@"
 IF COL_LENGTH(N'dbo.Aplication_document', N'is_verified') IS NULL
     ALTER TABLE dbo.Aplication_document ADD is_verified BIT NOT NULL CONSTRAINT DF_appdoc_is_verified DEFAULT(0);");
@@ -324,6 +326,8 @@ if (app.Environment.IsDevelopment())
         await elections.EnsureSchemaAsync(CancellationToken.None);
         var nmBilling = scope.ServiceProvider.GetRequiredService<INonMembershipBillingService>();
         await nmBilling.EnsureSchemaAsync(CancellationToken.None);
+        var finance = scope.ServiceProvider.GetRequiredService<IFinanceService>();
+        await finance.EnsureSchemaAsync(CancellationToken.None);
         await db.Database.ExecuteSqlRawAsync(@"
 IF OBJECT_ID(N'dbo.Membership_fee_schedule', N'U') IS NULL
 BEGIN
@@ -341,6 +345,8 @@ BEGIN
     );
 END");
         await DevelopmentSeeder.SeedAsync(db);
+        var bulk = await BulkMemberSeeder.SeedAsync(db);
+        app.Logger.LogInformation("Bulk member seed: {Message}", bulk.Message);
     }
     catch (Exception ex)
     {

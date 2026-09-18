@@ -4,7 +4,6 @@ import { Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { PageFrame, PageHeader } from "@/components/layout/PageFrame";
-import { PageDataGate, TableLoadingSkeleton } from "@/components/layout/PageLoading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -39,8 +38,6 @@ function AssignRolesPanel() {
 
   const catalog = roles.data ?? [];
   const items = list.data?.items ?? [];
-  const loading = list.isLoading || roles.isLoading;
-  const fetching = list.isFetching || roles.isFetching;
 
   const selected = useMemo(() => {
     const map: Record<number, string[]> = {};
@@ -74,7 +71,7 @@ function AssignRolesPanel() {
 
   return (
     <div className="grid gap-4">
-      <p className="min-h-10 text-sm text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         Assign System_role codes to each User_account. Changes write to User_role (assigned_date is set
         on save). Access is the union of checked roles.
       </p>
@@ -86,18 +83,12 @@ function AssignRolesPanel() {
           placeholder="Search name, username or email"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          disabled={loading}
         />
-        {fetching && !loading ? (
-          <Loader2 className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-        ) : null}
       </div>
 
-      <PageDataGate
-        loading={loading}
-        label="Loading accounts and roles…"
-        minHeightClassName="min-h-[28rem]"
-      >
+      {list.isLoading || roles.isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading accounts and System_role catalog…</p>
+      ) : (
         <div className="overflow-x-auto rounded-xl border">
           <table className="w-full min-w-[720px] text-sm">
             <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -160,8 +151,7 @@ function AssignRolesPanel() {
             </tbody>
           </table>
         </div>
-      </PageDataGate>
-
+      )}
       <p className="text-xs text-muted-foreground">
         Applicant is not listed here — applicants self-register. MEMBER grants member-portal access;
         office roles (Admin, GM, Treasurer, …) unlock staff cards via Office / staff permissions.
@@ -209,19 +199,17 @@ function OfficePermissionsPanel() {
 
   return (
     <div className="grid gap-4">
-      <div className="flex min-h-10 flex-wrap items-start justify-between gap-3">
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          Set which office roles can view and write each admin module. Membership-type privileges stay
-          separate.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <Button
           type="button"
-          disabled={!dirty || save.isPending || modules.length === 0 || matrix.isLoading}
+          disabled={!dirty || save.isPending || modules.length === 0}
           onClick={() => {
             save.mutate(modules, {
-              onSuccess: () => {
+              onSuccess: (data) => {
                 setDraft(null);
                 toast.success("Office / staff permissions saved.");
+                // Keep UI in sync with server merge.
+                void data;
               },
               onError: (error) => toast.error(extractErrorMessage(error)),
             });
@@ -232,12 +220,11 @@ function OfficePermissionsPanel() {
         </Button>
       </div>
 
-      <PageDataGate
-        loading={matrix.isLoading}
-        error={matrix.isError ? extractErrorMessage(matrix.error) : null}
-        label="Loading office permission matrix…"
-        minHeightClassName="min-h-[28rem]"
-      >
+      {matrix.isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading office permission matrix…</p>
+      ) : matrix.isError ? (
+        <p className="text-sm text-destructive">{extractErrorMessage(matrix.error)}</p>
+      ) : (
         <div className="overflow-x-auto rounded-xl border">
           <table className="w-full min-w-[960px] text-sm">
             <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -297,8 +284,7 @@ function OfficePermissionsPanel() {
             </tbody>
           </table>
         </div>
-      </PageDataGate>
-
+      )}
       <p className="text-xs text-muted-foreground">
         Write always includes view. ADMIN / GM / Chairman can edit this matrix. Card visibility on the
         admin dashboard uses the View column for the signed-in user&apos;s roles.
@@ -309,12 +295,7 @@ function OfficePermissionsPanel() {
 
 export function RbacSettingsPage() {
   return (
-    <PageFrame width="lg" className="min-h-[36rem]">
-      <PageHeader
-        title="Role-Based Access Control"
-        description="Assign System_role to user accounts, then configure office / staff view & write permissions per admin module."
-      />
-
+    <PageFrame width="lg">
       <Tabs defaultValue="roles" className="gap-0">
         <TabsList className="h-auto w-full justify-start gap-1 rounded-xl bg-muted/80 p-1 sm:w-auto">
           <TabsTrigger value="roles" className="rounded-lg px-3 py-2 data-[state=active]:shadow-sm">
@@ -324,20 +305,17 @@ export function RbacSettingsPage() {
             value="permissions"
             className="rounded-lg px-3 py-2 data-[state=active]:shadow-sm"
           >
-            Office / staff permissions
+              Permissions
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="roles" className="mt-4 outline-none">
+        <TabsContent value="roles" className="mt-4">
           <AssignRolesPanel />
         </TabsContent>
-        <TabsContent value="permissions" className="mt-4 outline-none">
+        <TabsContent value="permissions" className="mt-4">
           <OfficePermissionsPanel />
         </TabsContent>
       </Tabs>
     </PageFrame>
   );
 }
-
-/** Kept for potential reuse in other settings tables. */
-export { TableLoadingSkeleton };

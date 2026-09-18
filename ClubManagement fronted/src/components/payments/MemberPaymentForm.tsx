@@ -100,6 +100,7 @@ export function MemberPaymentForm({
   nmChargeId,
   audience = "member",
   applicationId,
+  layout = "dialog",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -113,8 +114,11 @@ export function MemberPaymentForm({
   audience?: PaymentAudience;
   /** Required when audience is applicant. */
   applicationId?: number;
+  /** Dialog modal, or full form on the payment page. */
+  layout?: "dialog" | "page";
 }) {
   const isApplicant = audience === "applicant";
+  const formOpen = layout === "page" || open;
   const purposes = isApplicant ? APPLICANT_FEE_PURPOSES : MEMBER_FEE_PURPOSES;
   const paymentMethods = useMemo(() => {
     if (!isApplicant) return methods;
@@ -161,7 +165,7 @@ export function MemberPaymentForm({
   }, [paymentMethods]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!formOpen) return;
     const fallbackPurpose: FeePurpose =
       sub.joiningOutstanding > 0 && (!sub.paysSubscription || annualOutstanding <= 0)
         ? "joining"
@@ -193,7 +197,7 @@ export function MemberPaymentForm({
     setError("");
     setStkByRow({});
   }, [
-    open,
+    formOpen,
     defaultMethodId,
     sub.joiningOutstanding,
     annualOutstanding,
@@ -206,7 +210,7 @@ export function MemberPaymentForm({
   ]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!formOpen) return;
     if (purpose !== "joining" && purpose !== "annual") return;
     setRows((prev) => {
       if (prev.length !== 1) return prev;
@@ -220,7 +224,7 @@ export function MemberPaymentForm({
         },
       ];
     });
-  }, [open, purpose, suggestedAmount]);
+  }, [formOpen, purpose, suggestedAmount]);
 
   const allocated = round2(rows.reduce((sum, row) => sum + Math.max(toNum(row.amount), 0), 0));
   const target =
@@ -318,12 +322,8 @@ export function MemberPaymentForm({
     if (!active.length) throw new Error("Enter at least one payment amount.");
 
     if (purpose === "joining" || purpose === "annual") {
-      if (!remainingIsZero) {
-        throw new Error(
-          remaining > 0
-            ? "Allocate the full balance before processing."
-            : "Allocated payments exceed the amount due. Reduce a row.",
-        );
+      if (remaining < -EPSILON) {
+        throw new Error("Allocated payments exceed the amount due. Reduce a row.");
       }
     }
 
@@ -472,7 +472,7 @@ export function MemberPaymentForm({
       } else {
         await invalidateAfterMemberPayment(queryClient);
       }
-      onOpenChange(false);
+      if (layout === "dialog") onOpenChange(false);
     } catch (err) {
       const message = extractErrorMessage(err);
       setError(message);
@@ -484,21 +484,8 @@ export function MemberPaymentForm({
 
   const busy = submitting || stkPush.isPending || Boolean(chequeUploadingId);
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[92vh] w-[calc(100%-1rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:rounded-2xl">
-        <DialogHeader className="bg-brand-gradient space-y-0 px-6 py-4 pr-12 text-left text-primary-foreground">
-          <DialogTitle className="text-base font-semibold tracking-[0.14em] text-primary-foreground">
-            PAYMENT
-          </DialogTitle>
-          <DialogDescription className="sr-only">
-            {isApplicant
-              ? "Pay joining and first-year subscription fees for your application."
-              : `Allocate joining, annual, or advance club charges for ${sub.membershipNo ?? "this membership"}.`}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[0.9fr_1.15fr]">
+  const formBody = (
+        <div className={cn("grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[0.9fr_1.15fr]", layout === "page" && "min-h-[28rem]")}>
           {/* Left — transaction context */}
           <aside className="space-y-4 overflow-y-auto border-b border-border bg-muted/40 px-5 py-5 lg:border-b-0 lg:border-r">
             <div className="flex items-center justify-between gap-2">
@@ -615,7 +602,7 @@ export function MemberPaymentForm({
                 <h4 className="text-sm font-semibold tracking-tight">Payment Allocation</h4>
                 <p className="text-xs text-muted-foreground">
                   Allocated <strong>{formatKes(allocated)}</strong>
-                  {purpose === "joining" || purpose === "annual" ? (
+{purpose === "joining" || purpose === "annual" ? (
                     <>
                       {" · Remaining "}
                       <strong
@@ -928,11 +915,11 @@ export function MemberPaymentForm({
                       </div>
                     ) : null}
 
-                    {isClub ? (
+                    {/* {isClub ? (
                       <p className="rounded-xl border border-success/30 bg-success/10 px-3 py-2 text-xs text-foreground">
                         Paying from club card credit ({formatKes(sub.clubCreditBalance ?? 0)}).
                       </p>
-                    ) : null}
+                    ) : null} */}
 
                     <div className="space-y-1.5">
                       <Label className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -957,6 +944,7 @@ export function MemberPaymentForm({
             </div>
 
             <div className="flex flex-col-reverse gap-2 border-t border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
+              {layout === "dialog" ? (
               <Button
                 type="button"
                 variant="outline"
@@ -966,6 +954,7 @@ export function MemberPaymentForm({
               >
                 Cancel
               </Button>
+              ) : null}
               <Button
                 type="button"
                 className="min-w-48 rounded-full"
@@ -978,6 +967,33 @@ export function MemberPaymentForm({
             </div>
           </section>
         </div>
+  );
+
+  if (layout === "page") {
+    return (
+      <section
+        id="member-make-payment"
+        className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+      >
+        {formBody}
+      </section>
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[92vh] w-[calc(100%-1rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:rounded-2xl">
+        <DialogHeader className="bg-brand-gradient space-y-0 px-6 py-4 pr-12 text-left text-primary-foreground">
+          <DialogTitle className="text-base font-semibold tracking-[0.14em] text-primary-foreground">
+            PAYMENT
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            {isApplicant
+              ? "Pay joining and first-year subscription fees for your application."
+              : `Allocate joining, annual, or advance club charges for ${sub.membershipNo ?? "this membership"}.`}
+          </DialogDescription>
+        </DialogHeader>
+        {formBody}
       </DialogContent>
     </Dialog>
   );

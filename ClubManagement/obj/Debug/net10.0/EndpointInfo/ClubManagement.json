@@ -3760,6 +3760,96 @@
         }
       }
     },
+    "/api/members/me/invoices/current": {
+      "get": {
+        "tags": [
+          "MembersMe"
+        ],
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceDocumentDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceDocumentDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceDocumentDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/members/me/statement": {
+      "get": {
+        "tags": [
+          "MembersMe"
+        ],
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementDocumentDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementDocumentDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementDocumentDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/members/me/payments/{transactionId}/void": {
       "post": {
         "tags": [
@@ -7978,6 +8068,304 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PaymentRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/finance/payments/{transactionId}/reverse": {
+      "post": {
+        "tags": [
+          "Finance"
+        ],
+        "parameters": [
+          {
+            "name": "transactionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReversePaymentRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReversePaymentRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReversePaymentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/finance/invoices/bulk": {
+      "post": {
+        "tags": [
+          "Finance"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BulkInvoiceRequest"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BulkInvoiceRequest"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BulkInvoiceRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkInvoiceResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkInvoiceResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkInvoiceResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/finance/invoices/{accountId}": {
+      "post": {
+        "tags": [
+          "Finance"
+        ],
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "sendEmail",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceDocumentDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceDocumentDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceDocumentDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Finance"
+        ],
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceDocumentDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceDocumentDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceDocumentDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/finance/statements/{accountId}": {
+      "get": {
+        "tags": [
+          "Finance"
+        ],
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementDocumentDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementDocumentDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementDocumentDto"
                 }
               }
             }
@@ -13094,6 +13482,63 @@
           }
         }
       },
+      "BulkInvoiceRequest": {
+        "type": "object",
+        "properties": {
+          "year": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "accountIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          },
+          "sendEmail": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "BulkInvoiceResultDto": {
+        "required": [
+          "issued",
+          "year"
+        ],
+        "type": "object",
+        "properties": {
+          "issued": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "year": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "CastCommitteeBallotRequest": {
         "type": "object",
         "properties": {
@@ -13323,6 +13768,12 @@
           },
           "applicantName": {
             "type": "string"
+          },
+          "photoUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "applicationStatusCode": {
             "type": [
@@ -16365,6 +16816,12 @@
               "null",
               "string"
             ]
+          },
+          "fileUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -16668,6 +17125,151 @@
           },
           "emailSent": {
             "type": "boolean"
+          }
+        }
+      },
+      "InvoiceDocumentDto": {
+        "required": [
+          "invoiceId",
+          "invoiceNo",
+          "accountId",
+          "year",
+          "memberName",
+          "membershipNo",
+          "membershipType",
+          "amount",
+          "amountPaid",
+          "balance",
+          "dueDate",
+          "issuedAt",
+          "status",
+          "emailSent",
+          "sentToEmail",
+          "clubName",
+          "clubAddress",
+          "clubEmail",
+          "clubPhone",
+          "mpesaPaybill",
+          "bankName",
+          "bankAccount"
+        ],
+        "type": "object",
+        "properties": {
+          "invoiceId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "invoiceNo": {
+            "type": "string"
+          },
+          "accountId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "year": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "memberName": {
+            "type": "string"
+          },
+          "membershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "membershipType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "amount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "amountPaid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "balance": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "issuedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string"
+          },
+          "emailSent": {
+            "type": "boolean"
+          },
+          "sentToEmail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "clubName": {
+            "type": "string"
+          },
+          "clubAddress": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "clubEmail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "clubPhone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "mpesaPaybill": {
+            "type": "string"
+          },
+          "bankName": {
+            "type": "string"
+          },
+          "bankAccount": {
+            "type": "string"
           }
         }
       },
@@ -17105,6 +17707,12 @@
           "applicantName": {
             "type": "string"
           },
+          "photoUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "statusCode": {
             "type": [
               "null",
@@ -17148,6 +17756,12 @@
               "string"
             ],
             "format": "int64"
+          },
+          "interviewerName": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "attendedFlag": {
             "type": "boolean"
@@ -19740,6 +20354,15 @@
               "string"
             ],
             "format": "double"
+          },
+          "upcomingPaymentStatus": {
+            "type": "string"
+          },
+          "annualPaymentStatus": {
+            "type": "string"
+          },
+          "joiningPaymentStatus": {
+            "type": "string"
           }
         }
       },
@@ -21475,6 +22098,39 @@
               "null",
               "string"
             ]
+          },
+          "feeDue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "feePaidToDate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "feeOutstanding": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "obligationStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -22732,6 +23388,17 @@
           }
         }
       },
+      "ReversePaymentRequest": {
+        "required": [
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
       "ReviewProxyRequest": {
         "type": "object",
         "properties": {
@@ -23425,6 +24092,65 @@
           }
         }
       },
+      "StatementDocumentDto": {
+        "required": [
+          "accountId",
+          "memberName",
+          "membershipNo",
+          "from",
+          "to",
+          "openingBalance",
+          "closingBalance",
+          "html"
+        ],
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "memberName": {
+            "type": "string"
+          },
+          "membershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date"
+          },
+          "openingBalance": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "closingBalance": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "html": {
+            "type": "string"
+          }
+        }
+      },
       "StayRow": {
         "required": [
           "memberName",
@@ -23533,6 +24259,15 @@
             "format": "int32"
           },
           "futureYearsCleared": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32",
+            "default": 0
+          },
+          "invoicesIssued": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
               "integer",

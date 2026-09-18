@@ -1,5 +1,3 @@
-/** CSV / print helpers for the admin Finance desk. */
-
 export type FinanceExportColumn<T> = {
   header: string;
   value: (row: T) => string | number | null | undefined;
@@ -10,8 +8,8 @@ function escapeCsv(value: string | number | null | undefined) {
   if (/[",\n\r]/.test(raw)) return `"${raw.replace(/"/g, '""')}"`;
   return raw;
 }
+export { buildInvoiceHtml, buildInvoicePrintHtml, type InvoiceDocument } from "./invoiceDocument";
 
-/** Downloads a UTF-8 CSV that Excel opens cleanly. */
 export function downloadExcelCsv<T>(
   filename: string,
   columns: FinanceExportColumn<T>[],
@@ -33,34 +31,7 @@ export function downloadExcelCsv<T>(
   a.remove();
   URL.revokeObjectURL(url);
 }
-
-/**
- * Prints via a hidden iframe so browsers do not treat it as a pop-up
- * (works after async fetches and without requiring pop-up permission).
- */
-export function printHtmlReport(title: string, tableHtml: string) {
-  const safeTitle = title.replace(/</g, "&lt;");
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>${safeTitle}</title>
-  <style>
-    body { font-family: "Segoe UI", Tahoma, sans-serif; color: #111; margin: 24px; }
-    h1 { font-size: 18px; margin: 0 0 4px; }
-    .meta { color: #555; font-size: 12px; margin-bottom: 16px; }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
-    th { background: #f3f4f6; text-transform: uppercase; letter-spacing: 0.04em; font-size: 10px; }
-  </style>
-</head>
-<body>
-  <h1>${safeTitle}</h1>
-  <p class="meta">Printed ${new Date().toLocaleString()} · Aero Club Finance Desk</p>
-  ${tableHtml}
-</body>
-</html>`;
-
+export function printHtmlDocument(html: string) {
   const iframe = document.createElement("iframe");
   iframe.setAttribute("title", "Print report");
   iframe.setAttribute("aria-hidden", "true");
@@ -98,13 +69,37 @@ export function printHtmlReport(title: string, tableHtml: string) {
     }
   };
 
-  // Give the iframe a tick to layout before opening the print dialog.
   if (frameDoc.readyState === "complete") {
     setTimeout(triggerPrint, 50);
   } else {
     iframe.onload = () => setTimeout(triggerPrint, 50);
   }
   return true;
+}
+
+export function printHtmlReport(title: string, tableHtml: string) {
+  const safeTitle = title.replace(/</g, "&lt;");
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${safeTitle}</title>
+  <style>
+    body { font-family: "Segoe UI", Tahoma, sans-serif; color: #111; margin: 24px; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    .meta { color: #555; font-size: 12px; margin-bottom: 16px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
+    th { background: #f3f4f6; text-transform: uppercase; letter-spacing: 0.04em; font-size: 10px; }
+  </style>
+</head>
+<body>
+  <h1>${safeTitle}</h1>
+  <p class="meta">Printed ${new Date().toLocaleString()} · Aero Club Finance Desk</p>
+  ${tableHtml}
+</body>
+</html>`;
+  return printHtmlDocument(html);
 }
 
 export function rowsToTableHtml<T>(

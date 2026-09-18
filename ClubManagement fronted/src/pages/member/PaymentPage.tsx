@@ -7,18 +7,14 @@ import { PageBackLink, PageFrame, PageHeader } from "@/components/layout/PageFra
 import { PageBodyLoading } from "@/components/layout/PageLoading";
 import {
   MemberPaymentForm,
-  PaymentHistoryTable,
-  SubscriptionStatusBanners,
+  PAYMENT_PAGE_DESCRIPTION,
   SubscriptionSummaryCards,
   applicationDuesToSubscription,
   useApplicationDues,
-  useApplicationPaymentHistory,
-  useMemberPaymentHistory,
   useMemberSubscription,
   usePaymentMethods,
-  useVoidApplicationPayment,
-  useVoidMemberPayment,
 } from "@/components/payments";
+import { MemberStatementDialog } from "@/components/finance/MemberStatementDialog";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -28,7 +24,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { isClubMember, readUser } from "@/lib/auth";
-import { fetchApplication, saveDraft, extractErrorMessage } from "@/services/membership/api";
+import { fetchApplication, saveDraft, extractErrorMessage, apiRequest, ApiError } from "@/services/membership/api";
+import { buildInvoiceHtml, printHtmlDocument, type InvoiceDocument } from "@/utils/financeExport";
 import { fetchMembershipTypes } from "@/services/membership/membershipTypes";
 import { applicationQueryKey } from "@/services/membership/useApplication";
 import { emptyDraft, type MembershipType } from "@/services/membership/schema";
@@ -44,20 +41,39 @@ export function PaymentPage() {
 
 function MemberSubscriptionPage() {
   const search = Route.useSearch();
-  const [payOpen, setPayOpen] = useState(Boolean(search.purpose || search.nmId || search.amount));
+  const [statementOpen, setStatementOpen] = useState(false);
   const sub = useMemberSubscription();
-  const history = useMemberPaymentHistory();
   const methods = usePaymentMethods();
-  const voidPayment = useVoidMemberPayment();
+  const invoiceYear =
+    sub.data?.upcomingYear && Number(sub.data.upcomingOutstanding || 0) > 0
+      ? sub.data.upcomingYear
+      : sub.data?.year;
+  const invoice = useQuery({
+    queryKey: ["member-invoice-current", invoiceYear],
+    enabled: Boolean(invoiceYear),
+    queryFn: async () => {
+      try {
+        return await apiRequest<InvoiceDocument>(
+          `/api/members/me/invoices/current?year=${invoiceYear}`,
+        );
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null;
+        throw err;
+      }
+    },
+    retry: false,
+  });
 
   useEffect(() => {
-    if (search.purpose || search.nmId || search.amount) setPayOpen(true);
+    if (search.purpose || search.nmId || search.amount) {
+      document.getElementById("member-make-payment")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   }, [search.purpose, search.nmId, search.amount]);
 
   if (sub.isLoading) {
     return (
       <PageFrame>
-        <PageHeader title="Payment" description="Review dues and track receipts." />
+        <PageHeader title="Payment" description={PAYMENT_PAGE_DESCRIPTION} />
         <PageBodyLoading label="Loading your dues…" />
       </PageFrame>
     );
@@ -72,6 +88,9 @@ function MemberSubscriptionPage() {
   }
 
   const row = sub.data;
+  const invoiceBalance = Number(invoice.data?.balance ?? row.balance ?? 0);
+  const invoicePaidOff = Boolean(invoice.data) && invoiceBalance <= 0.01;
+  const showInvoice = Boolean(invoice.data) && invoiceBalance > 0.01;
   const memberPaymentDefaults = {
     ...(search.purpose ? { initialPurpose: search.purpose } : {}),
     ...(typeof search.amount === "number" ? { initialAmount: search.amount } : {}),
@@ -82,48 +101,68 @@ function MemberSubscriptionPage() {
   return (
     <PageFrame>
       <PageHeader
-        title="Payment"
-        description="Review dues, pay joining or annual fees."
+        title=""
+        description={PAYMENT_PAGE_DESCRIPTION}
         actions={
-          <Button type="button" onClick={() => setPayOpen(true)}>
-            Make a payment
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={() => setStatementOpen(true)}>
+              Print statement
+            </Button>
+            {showInvoice ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  if (invoice.data) printHtmlDocument(buildInvoiceHtml(invoice.data));
+                }}
+              >
+                Print invoice
+              </Button>
+            ) : null}
+            {invoicePaidOff ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  if (invoice.data) printHtmlDocument(buildInvoiceHtml(invoice.data));
+                }}
+              >
+                Print receipt
+              </Button>
+            ) : null}
+          </div>
         }
       />
 
-      <SubscriptionSummaryCards sub={row} onPay={() => setPayOpen(true)} />
-      <SubscriptionStatusBanners sub={row} />
+      <MemberStatementDialog
+        open={statementOpen}
+        onClose={() => setStatementOpen(false)}
+        mode="self"
+        year={row.year}
+      />
+
+      <SubscriptionSummaryCards
+        sub={row}
+        onPay={() =>
+          document.getElementById("member-make-payment")?.scrollIntoView({ behavior: "smooth", block: "start" })
+        }
+      />
 
       <MemberPaymentForm
-        open={payOpen}
-        onOpenChange={setPayOpen}
+        open
+        onOpenChange={() => undefined}
+        layout="page"
         audience="member"
         sub={row}
         methods={methods.data ?? []}
         {...memberPaymentDefaults}
       />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent transactions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <PaymentHistoryTable
-            rows={history.data ?? []}
-            loading={history.isLoading}
-            showFilters
-            onVoid={(transactionId) => voidPayment.mutate(transactionId)}
-            voidingId={voidPayment.isPending ? voidPayment.variables ?? null : null}
-          />
-        </CardContent>
-      </Card>
     </PageFrame>
   );
 }
 
 function ApplicantPaymentPage() {
   const queryClient = useQueryClient();
-  const [payOpen, setPayOpen] = useState(false);
   const [openAfterTypeSave, setOpenAfterTypeSave] = useState(false);
   const methods = usePaymentMethods();
 
@@ -139,8 +178,6 @@ function ApplicantPaymentPage() {
   const membershipType = String(draft.membership?.membershipType ?? "").trim();
 
   const dues = useApplicationDues(applicationId);
-  const history = useApplicationPaymentHistory(applicationId);
-  const voidPayment = useVoidApplicationPayment(applicationId);
   const typeOptions = useQuery({
     queryKey: ["membership-types", "applicant"],
     queryFn: () => fetchMembershipTypes({ applicantOnly: true }),
@@ -150,7 +187,7 @@ function ApplicantPaymentPage() {
     membershipType || dues.data?.membershipTypeId || dues.data?.membershipTypeName,
   );
   const sub = dues.data ? applicationDuesToSubscription(dues.data) : null;
-  const canOpenPayment = Boolean(applicationId > 0 && hasMembershipClass && sub);
+  const canPay = Boolean(applicationId > 0 && hasMembershipClass && sub);
   const loading = application.isLoading || (applicationId > 0 && dues.isLoading);
 
   const saveType = useMutation({
@@ -169,7 +206,7 @@ function ApplicantPaymentPage() {
       });
     },
     onSuccess: async () => {
-      toast.success("Membership type saved. Opening payment desk…");
+      toast.success("Membership type saved. The payment form is ready below.");
       setOpenAfterTypeSave(true);
       await queryClient.invalidateQueries({ queryKey: applicationQueryKey(readUser()?.userAccountId) });
       await queryClient.invalidateQueries({ queryKey: ["application-dues"] });
@@ -178,33 +215,17 @@ function ApplicantPaymentPage() {
   });
 
   useEffect(() => {
-    if (!openAfterTypeSave || !canOpenPayment) return;
-    setPayOpen(true);
+    if (!openAfterTypeSave || !canPay) return;
+    document.getElementById("member-make-payment")?.scrollIntoView({ behavior: "smooth", block: "start" });
     setOpenAfterTypeSave(false);
-  }, [openAfterTypeSave, canOpenPayment]);
-
-  function openPaymentDesk() {
-    if (canOpenPayment) {
-      setPayOpen(true);
-      return;
-    }
-    if (!applicationId) {
-      toast.error("Start or save your application first, then return here to pay.");
-      return;
-    }
-    if (!hasMembershipClass) {
-      toast.error("Select a membership type below, then click Make a payment.");
-      return;
-    }
-    toast.error("Fee schedule is still loading. Try again in a moment.");
-  }
+  }, [openAfterTypeSave, canPay]);
 
   if (loading) {
     return (
       <PageFrame>
         <PageHeader
           title="Payment"
-          description="Pay joining and first-year subscription fees for your application."
+          description={PAYMENT_PAGE_DESCRIPTION}
         />
         <PageBodyLoading label="Loading application fees…" />
       </PageFrame>
@@ -216,16 +237,11 @@ function ApplicantPaymentPage() {
       <PageBackLink to="/" label="Back to home" />
       <PageHeader
         title="Payment"
-        description="Review dues, pay joining or annual fees, and track receipts"
+        description={PAYMENT_PAGE_DESCRIPTION}
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={openPaymentDesk}>
-              Make a payment
-            </Button>
-            <Button asChild variant="outline">
-              <Link to="/applications">Back to application</Link>
-            </Button>
-          </div>
+          <Button asChild variant="outline">
+            <Link to="/applications">Back to application</Link>
+          </Button>
         }
       />
 
@@ -234,8 +250,8 @@ function ApplicantPaymentPage() {
           <CardHeader>
             <CardTitle>Choose your membership type</CardTitle>
             <CardDescription>
-              Amounts come from Membership_fee_schedule. Pick a class here, then use{" "}
-              <strong>Make a payment</strong> to open the payment desk.
+              Amounts come from the club fee schedule. Pick a class, then pay joining and first-year
+              subscription on this page.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -257,19 +273,12 @@ function ApplicantPaymentPage() {
                 </button>
               ))}
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" onClick={openPaymentDesk} disabled={saveType.isPending}>
-                Make a payment
-              </Button>
-              <Button asChild variant="outline">
-                <Link to="/application">Open full membership form</Link>
-              </Button>
-            </div>
+            <Button asChild variant="outline">
+              <Link to="/application">Open full membership form</Link>
+            </Button>
           </CardContent>
         </Card>
-      ) : sub ? (
-        <SubscriptionSummaryCards sub={sub} onPay={openPaymentDesk} />
-      ) : (
+      ) : !sub ? (
         <Card>
           <CardHeader>
             <CardTitle>Could not load fees</CardTitle>
@@ -277,40 +286,24 @@ function ApplicantPaymentPage() {
               Save your application, then refresh this page to load amounts from the fee schedule.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <Button type="button" onClick={openPaymentDesk}>
-              Make a payment
-            </Button>
-          </CardContent>
         </Card>
+      ) : (
+        <>
+          <SubscriptionSummaryCards sub={sub} />
+          {applicationId > 0 ? (
+            <MemberPaymentForm
+              open
+              onOpenChange={() => undefined}
+              layout="page"
+              audience="applicant"
+              applicationId={applicationId}
+              sub={sub}
+              methods={methods.data ?? []}
+              initialPurpose={sub.joiningOutstanding > 0 ? "joining" : "annual"}
+            />
+          ) : null}
+        </>
       )}
-
-      {sub && applicationId > 0 ? (
-        <MemberPaymentForm
-          open={payOpen}
-          onOpenChange={setPayOpen}
-          audience="applicant"
-          applicationId={applicationId}
-          sub={sub}
-          methods={methods.data ?? []}
-          initialPurpose={sub.joiningOutstanding > 0 ? "joining" : "annual"}
-        />
-      ) : null}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Payment history</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <PaymentHistoryTable
-            rows={history.data ?? []}
-            loading={history.isLoading}
-            showFilters
-            onVoid={(transactionId) => voidPayment.mutate(transactionId)}
-            voidingId={voidPayment.isPending ? voidPayment.variables ?? null : null}
-          />
-        </CardContent>
-      </Card>
     </PageFrame>
   );
 }

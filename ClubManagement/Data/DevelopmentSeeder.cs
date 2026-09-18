@@ -39,6 +39,7 @@ public static class DevelopmentSeeder
         await EnsureLookup(db.MemberStatuses, "REMOVED", "Removed", false, true);
         await EnsureLookup(db.MemberStatuses, "PAID", "Paid", true, false);
         await EnsureLookup(db.MemberStatuses, "DUE", "Due", true, false);
+        await EnsureLookup(db.MemberStatuses, "UNPAID", "Unpaid", true, false);
 
         await EnsurePayment(db, db.PaymentMethods, "CASH", "Cash");
         await EnsurePayment(db, db.PaymentMethods, "CHEQUE", "Cheque");
@@ -55,6 +56,7 @@ public static class DevelopmentSeeder
         await EnsurePayment(db, db.PaymentStatuses, "REFUNDED", "Refunded");
         await EnsurePayment(db, db.PaymentStatuses, "REJECTED", "Rejected");
         await EnsurePayment(db, db.PaymentStatuses, "VOIDED", "Voided");
+        await EnsurePayment(db, db.PaymentStatuses, "REVERSED", "Reversed");
 
         await EnsureFeeType(db, "JOINING", "Joining fee");
         await EnsureFeeType(db, "ANNUAL", "Annual subscription");

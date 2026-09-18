@@ -95,6 +95,12 @@ public class MemberSubscriptionDto
     public decimal UpcomingAmountDue { get; set; }
     public decimal UpcomingAmountPaid { get; set; }
     public decimal UpcomingOutstanding { get; set; }
+    public string UpcomingPaymentStatus { get; set; } = "Unpaid";
+
+    /// <summary>Paid | PartiallyPaid | PendingVerification | Unpaid</summary>
+    public string AnnualPaymentStatus { get; set; } = "Unpaid";
+    /// <summary>Paid | PartiallyPaid | PendingVerification | Unpaid | Waived</summary>
+    public string JoiningPaymentStatus { get; set; } = "Unpaid";
 }
 
 public class MemberNotificationDto

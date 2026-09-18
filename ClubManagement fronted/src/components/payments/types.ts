@@ -66,6 +66,9 @@ export type MemberSubscription = {
   upcomingAmountDue?: number;
   upcomingAmountPaid?: number;
   upcomingOutstanding?: number;
+  upcomingPaymentStatus?: string;
+  annualPaymentStatus?: string;
+  joiningPaymentStatus?: string;
 };
 
 export type PaymentHistoryRow = {
@@ -116,10 +119,10 @@ export type MpesaStkResult = {
 };
 
 export const FEE_PURPOSE_LABEL: Record<FeePurpose, string> = {
-  joining: "Joining / entrance fee",
+  joining: "Joining",
   annual: "Annual subscription",
-  accommodation: "Accommodation / room",
-  corkage: "Corkage / outside food",
+  accommodation: "Accommodation",
+  corkage: "Corkage ",
   other: "Custom club charge",
 };
 
@@ -170,8 +173,56 @@ export function normalizeMethodCode(code?: string | null) {
 }
 
 export function isPaidStatus(status?: string | null) {
-  const s = (status ?? "").toLowerCase();
-  return s === "paid" || s === "waived";
+  const s = (status ?? "").toLowerCase().replace(/[-\s]/g, "_");
+  return (
+    s === "paid"
+    || s === "waived"
+    || s === "partially_paid"
+    || s === "partiallypaid"
+    || s === "settled"
+    || s === "refunded"
+    || s === "reversed"
+  );
+}
+
+export function paymentStatusTone(status?: string | null, statusCode?: string | null) {
+  const code = (statusCode ?? status ?? "").trim().toUpperCase().replace(/[-\s]/g, "_");
+  if (code === "PAID" || code === "WAIVED" || code === "SETTLED" || code === "PAIDSTATUS") {
+    return "ok" as const;
+  }
+  if (code === "PARTIALLY_PAID" || code === "PARTIALLYPAY" || code === "PARTIALLYPAID") {
+    return "partial" as const;
+  }
+  if (code === "REFUNDED") return "refunded" as const;
+  if (code === "REVERSED") return "reversed" as const;
+  if (code === "VOIDED" || code === "CANCELLED" || code === "CANCELED" || code === "REJECTED") {
+    return "voided" as const;
+  }
+  return "pending" as const;
+}
+
+export function liveFeeStatusLabel(code?: string | null) {
+  switch ((code ?? "").trim()) {
+    case "Paid":
+      return "Paid";
+    case "PartiallyPaid":
+      return "Partially paid";
+    case "PendingVerification":
+      return "Pending verification";
+    case "Waived":
+      return "Waived";
+    case "Refunded":
+      return "Refunded";
+    case "Reversed":
+      return "Reversed";
+    default:
+      return "Unpaid";
+  }
+}
+
+export function isReceiptViewable(status?: string | null, statusCode?: string | null) {
+  const s = (statusCode ?? status ?? "").trim().toUpperCase().replace(/[-\s]/g, "_");
+  return s === "PAID" || s === "WAIVED" || s === "PARTIALLY_PAID" || s === "SETTLED" || s === "REFUNDED";
 }
 
 export function isVoidablePayment(row: Pick<PaymentHistoryRow, "status" | "statusCode" | "receiptNumber">) {

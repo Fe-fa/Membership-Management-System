@@ -82,6 +82,8 @@ public partial class ApplicationModuleDbContext : DbContext
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<MTransaction> Transactions => Set<MTransaction>();
     public DbSet<MReceiptMaster> Receipts => Set<MReceiptMaster>();
+    public DbSet<ReversalEntry> ReversalEntries => Set<ReversalEntry>();
+    public DbSet<MembershipInvoice> MembershipInvoices => Set<MembershipInvoice>();
     public DbSet<FeeWaiver> FeeWaivers => Set<FeeWaiver>();
     public DbSet<MembershipFeeSchedule> MembershipFeeSchedules => Set<MembershipFeeSchedule>();
     public DbSet<UserAccount> UserAccounts => Set<UserAccount>();
@@ -862,6 +864,9 @@ public partial class ApplicationModuleDbContext : DbContext
         modelBuilder.Entity<UserAccount>().HasIndex(x => new { x.TenantId, x.Username }).IsUnique();
         modelBuilder.Entity<MTransaction>().HasIndex(x => x.PaymentDate);
         modelBuilder.Entity<MTransaction>().HasIndex(x => x.MpesaCode);
+        modelBuilder.Entity<ReversalEntry>().HasIndex(x => x.SourceTransactionId).IsUnique();
+        modelBuilder.Entity<MembershipInvoice>().HasIndex(x => new { x.AccountId, x.Year }).IsUnique();
+        modelBuilder.Entity<MembershipInvoice>().HasIndex(x => x.InvoiceNo).IsUnique();
         modelBuilder.Entity<MVisit>().HasIndex(x => new { x.VisitingProfileId, x.VisitDate });
         modelBuilder.Entity<MVisit>().HasIndex(x => new { x.GuestId, x.VisitDate });
         modelBuilder.Entity<ReciprocalUsage>().HasIndex(x => new { x.ProfileId, x.VisitDate });

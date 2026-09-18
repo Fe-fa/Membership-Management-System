@@ -6,7 +6,7 @@ import { formatKes } from "@/utils/format";
 import { cn } from "@/utils/cn";
 
 import type { MemberSubscription } from "./types";
-import { standingLabel } from "./types";
+import { liveFeeStatusLabel, standingLabel } from "./types";
 
 export function SubscriptionStatusBanners({ sub }: { sub: MemberSubscription }) {
   const standing = sub.standing || "InGoodStanding";
@@ -16,9 +16,9 @@ export function SubscriptionStatusBanners({ sub }: { sub: MemberSubscription }) 
   const posted =
     !duesClear
     && (standing === "Posted" || (sub.statusCode ?? "").toUpperCase() === "POSTED");
-  const atRisk =
+  const unpaidStanding =
     !duesClear
-    && (standing === "AtRiskOfRemoval" || (sub.statusCode ?? "").toUpperCase() === "REMOVED");
+    && (standing === "Unpaid" || (sub.statusCode ?? "").toUpperCase() === "UNPAID");
   const unpaid = sub.balance > 0 && (sub.paysSubscription || sub.joiningOutstanding > 0);
   const settled = duesClear;
   const currentYearSettled = sub.outstanding <= 0 && sub.joiningOutstanding <= 0;
@@ -38,7 +38,7 @@ export function SubscriptionStatusBanners({ sub }: { sub: MemberSubscription }) 
         </Alert>
       ) : null}
 
-      {posted || (unpaid && sub.outstanding > 0 && !atRisk) ? (
+      {posted || (unpaid && sub.outstanding > 0 && !unpaidStanding) ? (
         <Alert
           className={cn(
             "border-amber-300 bg-amber-50 text-amber-950",
@@ -52,23 +52,23 @@ export function SubscriptionStatusBanners({ sub }: { sub: MemberSubscription }) 
           <AlertDescription>
             {posted
               ? `Your account was posted after the ${sub.postingDeadline} deadline. Settle arrears of ${formatKes(sub.outstanding)} to restore full privileges.`
-              : `Annual dues are due by ${sub.dueDate}. Unpaid members are posted after ${sub.postingDeadline} and risk removal after ${sub.removalDeadline}.`}
+              : `Annual dues are due by ${sub.dueDate}. Unpaid members are posted after ${sub.postingDeadline}. After ${sub.removalDeadline} membership stays active with payment status unpaid.`}
           </AlertDescription>
         </Alert>
       ) : null}
 
-      {atRisk ? (
-        <Alert variant="destructive">
-          <AlertTriangle className="size-4" />
-          <AlertTitle>Membership at risk of removal</AlertTitle>
+      {unpaidStanding ? (
+        <Alert className="border-amber-300 bg-amber-50 text-amber-950">
+          <AlertTriangle className="size-4 text-amber-700" />
+          <AlertTitle>Annual subscription unpaid</AlertTitle>
           <AlertDescription>
-            Unpaid subscriptions after {sub.removalDeadline} lead to removal. Outstanding balance:{" "}
-            {formatKes(sub.balance)}.
+            No payment has been received for this year. Membership remains active. Outstanding
+            balance: {formatKes(sub.balance)}.
           </AlertDescription>
         </Alert>
       ) : null}
 
-      {sub.votingBlockedByArrears || (sub.canVote && unpaid) ? (
+      {/* {sub.votingBlockedByArrears || (sub.canVote && unpaid) ? (
         <Alert className="border-sky-200 bg-sky-50 text-sky-950">
           <Vote className="size-4 text-sky-700" />
           <AlertTitle>Voting rights require accounts fully paid up</AlertTitle>
@@ -77,7 +77,7 @@ export function SubscriptionStatusBanners({ sub }: { sub: MemberSubscription }) 
             current-year subscription are settled. Current standing: {standingLabel(standing)}.
           </AlertDescription>
         </Alert>
-      ) : null}
+      ) : null} */}
 
       {sub.isLifeExempt ? (
         <Alert className="border-emerald-200 bg-emerald-50 text-emerald-950">
@@ -126,8 +126,6 @@ export function SubscriptionSummaryCards({
   const upcomingOutstanding = Number(sub.upcomingOutstanding || 0);
   const showUpcoming = Boolean(sub.upcomingYear && upcomingOutstanding > 0 && sub.outstanding <= 0);
   const billingYear = showUpcoming ? Number(sub.upcomingYear) : sub.year;
-  const amountDue = showUpcoming ? Number(sub.upcomingAmountDue || 0) : sub.amountDue;
-  const amountPaid = showUpcoming ? Number(sub.upcomingAmountPaid || 0) : sub.amountPaid;
   const outstanding = showUpcoming ? upcomingOutstanding : sub.outstanding;
   const annualCaption = sub.isLifeExempt
     ? "Exempt · Ksh 0"
@@ -138,23 +136,18 @@ export function SubscriptionSummaryCards({
         : sub.discountPercent > 0
           ? `${sub.discountPercent}% senior reduction`
           : `${tierLabel} full annual rate`;
+  const annualStatus = showUpcoming ? sub.upcomingPaymentStatus : sub.annualPaymentStatus;
 
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <SummaryCard
         title="Account status"
-        description={`${sub.membershipNo ? `${sub.membershipNo} · ` : ""}${standingLabel(sub.standing)}`}
         accent={sub.balance > 0 ? "warn" : "ok"}
       >
-        {/* <p className="text-sm text-muted-foreground">{sub.detail}</p>
-        <p className="mt-2 text-xs text-muted-foreground">
-          {tierLabel}
-          {sub.isSeniorMember ? " · Senior eligible" : ""}
-          {sub.ageYears != null ? ` · Age ${sub.ageYears}` : ""}
-          {sub.continuousMembershipYears != null
-            ? ` · ${sub.continuousMembershipYears} yr membership`
-            : ""}
-        </p> */}
+        <p className="text-sm font-medium">{standingLabel(sub.standing)}</p>
+        {sub.membershipNo ? (
+          <p className="mt-2 text-xs text-muted-foreground">{sub.membershipNo}</p>
+        ) : null}
       </SummaryCard>
 
       <SummaryCard
@@ -163,6 +156,9 @@ export function SubscriptionSummaryCards({
       >
         <p className="text-sm">
           Balance <strong>{formatKes(sub.joiningOutstanding)}</strong>
+        </p>
+        <p className="mt-2 text-xs font-medium text-muted-foreground">
+          {liveFeeStatusLabel(sub.joiningPaymentStatus)}
         </p>
       </SummaryCard>
 
@@ -175,6 +171,9 @@ export function SubscriptionSummaryCards({
           <>
             <p className="text-sm">
               <strong>{formatKes(outstanding)}</strong>
+            </p>
+            <p className="mt-2 text-xs font-medium text-muted-foreground">
+              {liveFeeStatusLabel(annualStatus)}
             </p>
             {/* {(sub.fullAnnualRate ?? 0) > 0 ? (
               <p className="mt-2 text-xs text-muted-foreground">
@@ -206,10 +205,10 @@ export function SubscriptionSummaryCards({
 
       <SummaryCard title="Balances">
         <p className="text-2xl font-semibold">{formatKes(sub.balance)}</p>
-        <p className="mt-2 text-sm">
+        {/* <p className="mt-2 text-sm">
           Club card credit{" "}
           <strong className="text-success">{formatKes(sub.clubCreditBalance ?? 0)}</strong>
-        </p>
+        </p> */}
       </SummaryCard>
     </div>
   );
@@ -223,7 +222,7 @@ function SummaryCard({
 }: {
   title: string;
   description?: string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   accent?: "warn" | "ok" | undefined;
 }) {
   return (
@@ -236,7 +235,7 @@ function SummaryCard({
     >
       <p className="text-sm font-semibold tracking-tight">{title}</p>
       {description ? <p className="mt-0.5 text-xs text-muted-foreground">{description}</p> : null}
-      <div className="mt-3">{children}</div>
+      {children ? <div className="mt-3">{children}</div> : null}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { API_BASE } from "@/config/env";
 import { kenyaTodayISO } from "@/utils/kenyaDate";
 import { apiRequest, extractErrorMessage } from "@/services/membership/api";
 
@@ -31,6 +32,7 @@ export type BallotItem = {
   applicationNo: string;
   applicantName: string;
   photoUrl?: string | null;
+  PhotoUrl?: string | null;
   applicationStatusCode?: string | null;
   itemStatus: string;
   forCount: number;
@@ -83,6 +85,26 @@ export type AdmissionDesk = {
   items: BallotItem[];
   pendingApplicants: Candidate[];
 };
+
+export function applicantInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+}
+
+export function applicantPhotoSrc(url?: string | null) {
+  if (!url) return undefined;
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${API_BASE}${url.startsWith("/") ? url : `/${url}`}`;
+}
+
+export function ballotPhotoUrl(row: Pick<BallotItem, "photoUrl" | "PhotoUrl">) {
+  return applicantPhotoSrc(row.photoUrl ?? row.PhotoUrl);
+}
 
 export function peopleList(...candidates: unknown[]): BallotPerson[] {
   for (const candidate of candidates) {

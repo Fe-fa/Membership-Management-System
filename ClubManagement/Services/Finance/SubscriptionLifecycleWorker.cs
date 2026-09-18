@@ -1,9 +1,4 @@
 namespace ClubManagement.Services.Finance;
-
-/// <summary>
-/// Periodically enforces the Aero Club annual subscription lifecycle:
-/// 1 Jan generate unpaid subscriptions → after 28 Feb POSTED → after 30 Apr REMOVED.
-/// </summary>
 public class SubscriptionLifecycleWorker : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(6);
@@ -42,7 +37,7 @@ public class SubscriptionLifecycleWorker : BackgroundService
                 if (result.TotalUpdated > 0)
                 {
                     _logger.LogInformation(
-                        "Subscription lifecycle {Year} as of {AsOf}: generated={Generated}, posted={Posted}, removed={Removed}",
+                        "Subscription lifecycle {Year} as of {AsOf}: generated={Generated}, posted={Posted}, unpaidActive={Unpaid}",
                         result.Year,
                         result.AsOf,
                         result.SubscriptionsGenerated,

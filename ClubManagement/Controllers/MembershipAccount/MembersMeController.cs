@@ -86,6 +86,48 @@ public class MembersMeController : ControllerBase
         return Ok(await _finance.ListPaymentsAsync(me.AccountId, cancellationToken));
     }
 
+    [HttpGet("invoices/current")]
+    public async Task<ActionResult<InvoiceDocumentDto>> CurrentInvoice(
+        [FromQuery] int? year,
+        CancellationToken cancellationToken)
+    {
+        var profileId = User.ProfileId();
+        if (profileId is null) return Unauthorized();
+        var me = await _dashboard.GetMineAsync(profileId.Value, cancellationToken);
+        if (me is null) return NotFound();
+        try
+        {
+            var invoice = await _finance.GetSubscriptionInvoiceAsync(me.AccountId, year, cancellationToken);
+            return invoice is null
+                ? NotFound(new { message = "No invoice has been issued for this year yet." })
+                : Ok(invoice);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpGet("statement")]
+    public async Task<ActionResult<StatementDocumentDto>> Statement(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        CancellationToken cancellationToken)
+    {
+        var profileId = User.ProfileId();
+        if (profileId is null) return Unauthorized();
+        var me = await _dashboard.GetMineAsync(profileId.Value, cancellationToken);
+        if (me is null) return NotFound();
+        try
+        {
+            return Ok(await _finance.GetMemberStatementAsync(me.AccountId, from, to, cancellationToken));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpPost("payments/{transactionId:long}/void")]
     public async Task<ActionResult<PaymentRowDto>> VoidPayment(
         long transactionId,

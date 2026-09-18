@@ -2,9 +2,6 @@ using System.Text.Json;
 
 namespace ClubManagement.Services.Finance;
 
-/// <summary>
-/// Facts required to price an applicant. The calculator does not load members or schedules.
-/// </summary>
 public record MembershipFeeFacts(
     long MembershipTypeId,
     string MembershipType,
@@ -36,10 +33,6 @@ public record MembershipFeeCalculation(
     EntranceFeeDecision EntranceFee,
     AnnualProration AnnualSubscription,
     DateOnly AsOf);
-
-/// <summary>
-/// Inputs for a priced quote. Parent standing is resolved by the finance service when an account is supplied.
-/// </summary>
 public record ApplicantPathSnapshot(string? Category, int ParentContinuousYears, DateOnly? DateOfBirth);
 
 public record MembershipFeeInquiry(
@@ -50,9 +43,6 @@ public record MembershipFeeInquiry(
     long? ParentAccountId = null,
     string? ParentMembershipNo = null);
 
-/// <summary>
-/// Membership entrance and annual fee rules. Pure: same facts always produce the same money.
-/// </summary>
 public static class MembershipFeeCalculator
 {
     public const int EntranceWaiverMinimumAge = 21;
@@ -82,12 +72,6 @@ public static class MembershipFeeCalculator
             annual,
             facts.AsOf);
     }
-
-    /// <summary>
-    /// 100% entrance waiver only when the applicant is a child of a member, that parent is ACTIVE
-    /// with at least five continuous years at the application date, and the applicant is 21 or older.
-    /// Any failed condition charges the full standard entrance fee. The under-30 tariff is not applied here.
-    /// </summary>
     public static EntranceFeeDecision DecideEntranceFee(
         decimal standardEntranceFee,
         int applicantAge,
@@ -128,11 +112,6 @@ public static class MembershipFeeCalculator
             "Standard entrance fee applies. " + string.Join("; ", failed) + ".");
     }
 
-    /// <summary>
-    /// Prorated annual = (remaining days in the joining year / days in that year) × full annual.
-    /// Remaining days include the application date through 31 December.
-    /// A non-leap year has 365 days; a leap year has 366. Joining on 1 January charges the full annual.
-    /// </summary>
     public static AnnualProration ProrateAnnual(decimal fullAnnual, DateOnly asOf)
     {
         var full = decimal.Round(fullAnnual, 2, MidpointRounding.AwayFromZero);

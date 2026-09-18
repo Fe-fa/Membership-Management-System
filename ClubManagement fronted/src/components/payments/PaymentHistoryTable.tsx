@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { FileText } from "lucide-react";
 
 import { MembershipReceiptDialog } from "@/components/finance/MembershipReceipt";
 import {
@@ -16,7 +17,7 @@ import { formatKes } from "@/utils/format";
 import { cn } from "@/utils/cn";
 
 import type { PaymentHistoryRow } from "./types";
-import { isPaidStatus, isVoidablePayment, isVoidedStatus } from "./types";
+import { isPaidStatus, isReceiptViewable, isVoidablePayment, isVoidedStatus, paymentStatusTone } from "./types";
 
 export function PaymentHistoryTable({
   rows,
@@ -39,6 +40,7 @@ export function PaymentHistoryTable({
 
   const filtered = useMemo(() => {
     return rows.filter((item) => {
+      if (Number(item.amount) <= 0) return false;
       if (historyStatus === "settled" && !isPaidStatus(item.status)) return false;
       if (historyStatus === "pending" && (isPaidStatus(item.status) || isVoidedStatus(item.status, item.statusCode)))
         return false;
@@ -111,8 +113,12 @@ export function PaymentHistoryTable({
       ) : null}
 
       {filtered.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-          No payment has been recorded yet.
+        <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center">
+          <FileText className="mx-auto mb-3 size-8 text-muted-foreground/70" />
+          <p className="text-sm font-medium">No transactions recorded</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Payments made toward your subscriptions and fees will appear here with downloadable receipts.
+          </p>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border">
@@ -132,7 +138,6 @@ export function PaymentHistoryTable({
             <tbody>
               {filtered.map((row) => {
                 const voidable = Boolean(onVoid) && isVoidablePayment(row);
-                const voided = isVoidedStatus(row.status, row.statusCode);
                 return (
                   <tr key={row.transactionId} className="border-b border-border/70 last:border-0">
                     <td className="px-3 py-3">{row.paymentDate ?? "—"}</td>
@@ -160,11 +165,12 @@ export function PaymentHistoryTable({
                       <span
                         className={cn(
                           "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium",
-                          isPaidStatus(row.status)
-                            ? "bg-emerald-100 text-emerald-800"
-                            : voided
-                              ? "bg-secondary text-muted-foreground"
-                              : "bg-amber-100 text-amber-900",
+                          paymentStatusTone(row.status, row.statusCode) === "ok" && "bg-emerald-100 text-emerald-800",
+                          paymentStatusTone(row.status, row.statusCode) === "partial" && "bg-sky-100 text-sky-900",
+                          paymentStatusTone(row.status, row.statusCode) === "refunded" && "bg-violet-100 text-violet-900",
+                          paymentStatusTone(row.status, row.statusCode) === "reversed" && "bg-slate-200 text-slate-800",
+                          paymentStatusTone(row.status, row.statusCode) === "voided" && "bg-secondary text-muted-foreground",
+                          paymentStatusTone(row.status, row.statusCode) === "pending" && "bg-amber-100 text-amber-900",
                         )}
                       >
                         {row.status ?? "Pending"}
@@ -172,7 +178,7 @@ export function PaymentHistoryTable({
                     </td>
                     <td className="px-3 py-3 text-right">
                       <div className="flex flex-wrap items-center justify-end gap-2">
-                        {row.receiptNumber && isPaidStatus(row.status) ? (
+                        {row.receiptNumber && isReceiptViewable(row.status, row.statusCode) ? (
                           <Button
                             type="button"
                             size="sm"
@@ -194,7 +200,7 @@ export function PaymentHistoryTable({
                             {voidingId === row.transactionId ? "Voiding…" : "Void"}
                           </Button>
                         ) : null}
-                        {!voidable && !(row.receiptNumber && isPaidStatus(row.status)) ? (
+                        {!voidable && !(row.receiptNumber && isReceiptViewable(row.status, row.statusCode)) ? (
                           <span className="text-xs text-muted-foreground">—</span>
                         ) : null}
                       </div>

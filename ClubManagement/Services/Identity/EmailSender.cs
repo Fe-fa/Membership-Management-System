@@ -25,6 +25,7 @@ public class AppPublicOptions
 public interface IEmailSender
 {
     Task<bool> SendAsync(string to, string subject, string body, CancellationToken cancellationToken);
+    Task<bool> SendHtmlAsync(string to, string subject, string html, CancellationToken cancellationToken);
 }
 
 public class EmailSender : IEmailSender
@@ -46,13 +47,31 @@ public class EmailSender : IEmailSender
             return false;
         }
 
+        await SendCoreAsync(to, subject, body, html: false, cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> SendHtmlAsync(string to, string subject, string html, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_smtp.Host))
+        {
+            _logger.LogInformation("Email HTML (not sent — SMTP host is empty). To={To} Subject={Subject}", to, subject);
+            return false;
+        }
+
+        await SendCoreAsync(to, subject, html, html: true, cancellationToken);
+        return true;
+    }
+
+    private async Task SendCoreAsync(string to, string subject, string body, bool html, CancellationToken cancellationToken)
+    {
         var fromName = string.IsNullOrWhiteSpace(_smtp.FromName) ? _smtp.From : _smtp.FromName;
         using var message = new MailMessage
         {
             From = new MailAddress(_smtp.From, fromName),
             Subject = subject,
             Body = body,
-            IsBodyHtml = false
+            IsBodyHtml = html
         };
         message.To.Add(to);
 
@@ -67,6 +86,5 @@ public class EmailSender : IEmailSender
         }
 
         await client.SendMailAsync(message, cancellationToken);
-        return true;
     }
 }

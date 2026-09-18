@@ -80,7 +80,17 @@ function escapeHtml(value: string) {
     .replaceAll('"', "&quot;");
 }
 
+function receiptStamp(status?: string | null): "VOIDED" | "REFUNDED" | null {
+  const s = (status ?? "").trim().toUpperCase().replace(/[-\s]/g, "_");
+  if (s === "VOIDED" || s === "REVERSED") return "VOIDED";
+  if (s === "REFUNDED") return "REFUNDED";
+  return null;
+}
+
 function buildReceiptHtml(r: MembershipReceipt) {
+  const stamp = receiptStamp(r.status);
+  const stampColor = stamp === "VOIDED" ? "#991b1b" : "#6d28d9";
+  const stampBg = stamp === "VOIDED" ? "#fef2f2" : "#f5f3ff";
   const rows: Array<[string, string]> = [
     ["Received from", r.payerName],
     ["Category", r.payerCategory],
@@ -112,7 +122,16 @@ function buildReceiptHtml(r: MembershipReceipt) {
   <style>
     @page { margin: 16mm; }
     body { font-family: Georgia, "Times New Roman", serif; color: #142033; margin: 0; background: #f4f1ea; }
-    .sheet { max-width: 760px; margin: 24px auto; background: #fff; border: 1px solid #c9c2b4; padding: 28px 32px; }
+    .sheet { position: relative; overflow: hidden; max-width: 760px; margin: 24px auto; background: #fff; border: 1px solid #c9c2b4; padding: 28px 32px; }
+    .watermark {
+      position: absolute; inset: 18%; display: flex; align-items: center; justify-content: center;
+      pointer-events: none; font-size: 86px; font-weight: 800; letter-spacing: 0.14em;
+      opacity: 0.13; transform: rotate(-22deg); color: ${stampColor};
+    }
+    .banner {
+      text-align: center; font-weight: 700; letter-spacing: 0.16em; padding: 8px 12px; margin-bottom: 14px;
+      border: 2px solid ${stampColor}; background: ${stampBg}; color: ${stampColor}; font-size: 13px;
+    }
     .brand { text-align: center; border-bottom: 2px solid #1f3b5b; padding-bottom: 14px; margin-bottom: 18px; }
     .brand h1 { margin: 0; font-size: 22px; letter-spacing: 0.02em; }
     .brand .sub { margin-top: 4px; font-size: 12px; color: #5b6472; }
@@ -136,6 +155,7 @@ function buildReceiptHtml(r: MembershipReceipt) {
 </head>
 <body>
   <div class="sheet">
+    ${stamp ? `<div class="watermark">${stamp}</div><div class="banner">${stamp}</div>` : ""}
     <div class="brand">
       <h1>${escapeHtml(r.clubName)}</h1>
       <div class="sub">
@@ -240,8 +260,33 @@ export function MembershipReceiptDialog({
 }
 
 function ReceiptPreview({ receipt: r }: { receipt: MembershipReceipt }) {
+  const stamp = receiptStamp(r.status);
   return (
-    <article className="rounded-lg border border-[#c9c2b4] bg-[#fffdf8] p-5 text-[#142033] shadow-sm">
+    <article className="relative overflow-hidden rounded-lg border border-[#c9c2b4] bg-[#fffdf8] p-5 text-[#142033] shadow-sm">
+      {stamp ? (
+        <>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 flex items-center justify-center text-[72px] font-extrabold tracking-[0.14em] opacity-[0.12]"
+            style={{
+              transform: "rotate(-22deg)",
+              color: stamp === "VOIDED" ? "#991b1b" : "#6d28d9",
+            }}
+          >
+            {stamp}
+          </div>
+          <div
+            className="mb-3 border-2 px-3 py-1.5 text-center text-xs font-bold tracking-[0.16em]"
+            style={{
+              borderColor: stamp === "VOIDED" ? "#991b1b" : "#6d28d9",
+              background: stamp === "VOIDED" ? "#fef2f2" : "#f5f3ff",
+              color: stamp === "VOIDED" ? "#991b1b" : "#6d28d9",
+            }}
+          >
+            {stamp}
+          </div>
+        </>
+      ) : null}
       <header className="border-b-2 border-[#1f3b5b] pb-3 text-center">
         <h3 className="font-serif text-xl font-semibold tracking-wide">{r.clubName}</h3>
         <p className="mt-1 text-xs text-muted-foreground">
@@ -276,6 +321,7 @@ function ReceiptPreview({ receipt: r }: { receipt: MembershipReceipt }) {
         <Field label="Bank code" value={r.chequeBankCode || "—"} />
         <Field label="M-Pesa / ref" value={r.mpesaCode || r.referenceNote || "—"} />
         <Field label="Payment date" value={formatDisplayDate(r.paymentDate)} />
+        <Field label="Status" value={r.status} />
       </dl>
 
       <div className="mt-4 rounded-md border border-[#1f3b5b] p-3">

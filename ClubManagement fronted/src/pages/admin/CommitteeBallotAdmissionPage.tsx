@@ -1,15 +1,8 @@
 import { Outlet } from "@tanstack/react-router";
-import {
-  Check,
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  Clock,
-  Loader2,
-  PenLine,
-} from "lucide-react";
+import { Check, CheckCircle2, Clock, Loader2, PenLine } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
+import { BallotCandidateCard } from "@/components/admin/BallotCandidateCard";
 import { PageFrame } from "@/components/layout/PageFrame";
 import { PageBodyLoading } from "@/components/layout/PageLoading";
 import { Badge } from "@/components/ui/badge";
@@ -30,16 +23,14 @@ import { hasAnyRole, readUser } from "@/lib/auth";
 import { cn } from "@/utils/cn";
 
 import {
-  canToggleVoting,
+  applicantInitials,
   isFinanceFeesCleared,
-  isVotingOpen,
   peopleList,
   signaturesUnlocked,
   useAdmissionBallot,
   type AdmissionDesk,
   type BallotItem,
   type BallotPerson,
-  type Seat,
 } from "./committeeBallotDesk";
 
 function BallotMeetingBanner({ data }: { data: AdmissionDesk }) {
@@ -175,14 +166,6 @@ export function BallotPendingPage() {
   );
 }
 
-function voteTrace(row: BallotItem, seats: Seat[]) {
-  const voted = peopleList(row.voted, row.Voted);
-  const votedIds = new Set(voted.map((v) => v.profileId));
-  const presentWaiting = seats.filter((s) => s.present && !votedIds.has(s.profileId));
-  const notYetPresent = seats.filter((s) => !s.present);
-  return { voted, presentWaiting, notYetPresent };
-}
-
 function InterviewDetailsCard({ data }: { data: AdmissionDesk }) {
   return (
     <Card>
@@ -223,208 +206,15 @@ function InterviewDetailsCard({ data }: { data: AdmissionDesk }) {
   );
 }
 
-function VotingStatusBadge({ row }: { row: BallotItem }) {
-  if (row.autoRejected || row.itemStatus === "REJECTED") {
-    return (
-      <Badge className="border-transparent bg-destructive text-destructive-foreground hover:bg-destructive">
-        REJECTED
-      </Badge>
-    );
-  }
-  if (row.itemStatus === "PASSED") {
-    return (
-      <Badge className="border-transparent bg-emerald-600 text-white hover:bg-emerald-600">PASSED</Badge>
-    );
-  }
-  if (isVotingOpen(row)) {
-    return (
-      <Badge className="border-transparent bg-orange-500 text-white hover:bg-orange-500">
-        VOTING OPEN
-      </Badge>
-    );
-  }
-  return (
-    <Badge variant="secondary" className="border-transparent">
-      VOTING CLOSED
-    </Badge>
-  );
-}
-
-function BallotCandidateRow({
-  row,
-  seats,
-  busy,
-  onVote,
-  onSetVoting,
-}: {
-  row: BallotItem;
-  seats: Seat[];
-  busy: boolean;
-  onVote: (voteValue: "FOR" | "AGAINST") => void;
-  onSetVoting: (open: boolean) => void;
-}) {
-  const [traceOpen, setTraceOpen] = useState(false);
-  const { voted, presentWaiting, notYetPresent } = voteTrace(row, seats);
-  const votingOpen = isVotingOpen(row);
-  const nonVoters = presentWaiting.length + notYetPresent.length;
-
-  return (
-    <tr className="border-t align-top">
-      <td className="px-4 py-4">
-        <p className="font-semibold text-foreground">{row.applicantName}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {row.applicationNo}
-          {row.itemStatus ? ` · ${row.itemStatus}` : ""}
-        </p>
-        {row.autoRejected ? (
-          <p className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive">
-            2 adverse votes — excluded until {row.excludedUntil ?? "one year from today"}
-          </p>
-        ) : null}
-      </td>
-      <td className="px-4 py-4">
-        <VotingStatusBadge row={row} />
-      </td>
-      <td className="px-4 py-4">
-        <p className="whitespace-nowrap text-sm font-semibold tabular-nums">
-          {row.forCount} FOR / {row.againstCount} AGAINST / {row.votesCast} VOTED
-        </p>
-        {traceOpen ? (
-          <div className="mt-3 grid max-w-sm gap-3 text-xs">
-            <div>
-              <p className="font-semibold text-foreground">Voted</p>
-              {voted.length === 0 ? (
-                <p className="mt-1 text-muted-foreground">No votes yet.</p>
-              ) : (
-                <ul className="mt-1 space-y-1 text-muted-foreground">
-                  {voted.map((v) => (
-                    <li key={`${row.committeeBallotItemId}-v-${v.profileId}`}>
-                      <span className="text-foreground">{v.name}</span>
-                      {v.roleName ? `: ${v.roleName}` : ""} — {v.voteValue ?? "—"}
-                      {v.castAt ? ` · ${v.castAt}` : ""}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div>
-              <p className="font-semibold text-foreground">Present, not voted</p>
-              {presentWaiting.length === 0 ? (
-                <p className="mt-1 text-muted-foreground">
-                  {voted.length > 0
-                    ? "Everyone present has voted."
-                    : seats.some((s) => s.present)
-                      ? "Waiting for the first vote."
-                      : "Mark members present first."}
-                </p>
-              ) : (
-                <ul className="mt-1 space-y-1 text-muted-foreground">
-                  {presentWaiting.map((s) => (
-                    <li key={`${row.committeeBallotItemId}-w-${s.profileId}`}>
-                      <span className="text-foreground">{s.name}</span>
-                      {s.roleName ? `: ${s.roleName}` : ""}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            {notYetPresent.length > 0 ? (
-              <div>
-                <p className="font-semibold text-foreground">Will vote after marked present</p>
-                <ul className="mt-1 space-y-1 text-muted-foreground">
-                  {notYetPresent.map((s) => (
-                    <li key={`${row.committeeBallotItemId}-a-${s.profileId}`}>
-                      <span className="text-foreground">{s.name}</span>
-                      {s.roleName ? `: ${s.roleName}` : ""}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </td>
-      <td className="px-4 py-4">
-        <div className="grid gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="w-fit"
-            onClick={() => setTraceOpen((v) => !v)}
-          >
-            View Trace
-            {traceOpen ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-          </Button>
-          <p className="text-xs text-muted-foreground">
-            Voters: {voted.length} / Non-Voters: {nonVoters}
-          </p>
-          {row.myVoteCast ? (
-            <p className="text-sm font-medium">Your vote: {row.myVoteValue}</p>
-          ) : votingOpen && !row.autoRejected ? (
-            <div className="grid gap-1.5">
-              <p className="text-xs font-medium text-muted-foreground">Your Vote</p>
-              <div className="flex flex-wrap gap-1.5">
-                <Button type="button" size="sm" disabled={busy} onClick={() => onVote("FOR")}>
-                  FOR
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() => onVote("AGAINST")}
-                >
-                  AGAINST
-                </Button>
-              </div>
-            </div>
-          ) : null}
-        </div>
-      </td>
-      <td className="px-4 py-4">
-        <div className="flex flex-col items-stretch gap-1.5 sm:min-w-[9.5rem]">
-          <Button type="button" size="sm" variant="secondary" disabled>
-            Moved to Signatures
-          </Button>
-          {canToggleVoting(row) ? (
-            votingOpen ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() => onSetVoting(false)}
-              >
-                Close Voting
-              </Button>
-            ) : (
-              <Button type="button" size="sm" disabled={busy} onClick={() => onSetVoting(true)}>
-                Open Voting
-              </Button>
-            )
-          ) : (
-            <Button type="button" size="sm" variant="outline" disabled>
-              Close Voting
-            </Button>
-          )}
-        </div>
-      </td>
-    </tr>
-  );
-}
-
 export function BallotCandidatesPage() {
   return (
     <BallotLoadGate>
       {(ballot) => {
-        const { data, seats, busy, vote, setVoting } = ballot;
+        const { data, seats, busy, vote, setVoting, proceed } = ballot;
         const items = data?.items ?? [];
         return (
           <div className="grid gap-4">
-            <div>
-              {/* <h1 className="text-2xl font-semibold tracking-tight">Ballot</h1> */}
-            </div>
+            <h1 className="text-2xl font-semibold tracking-tight">Ballot</h1>
 
             <InterviewDetailsCard data={data!} />
 
@@ -435,60 +225,36 @@ export function BallotCandidatesPage() {
               </p>
             ) : null}
 
-            <Card>
-              <CardContent className="p-0">
-                {items.length === 0 ? (
-                  <p className="px-4 py-10 text-center text-sm text-muted-foreground">
-                    No applicants on this meeting ballot yet. Add them from Pending applicants.
-                  </p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[980px] text-sm">
-                      <thead className="border-b bg-muted/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                        <tr>
-                          <th className="px-4 py-3 font-medium">Applicant</th>
-                          <th className="px-4 py-3 font-medium">Voting Status</th>
-                          <th className="px-4 py-3 font-medium">Summary</th>
-                          <th className="px-4 py-3 font-medium">Vote Trace &amp; Actions</th>
-                          <th className="px-4 py-3 font-medium">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((row) => (
-                          <BallotCandidateRow
-                            key={row.committeeBallotItemId}
-                            row={row}
-                            seats={seats}
-                            busy={busy}
-                            onVote={(voteValue) =>
-                              vote.mutate({ itemId: row.committeeBallotItemId, voteValue })
-                            }
-                            onSetVoting={(open) =>
-                              setVoting.mutate({ itemId: row.committeeBallotItemId, open })
-                            }
-                          />
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            {items.length === 0 ? (
+              <Card>
+                <CardContent className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  No applicants on this meeting ballot yet. Add them from Pending applicants.
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4">
+                {items.map((row) => (
+                  <BallotCandidateCard
+                    key={row.committeeBallotItemId}
+                    row={row}
+                    seats={seats}
+                    busy={busy}
+                    onVote={(voteValue) =>
+                      vote.mutate({ itemId: row.committeeBallotItemId, voteValue })
+                    }
+                    onSetVoting={(open) =>
+                      setVoting.mutate({ itemId: row.committeeBallotItemId, open })
+                    }
+                    onMoveToSignatures={() => proceed.mutate(row.committeeBallotItemId)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         );
       }}
     </BallotLoadGate>
   );
-}
-
-function applicantInitials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
 }
 
 function kindLabel(kind?: string) {

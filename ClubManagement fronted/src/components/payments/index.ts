@@ -17,11 +17,18 @@ export {
   METHOD_ICONS,
   applicationDuesToSubscription,
   isPaidStatus,
+  liveFeeStatusLabel,
   normalizeMethodCode,
+  paymentStatusTone,
   sortPaymentMethods,
   standingLabel,
 } from "./types";
 export { MemberPaymentForm, MemberPaymentForm as PaymentForm } from "./MemberPaymentForm";
+export {
+  PAYMENT_PAGE_DESCRIPTION,
+  PaymentDeskBody,
+  PaymentHistoryPanel,
+} from "./PaymentDesk";
 export { PaymentHistoryTable } from "./PaymentHistoryTable";
 export {
   SubscriptionStatusBanners,

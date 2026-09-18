@@ -2559,6 +2559,99 @@
   },
   {
     "ContainingType": "ClubManagement.Controllers.Finance.FinanceController",
+    "Method": "IssueInvoice",
+    "RelativePath": "api/finance/invoices/{accountId}",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "accountId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "year",
+        "Type": "System.Nullable\u00601[[System.Int32, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "IsRequired": false
+      },
+      {
+        "Name": "sendEmail",
+        "Type": "System.Boolean",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "ClubManagement.Services.Finance.InvoiceDocumentDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.Finance.FinanceController",
+    "Method": "GetInvoice",
+    "RelativePath": "api/finance/invoices/{accountId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "accountId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "year",
+        "Type": "System.Nullable\u00601[[System.Int32, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "ClubManagement.Services.Finance.InvoiceDocumentDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.Finance.FinanceController",
+    "Method": "IssueInvoicesBulk",
+    "RelativePath": "api/finance/invoices/bulk",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "ClubManagement.Controllers.Finance.FinanceController\u002BBulkInvoiceRequest",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "ClubManagement.Controllers.Finance.FinanceController\u002BBulkInvoiceResultDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.Finance.FinanceController",
     "Method": "NextReceipt",
     "RelativePath": "api/finance/next-receipt",
     "HttpMethod": "GET",
@@ -3258,6 +3351,37 @@
   },
   {
     "ContainingType": "ClubManagement.Controllers.Finance.FinanceController",
+    "Method": "Reverse",
+    "RelativePath": "api/finance/payments/{transactionId}/reverse",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "transactionId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "ClubManagement.Services.Finance.ReversePaymentRequest",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "ClubManagement.Services.Finance.PaymentRowDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.Finance.FinanceController",
     "Method": "Posting",
     "RelativePath": "api/finance/posting/{year}",
     "HttpMethod": "POST",
@@ -3402,6 +3526,42 @@
     "ReturnTypes": [
       {
         "Type": "System.Collections.Generic.IReadOnlyList\u00601[[ClubManagement.Services.Finance.SettlementMemberHitDto, ClubManagement, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.Finance.FinanceController",
+    "Method": "Statement",
+    "RelativePath": "api/finance/statements/{accountId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "accountId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "from",
+        "Type": "System.DateOnly",
+        "IsRequired": false
+      },
+      {
+        "Name": "to",
+        "Type": "System.DateOnly",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "ClubManagement.Services.Finance.StatementDocumentDto",
         "MediaTypes": [
           "text/plain",
           "application/json",
@@ -4379,6 +4539,32 @@
   },
   {
     "ContainingType": "ClubManagement.Controllers.MembershipAccount.MembersMeController",
+    "Method": "CurrentInvoice",
+    "RelativePath": "api/members/me/invoices/current",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "year",
+        "Type": "System.Nullable\u00601[[System.Int32, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "ClubManagement.Services.Finance.InvoiceDocumentDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.MembershipAccount.MembersMeController",
     "Method": "Notifications",
     "RelativePath": "api/members/me/notifications",
     "HttpMethod": "GET",
@@ -4609,6 +4795,37 @@
     "ReturnTypes": [
       {
         "Type": "ClubManagement.DTOs.MembershipAccount.ReciprocalSummaryDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.MembershipAccount.MembersMeController",
+    "Method": "Statement",
+    "RelativePath": "api/members/me/statement",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "from",
+        "Type": "System.DateOnly",
+        "IsRequired": false
+      },
+      {
+        "Name": "to",
+        "Type": "System.DateOnly",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "ClubManagement.Services.Finance.StatementDocumentDto",
         "MediaTypes": [
           "text/plain",
           "application/json",

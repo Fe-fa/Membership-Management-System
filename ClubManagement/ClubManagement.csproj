@@ -4,6 +4,9 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Prevents IOException when VS / a second build writes obj static-web-assets cache while the API is running. -->
+    <StaticWebAssetsCacheEnabled>false</StaticWebAssetsCacheEnabled>
+    <DefineStaticWebAssetsCacheEnabled>false</DefineStaticWebAssetsCacheEnabled>
     <UserSecretsId>acea-club-management-2026</UserSecretsId>
   </PropertyGroup>
 

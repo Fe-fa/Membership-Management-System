@@ -138,6 +138,89 @@ public class FinanceController : ControllerBase
     }
 
     [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpPost("payments/{transactionId:long}/reverse")]
+    public async Task<ActionResult<PaymentRowDto>> Reverse(
+        long transactionId,
+        [FromBody] ReversePaymentRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _finance.ReversePaymentAsync(transactionId, request, User.UserId(), cancellationToken));
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    public record BulkInvoiceRequest(int? Year = null, long[]? AccountIds = null, bool SendEmail = true);
+    public record BulkInvoiceResultDto(int Issued, int Year);
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpPost("invoices/bulk")]
+    public async Task<ActionResult<BulkInvoiceResultDto>> IssueInvoicesBulk(
+        [FromBody] BulkInvoiceRequest? request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var year = request?.Year ?? DateTime.UtcNow.Year;
+            var sendEmail = request?.SendEmail ?? true;
+            var issued = await _finance.IssueAnnualInvoicesForYearAsync(
+                year,
+                User.UserId(),
+                sendEmail,
+                cancellationToken,
+                request?.AccountIds);
+            return Ok(new BulkInvoiceResultDto(issued, year));
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpPost("invoices/{accountId:long}")]
+    public async Task<ActionResult<InvoiceDocumentDto>> IssueInvoice(
+        long accountId,
+        [FromQuery] int? year,
+        [FromQuery] bool sendEmail,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _finance.IssueSubscriptionInvoiceAsync(accountId, year, sendEmail, User.UserId(), cancellationToken));
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpGet("invoices/{accountId:long}")]
+    public async Task<ActionResult<InvoiceDocumentDto>> GetInvoice(
+        long accountId,
+        [FromQuery] int? year,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var invoice = await _finance.GetSubscriptionInvoiceAsync(accountId, year, cancellationToken);
+            return invoice is null ? NotFound(new { message = "No invoice has been issued for this member and year." }) : Ok(invoice);
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpGet("statements/{accountId:long}")]
+    public async Task<ActionResult<StatementDocumentDto>> Statement(
+        long accountId,
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _finance.GetMemberStatementAsync(accountId, from, to, cancellationToken));
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
     [HttpPost("payments/{transactionId:long}/receipt")]
     public async Task<ActionResult<PaymentRowDto>> IssueReceipt(long transactionId, CancellationToken cancellationToken)
     {
@@ -218,10 +301,6 @@ public class FinanceController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Run annual subscription lifecycle for a chosen year (demo / ops):
-    /// generate unpaid rows for that year; apply POSTED after 28 Feb / REMOVED after 30 Apr when as-of date allows.
-    /// </summary>
     [Authorize(Roles = "GENERAL_MANAGER,CHAIRMAN,ADMIN")]
     [HttpPost("posting/{year:int}")]
     public async Task<ActionResult<SubscriptionLifecycleResultDto>> Posting(int year, CancellationToken cancellationToken)
@@ -231,10 +310,6 @@ public class FinanceController : ControllerBase
         return Ok(await _finance.RunSubscriptionLifecycleForYearAsync(year, User.UserId(), cancellationToken));
     }
 
-    /// <summary>
-    /// Manually run the annual subscription lifecycle for the current year
-    /// (1 Jan generate → after 28 Feb POSTED → after 30 Apr REMOVED).
-    /// </summary>
     [Authorize(Roles = "GENERAL_MANAGER,CHAIRMAN,ADMIN")]
     [HttpPost("subscription-lifecycle")]
     public async Task<ActionResult<SubscriptionLifecycleResultDto>> SubscriptionLifecycle(CancellationToken cancellationToken) =>

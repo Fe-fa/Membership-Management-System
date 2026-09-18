@@ -205,6 +205,7 @@ public class MemberDashboardService : IMemberDashboardService
         }
         else
         {
+            await _finance.ReconcileAccountDuesAsync(account.AccountId, cancellationToken);
             await EnsureYearSubscriptionAsync(account.AccountId, account.MembershipTypeId, discount, year, cancellationToken);
             // Mid-year joiners (after 30 June) show half-rate indicator and adjust unpaid schedule once.
             if (halfYear)
@@ -271,7 +272,7 @@ public class MemberDashboardService : IMemberDashboardService
                     account.CurrentMemberStatus = active;
                 }
             }
-            if (standingCode is "AtRiskOfRemoval" or "Posted")
+            if (standingCode is "AtRiskOfRemoval" or "Posted" or "Unpaid")
             {
                 standingCode = "InGoodStanding";
                 detail = "Joining fee and current-year subscription are settled.";
@@ -316,7 +317,33 @@ public class MemberDashboardService : IMemberDashboardService
             UpcomingYear = upcomingYear,
             UpcomingAmountDue = upcomingDue,
             UpcomingAmountPaid = upcomingPaid,
-            UpcomingOutstanding = upcomingOutstanding
+            UpcomingOutstanding = upcomingOutstanding,
+            UpcomingPaymentStatus = upcomingYear is null
+                ? "Unpaid"
+                : await ResolveLiveFeeStatusAsync(
+                    account.AccountId,
+                    "ANNUAL",
+                    upcomingDue,
+                    upcomingPaid,
+                    upcomingOutstanding,
+                    waived: false,
+                    cancellationToken),
+            AnnualPaymentStatus = await ResolveLiveFeeStatusAsync(
+                account.AccountId,
+                "ANNUAL",
+                amountDue,
+                amountPaid,
+                outstanding,
+                waived: isLifeExempt,
+                cancellationToken),
+            JoiningPaymentStatus = await ResolveLiveFeeStatusAsync(
+                account.AccountId,
+                "JOINING",
+                joining.Due,
+                joining.Paid,
+                joining.Outstanding,
+                waived: joining.Waived,
+                cancellationToken)
         };
     }
 
@@ -452,7 +479,7 @@ public class MemberDashboardService : IMemberDashboardService
             request.SubscriptionYear), actorUserId, cancellationToken);
 
         var statusCode = (row.StatusCode ?? row.Status ?? "").Trim().ToUpperInvariant().Replace("-", "_").Replace(" ", "_");
-        if (statusCode is "PAID" or "SETTLED" or "WAIVED"
+        if (statusCode is "PAID" or "SETTLED" or "WAIVED" or "PARTIALLY_PAID"
             && feeCode is "ACCOMMODATION" or "CORKAGE" or "OTHER")
         {
             try
@@ -523,12 +550,44 @@ public class MemberDashboardService : IMemberDashboardService
                 .Where(t =>
                     t.AccountId == account.AccountId
                     && t.FeeTypeId == joiningFee.FeeTypeId
-                    && (t.PaymentStatus.Code == "PAID" || t.PaymentStatus.Code == "WAIVED"))
+                    && t.Amount > 0
+                    && (t.PaymentStatus.Code == "PAID"
+                        || t.PaymentStatus.Code == "WAIVED"
+                        || t.PaymentStatus.Code == "PARTIALLY_PAID"
+                        || t.PaymentStatus.Code == "SETTLED"
+                        || t.PaymentStatus.Code == "REFUNDED"))
                 .SumAsync(t => (decimal?)t.Amount, cancellationToken) ?? 0;
         }
 
         var outstanding = Math.Max(0, due - paid);
         return (due, paid, outstanding, waived);
+    }
+
+    private async Task<string> ResolveLiveFeeStatusAsync(
+        long accountId,
+        string feeCode,
+        decimal due,
+        decimal paid,
+        decimal outstanding,
+        bool waived,
+        CancellationToken cancellationToken)
+    {
+        if (waived && outstanding <= 0) return "Waived";
+        var hasPending = await _db.Transactions.AsNoTracking()
+            .AnyAsync(t =>
+                t.AccountId == accountId
+                && t.FeeType != null
+                && (t.FeeType.Code == feeCode
+                    || (feeCode == "JOINING" && t.FeeType.Code == "ENTRANCE")
+                    || (feeCode == "ANNUAL" && (t.FeeType.Code == "SUBSCRIPTION" || t.FeeType.Code == "ANNUAL_SUBSCRIPTION")))
+                && (t.PaymentStatus.Code == "PENDING"
+                    || t.PaymentStatus.Code == "INITIATED"
+                    || t.PaymentStatus.Code == "UNCLEARED"),
+                cancellationToken);
+        if (hasPending) return "PendingVerification";
+        if (outstanding <= 0.01m && (paid > 0.01m || due <= 0.01m)) return "Paid";
+        if (paid > 0.01m && outstanding > 0.01m) return "PartiallyPaid";
+        return "Unpaid";
     }
 
     public async Task<IReadOnlyList<EndorsementInviteDto>> ListInvitesAsync(long profileId, CancellationToken cancellationToken)
@@ -1708,13 +1767,11 @@ public class MemberDashboardService : IMemberDashboardService
         if (outstanding <= 0)
             return ("InGoodStanding", "Subscription for the current year is settled.");
 
-        if (string.Equals(statusCode, "REMOVED", StringComparison.OrdinalIgnoreCase))
-            return ("AtRiskOfRemoval", "Membership has been removed for unpaid subscription (30 April deadline).");
         if (string.Equals(statusCode, "POSTED", StringComparison.OrdinalIgnoreCase))
             return ("Posted", "Posted (in arrears) after the 28 February posting deadline.");
 
-        if (today >= new DateOnly(year, 4, 1))
-            return ("AtRiskOfRemoval", "Unpaid subscription — at risk of removal on 30 April.");
+        if (today >= new DateOnly(year, 4, 30))
+            return ("Unpaid", "Annual subscription is unpaid. Membership remains active.");
         if (today >= new DateOnly(year, 2, 1))
             return ("Posted", "Reminder: unpaid members are posted after 28 February.");
         return ("InGoodStanding", "Annual subscription is due 1 January.");

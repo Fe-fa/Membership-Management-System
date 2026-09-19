@@ -32,6 +32,12 @@ public class TenantsController : ControllerBase
                 .FirstOrDefaultAsync(t => t.IsActive && t.Code == TenantResolutionMiddleware.DefaultTenantCode, cancellationToken);
 
         if (row is null) return NotFound();
+
+        var country = row.CountryId is long countryId
+            ? await _db.Countries.AsNoTracking().FirstOrDefaultAsync(c => c.CountryId == countryId, cancellationToken)
+            : await _db.Countries.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.CountryCode == "KE" || c.CountryCode == "KEN", cancellationToken);
+
         return Ok(new TenantPublicDto(
             row.TenantId,
             row.Code,
@@ -39,6 +45,11 @@ public class TenantsController : ControllerBase
             row.ShortName,
             row.ContactEmail,
             row.ContactPhone,
-            row.AddressLine));
+            row.AddressLine,
+            row.LogoUrl,
+            country?.CountryId,
+            country?.CountryCode,
+            country?.CountryName,
+            string.IsNullOrWhiteSpace(country?.Description) ? null : country.Description.Trim()));
     }
 }

@@ -9,6 +9,7 @@ function escapeCsv(value: string | number | null | undefined) {
   return raw;
 }
 export { buildInvoiceHtml, buildInvoicePrintHtml, type InvoiceDocument } from "./invoiceDocument";
+export { buildStatementHtml, type StatementDocument, type StatementLine } from "./statementDocument";
 
 export function downloadExcelCsv<T>(
   filename: string,
@@ -69,10 +70,28 @@ export function printHtmlDocument(html: string) {
     }
   };
 
+  const printWhenReady = () => {
+    const images = Array.from(frameDoc.images);
+    const pending = images.filter((img) => !img.complete);
+    if (pending.length === 0) {
+      setTimeout(triggerPrint, 50);
+      return;
+    }
+    let left = pending.length;
+    const done = () => {
+      left -= 1;
+      if (left <= 0) setTimeout(triggerPrint, 50);
+    };
+    for (const img of pending) {
+      img.addEventListener("load", done, { once: true });
+      img.addEventListener("error", done, { once: true });
+    }
+  };
+
   if (frameDoc.readyState === "complete") {
-    setTimeout(triggerPrint, 50);
+    printWhenReady();
   } else {
-    iframe.onload = () => setTimeout(triggerPrint, 50);
+    iframe.onload = printWhenReady;
   }
   return true;
 }

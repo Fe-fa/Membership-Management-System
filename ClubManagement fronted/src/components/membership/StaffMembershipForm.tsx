@@ -1,5 +1,6 @@
 ﻿import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, Camera, Check, Loader2, Save } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { ArrowLeft, ArrowRight, Camera, Check, List, Loader2, Save } from "lucide-react";
 import { z } from "zod";
 import { toast } from "sonner";
 
@@ -207,6 +208,7 @@ export function StaffMembershipForm({
           sectionStatus={sectionStatus}
           onEdit={(key) => go(key)}
           hideSteps={variant === "existingMember" ? ["supporters", "consent"] : []}
+          hidePaymentUploads={variant === "existingMember"}
         />
       ) : null}
     </>
@@ -248,15 +250,24 @@ export function StaffMembershipForm({
   });
 
   if (variant === "existingMember") {
+    const backToList = (
+      <Button type="button" variant="outline" className="rounded-full bg-white" asChild>
+        <Link to="/existing-members">
+          <List className="size-4" />
+          Back to List
+        </Link>
+      </Button>
+    );
+
     return (
-      <div className="space-y-5">
-        <section className="surface-card p-5 sm:p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="mx-auto w-full max-w-[1080px] space-y-4">
+        <section className="overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-primary to-sky px-5 py-5 text-primary-foreground shadow-sm sm:px-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-center gap-4">
               <div className="relative shrink-0">
                 <button
                   type="button"
-                  className="grid size-24 place-items-center overflow-hidden rounded-full bg-[#d8dee6] text-xs font-medium text-muted-foreground"
+                  className="grid size-[4.5rem] place-items-center overflow-hidden rounded-full bg-white/20 text-sm font-medium text-primary-foreground ring-4 ring-white/25"
                   onClick={() => photoInputRef.current?.click()}
                   disabled={photoBusy}
                   title="Change photo"
@@ -264,12 +275,12 @@ export function StaffMembershipForm({
                   {photoUrl ? (
                     <img src={photoUrl} alt="" className="size-full object-cover" />
                   ) : (
-                    "Photo"
+                    "?"
                   )}
                 </button>
                 <button
                   type="button"
-                  className="absolute bottom-0 right-0 grid size-8 place-items-center rounded-full border border-border bg-card text-foreground shadow-sm"
+                  className="absolute -bottom-0.5 -right-0.5 grid size-7 place-items-center rounded-full bg-sky text-white shadow-sm"
                   onClick={() => photoInputRef.current?.click()}
                   disabled={photoBusy}
                   aria-label="Upload photo"
@@ -285,71 +296,89 @@ export function StaffMembershipForm({
                 />
               </div>
               <div className="min-w-0">
-                <h1 className="truncate text-3xl leading-tight sm:text-4xl">{displayName}</h1>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {[profileStatus, profileMeta].filter(Boolean).join(" · ") || "Recording an existing member"}
+                <h1 className="truncate text-2xl font-semibold leading-tight sm:text-[1.7rem]">{displayName}</h1>
+                <p className="mt-1 text-sm text-primary-foreground/80">
+                  {[profileStatus, profileMeta].filter(Boolean).join(" · ") || "Create a new member record"}
                 </p>
               </div>
             </div>
-            {headerActions ? <div className="flex shrink-0 flex-wrap gap-2">{headerActions}</div> : null}
-          </div>
-
-          <div className="-mx-1 mt-5 overflow-x-auto pb-1">
-            <ol className="flex min-w-max items-center gap-2 px-1">
-              {stepper.map(({ item, i, done, active }) => (
-                <li key={item.key}>
-                  <button
-                    type="button"
-                    onClick={() => go(item.key)}
-                    className={cn(
-                      "flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors",
-                      active
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : done
-                          ? "border-emerald-200 bg-emerald-50 text-foreground hover:bg-emerald-100"
-                          : "border-border bg-card text-muted-foreground hover:bg-secondary",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "grid size-6 place-items-center rounded-full text-[11px] font-semibold",
-                        active
-                          ? "bg-primary-foreground/20 text-primary-foreground"
-                          : done
-                            ? "bg-success text-white"
-                            : "bg-muted text-muted-foreground",
-                      )}
-                    >
-                      {done && !active ? <Check className="size-3.5" /> : i + 1}
-                    </span>
-                    {item.short}
-                  </button>
-                </li>
-              ))}
-            </ol>
+            <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
+              <span className="rounded-md border border-white/30 bg-white/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide">
+                Membership No: {membershipNo?.trim() || "Entered on Membership step"}
+              </span>
+              <div className="flex flex-wrap gap-2 sm:justify-end">
+                {headerActions}
+                {backToList}
+              </div>
+            </div>
           </div>
         </section>
 
-        <div className="flex flex-col gap-3 rounded-xl bg-muted/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-muted-foreground">
-            {completedCount} of {countableSteps.length} sections complete.
-          </p>
-          <div className="w-full sm:max-w-xs">
-            <Progress value={(completedCount / Math.max(countableSteps.length, 1)) * 100} className="h-1.5" />
-          </div>
-        </div>
+        <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          {stepper.map(({ item, i, done, active }) => (
+            <li key={item.key}>
+              <button
+                type="button"
+                onClick={() => go(item.key)}
+                className={cn(
+                  "flex h-full w-full items-center gap-3 rounded-2xl border bg-white px-3 py-3 text-left shadow-sm transition-colors",
+                  active
+                    ? "border-primary ring-2 ring-primary/20"
+                    : "border-transparent hover:border-border",
+                )}
+              >
+                <span
+                  className={cn(
+                    "grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold",
+                    active
+                      ? "bg-primary text-primary-foreground"
+                      : done
+                        ? "bg-success text-white"
+                        : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {done && !active ? <Check className="size-3.5" /> : i + 1}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    Step {i + 1}
+                  </span>
+                  <span className="block truncate text-sm font-semibold text-foreground">{item.short}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ol>
 
-        <div className="surface-card p-5 sm:p-8">
-          <header className="mb-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Step {index + 1} of {formSteps.length}
-            </p>
-            <h2 className="mt-1 text-3xl">{formSteps[index]!.title}</h2>
-          </header>
-          <fieldset disabled={readOnly} className={cn(readOnly && "disabled:opacity-100")}>
+        <div className="rounded-2xl border border-white bg-white p-5 shadow-sm sm:p-6">
+          <fieldset
+            disabled={readOnly}
+            className={cn(
+              "register-member-fields space-y-8 [&_.grid]:lg:!grid-cols-4 [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:uppercase [&_h3]:tracking-[0.14em] [&_h3]:text-primary [&_label]:text-[13px] [&_label]:font-medium [&_label]:normal-case [&_label]:tracking-normal",
+              readOnly && "disabled:opacity-100",
+            )}
+          >
             {fields}
           </fieldset>
-          {footer}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {backToList}
+          {step !== "review" ? (
+            <Button type="button" className="rounded-full px-6" onClick={continueNext} disabled={saving}>
+              Next <ArrowRight className="size-4" />
+            </Button>
+          ) : readOnly ? null : (
+            <Button
+              type="button"
+              className="rounded-full px-6"
+              disabled={saving}
+              onClick={() => void onSave()}
+            >
+              {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+              {saveLabel}
+            </Button>
+          )}
         </div>
       </div>
     );

@@ -217,7 +217,12 @@ public class OfficePermissionService : IOfficePermissionService
                 ["ADMIN"] = VW(), ["GENERAL_MANAGER"] = VW(), ["CHAIRMAN"] = V(),
                 ["TREASURER"] = N(), ["COMMITTEE_MEMBER"] = N(), ["RECEPTIONIST"] = VW()
             }),
-            Mod("members", "Members", "Applications, register, privileges & member desk.", new(StringComparer.OrdinalIgnoreCase)
+            Mod("members", "Members", "Pending applications and authorize applicants.", new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ADMIN"] = VW(), ["GENERAL_MANAGER"] = VW(), ["CHAIRMAN"] = VW(),
+                ["TREASURER"] = V(), ["COMMITTEE_MEMBER"] = V(), ["RECEPTIONIST"] = N()
+            }),
+            Mod("manage-records", "Manage records", "Member register, privileges and user accounts.", new(StringComparer.OrdinalIgnoreCase)
             {
                 ["ADMIN"] = VW(), ["GENERAL_MANAGER"] = VW(), ["CHAIRMAN"] = VW(),
                 ["TREASURER"] = V(), ["COMMITTEE_MEMBER"] = V(), ["RECEPTIONIST"] = N()
@@ -254,8 +259,8 @@ public class OfficePermissionService : IOfficePermissionService
             }),
             Mod("support", "Support", "Help desk, tickets and member queries.", new(StringComparer.OrdinalIgnoreCase)
             {
-                ["ADMIN"] = VW(), ["GENERAL_MANAGER"] = VW(), ["CHAIRMAN"] = V(),
-                ["TREASURER"] = N(), ["COMMITTEE_MEMBER"] = N(), ["RECEPTIONIST"] = V()
+                ["ADMIN"] = VW(), ["GENERAL_MANAGER"] = VW(), ["CHAIRMAN"] = VW(),
+                ["TREASURER"] = VW(), ["COMMITTEE_MEMBER"] = VW(), ["RECEPTIONIST"] = V()
             }),
             Mod("setting", "Setting", "RBAC, accounts, lookups and club preferences.", new(StringComparer.OrdinalIgnoreCase)
             {

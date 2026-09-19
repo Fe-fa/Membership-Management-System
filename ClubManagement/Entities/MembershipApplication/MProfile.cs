@@ -29,6 +29,10 @@ namespace ClubManagement.Entities
         [Column("tenant_id")]
         public long TenantId { get; set; }
 
+        /// <summary>Company this person belongs to. Same value as TenantId.</summary>
+        [NotMapped]
+        public long CompanyId { get => TenantId; set => TenantId = value; }
+
         [Column("account_type_id")]
         public long? AccountTypeId { get; set; }
 

@@ -15,6 +15,10 @@ public class UserListItemDto
     public DateTime? LastLoginAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public List<string> Roles { get; set; } = [];
+    /// <summary>Company (tenant). 0 when the user is a system Admin with no company.</summary>
+    public long CompanyId { get; set; }
+    public string? CompanyCode { get; set; }
+    public string? CompanyName { get; set; }
 }
 
 public class UserDetailDto : UserListItemDto
@@ -46,6 +50,8 @@ public class CreateStaffUserRequest
     public List<string> RoleCodes { get; set; } = [];
     /// <summary>Required when any assigned role needs a club membership number.</summary>
     public string? MembershipNo { get; set; }
+    /// <summary>Required for applicant, member/officer, and receptionist. Must be omitted for Admin.</summary>
+    public long? CompanyId { get; set; }
 }
 
 public class CreateStaffUserResponse
@@ -62,6 +68,8 @@ public class UpdateUserRequest
     public string Email { get; set; } = string.Empty;
     public string? Mobile { get; set; }
     public string? Username { get; set; }
+    /// <summary>Change company for company-scoped roles. Ignored for Admin.</summary>
+    public long? CompanyId { get; set; }
 }
 
 public class AssignRolesRequest
@@ -70,6 +78,8 @@ public class AssignRolesRequest
     public string? RoleCode { get; set; }
     /// <summary>Full set of System_role codes for this user (replaces previous User_role rows).</summary>
     public List<string> RoleCodes { get; set; } = [];
+    /// <summary>Required when assigning any company-scoped role. Cleared automatically for Admin.</summary>
+    public long? CompanyId { get; set; }
 }
 
 public class ChangeAccountStatusRequest
@@ -95,6 +105,7 @@ public class RoleOptionDto
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public int SortOrder { get; set; }
+    public bool RequiresCompany { get; set; }
 }
 
 public class InviteResult

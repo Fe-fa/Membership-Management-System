@@ -78,6 +78,985 @@
         }
       }
     },
+    "/api/support/categories": {
+      "get": {
+        "tags": [
+          "Support"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SupportCategoryDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SupportCategoryDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SupportCategoryDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/support/dashboard": {
+      "get": {
+        "tags": [
+          "Support"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportDashboardDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportDashboardDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportDashboardDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/support/tickets": {
+      "get": {
+        "tags": [
+          "Support"
+        ],
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SupportTicketListItemDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SupportTicketListItemDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SupportTicketListItemDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Support"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSupportTicketRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSupportTicketRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSupportTicketRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportTicketDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportTicketDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportTicketDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/support/tickets/{ticketId}": {
+      "get": {
+        "tags": [
+          "Support"
+        ],
+        "parameters": [
+          {
+            "name": "ticketId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportTicketDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportTicketDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportTicketDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/support/tickets/{ticketId}/attachment": {
+      "post": {
+        "tags": [
+          "Support"
+        ],
+        "parameters": [
+          {
+            "name": "ticketId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ContentType": {
+                    "type": "string"
+                  },
+                  "ContentDisposition": {
+                    "type": "string"
+                  },
+                  "Headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "Length": {
+                    "pattern": "^-?(?:0|[1-9]\\d*)$",
+                    "type": [
+                      "integer",
+                      "string"
+                    ],
+                    "format": "int64"
+                  },
+                  "Name": {
+                    "type": "string"
+                  },
+                  "FileName": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportTicketDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportTicketDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportTicketDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/support/tickets/{ticketId}/replies": {
+      "post": {
+        "tags": [
+          "Support"
+        ],
+        "parameters": [
+          {
+            "name": "ticketId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplySupportTicketRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplySupportTicketRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplySupportTicketRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportTicketDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportTicketDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportTicketDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/support/tickets/{ticketId}/status": {
+      "put": {
+        "tags": [
+          "Support"
+        ],
+        "parameters": [
+          {
+            "name": "ticketId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeSupportTicketStatusRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeSupportTicketStatusRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeSupportTicketStatusRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportTicketDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportTicketDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportTicketDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/apply/{slug}": {
+      "get": {
+        "tags": [
+          "Apply"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyCompanyContextDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyCompanyContextDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyCompanyContextDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/apply/designations": {
+      "get": {
+        "tags": [
+          "Apply"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClubSetupDesignationDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClubSetupDesignationDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClubSetupDesignationDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/club-setup/countries": {
+      "get": {
+        "tags": [
+          "ClubSetup"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClubSetupCountryDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClubSetupCountryDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClubSetupCountryDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ClubSetup"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubSetupCountryRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubSetupCountryRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubSetupCountryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClubSetupCountryDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClubSetupCountryDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClubSetupCountryDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/club-setup/countries/{id}": {
+      "put": {
+        "tags": [
+          "ClubSetup"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubSetupCountryRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubSetupCountryRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubSetupCountryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClubSetupCountryDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClubSetupCountryDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClubSetupCountryDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/club-setup/companies": {
+      "get": {
+        "tags": [
+          "ClubSetup"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClubSetupCompanyDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClubSetupCompanyDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClubSetupCompanyDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ClubSetup"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubSetupCompanyRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubSetupCompanyRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubSetupCompanyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClubSetupCompanyDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClubSetupCompanyDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClubSetupCompanyDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/club-setup/companies/{id}": {
+      "put": {
+        "tags": [
+          "ClubSetup"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubSetupCompanyRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubSetupCompanyRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubSetupCompanyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClubSetupCompanyDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClubSetupCompanyDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClubSetupCompanyDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ClubSetup"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/club-setup/designations": {
+      "get": {
+        "tags": [
+          "ClubSetup"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClubSetupDesignationDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClubSetupDesignationDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClubSetupDesignationDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ClubSetup"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubSetupDesignationRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubSetupDesignationRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubSetupDesignationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClubSetupDesignationDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClubSetupDesignationDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClubSetupDesignationDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/club-setup/designations/{id}": {
+      "put": {
+        "tags": [
+          "ClubSetup"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubSetupDesignationRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubSetupDesignationRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClubSetupDesignationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClubSetupDesignationDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClubSetupDesignationDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClubSetupDesignationDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ClubSetup"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/settings/office-permissions": {
       "get": {
         "tags": [
@@ -8136,6 +9115,149 @@
         }
       }
     },
+    "/api/finance/invoices/stats": {
+      "get": {
+        "tags": [
+          "Finance"
+        ],
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "membershipType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceRunStatsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceRunStatsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceRunStatsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/finance/invoices/queue": {
+      "get": {
+        "tags": [
+          "Finance"
+        ],
+        "parameters": [
+          {
+            "name": "Page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Skip",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "membershipType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfInvoiceQueueRowDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfInvoiceQueueRowDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfInvoiceQueueRowDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/finance/invoices/bulk": {
       "post": {
         "tags": [
@@ -11755,6 +12877,26 @@
           "applicantName": {
             "type": "string"
           },
+          "companyId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "companyCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "companyName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "applicationFormVersionId": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
@@ -12320,6 +13462,26 @@
           },
           "applicantName": {
             "type": "string"
+          },
+          "companyId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "companyCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "companyName": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "applicantCity": {
             "type": [
@@ -12939,6 +14101,55 @@
           }
         }
       },
+      "ApplyCompanyContextDto": {
+        "required": [
+          "companyId",
+          "companyCode",
+          "slug",
+          "companyName",
+          "logoUrl",
+          "countries",
+          "designations"
+        ],
+        "type": "object",
+        "properties": {
+          "companyId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "companyCode": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "companyName": {
+            "type": "string"
+          },
+          "logoUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "countries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClubSetupCountryDto"
+            }
+          },
+          "designations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClubSetupDesignationDto"
+            }
+          }
+        }
+      },
       "AppointElectionOfficersRequest": {
         "type": "object",
         "properties": {
@@ -13143,6 +14354,15 @@
             "items": {
               "type": "string"
             }
+          },
+          "companyId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
           }
         }
       },
@@ -13511,6 +14731,10 @@
           "sendEmail": {
             "type": "boolean",
             "default": true
+          },
+          "publishToMember": {
+            "type": "boolean",
+            "default": true
           }
         }
       },
@@ -13536,6 +14760,33 @@
               "string"
             ],
             "format": "int32"
+          },
+          "emailed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32",
+            "default": 0
+          },
+          "published": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32",
+            "default": 0
+          },
+          "skippedNoEmail": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32",
+            "default": 0
           }
         }
       },
@@ -13666,6 +14917,14 @@
           }
         }
       },
+      "ChangeSupportTicketStatusRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        }
+      },
       "ChildDto": {
         "type": "object",
         "properties": {
@@ -13733,6 +14992,333 @@
           },
           "clubName": {
             "type": "string"
+          }
+        }
+      },
+      "ClubSetupCompanyDto": {
+        "required": [
+          "id",
+          "logoUrl",
+          "companyCode",
+          "companyName",
+          "slug",
+          "payrollName",
+          "postalAddress",
+          "physicalLocation",
+          "town",
+          "pinNumber",
+          "countryId",
+          "countryName",
+          "currencyDescription"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "logoUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "companyCode": {
+            "type": "string"
+          },
+          "companyName": {
+            "type": "string"
+          },
+          "slug": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "payrollName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "postalAddress": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "physicalLocation": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "town": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pinNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "countryId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "countryName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "currencyDescription": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ClubSetupCompanyRequest": {
+        "required": [
+          "logoUrl",
+          "companyCode",
+          "companyName",
+          "slug",
+          "payrollName",
+          "postalAddress",
+          "physicalLocation",
+          "town",
+          "pinNumber",
+          "countryId"
+        ],
+        "type": "object",
+        "properties": {
+          "logoUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "companyCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "companyName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "slug": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "payrollName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "postalAddress": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "physicalLocation": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "town": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pinNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "countryId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "ClubSetupCountryDto": {
+        "required": [
+          "id",
+          "countryCode",
+          "countryName",
+          "currencyDescription"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "countryCode": {
+            "type": "string"
+          },
+          "countryName": {
+            "type": "string"
+          },
+          "currencyDescription": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ClubSetupCountryRequest": {
+        "required": [
+          "countryCode",
+          "countryName",
+          "currencyDescription"
+        ],
+        "type": "object",
+        "properties": {
+          "countryCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "countryName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "currencyDescription": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ClubSetupDesignationDto": {
+        "required": [
+          "id",
+          "designationCode",
+          "description",
+          "isActive",
+          "companyId",
+          "companyName",
+          "isGlobal",
+          "isProtected"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "designationCode": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "companyId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "companyName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isGlobal": {
+            "type": "boolean"
+          },
+          "isProtected": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ClubSetupDesignationRequest": {
+        "required": [
+          "designationCode",
+          "description",
+          "isActive",
+          "companyId"
+        ],
+        "type": "object",
+        "properties": {
+          "designationCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isActive": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "companyId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
           }
         }
       },
@@ -14587,6 +16173,15 @@
             ],
             "format": "int64"
           },
+          "companyId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
           "applicationFormVersionId": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
@@ -15290,6 +16885,15 @@
               "null",
               "string"
             ]
+          },
+          "companyId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
           }
         }
       },
@@ -15304,6 +16908,29 @@
           },
           "emailSent": {
             "type": "boolean"
+          }
+        }
+      },
+      "CreateSupportTicketRequest": {
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "categoryRoleCode": {
+            "type": "string"
+          },
+          "priority": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -17270,6 +18897,141 @@
           },
           "bankAccount": {
             "type": "string"
+          }
+        }
+      },
+      "InvoiceQueueRowDto": {
+        "required": [
+          "accountId",
+          "subscriptionId",
+          "membershipNo",
+          "memberName",
+          "membershipType",
+          "membershipTypeCode",
+          "amountDue",
+          "amountPaid",
+          "arrearsAmount",
+          "email",
+          "invoiceNo",
+          "invoiceEmailSent"
+        ],
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "subscriptionId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "membershipNo": {
+            "type": "string"
+          },
+          "memberName": {
+            "type": "string"
+          },
+          "membershipType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "membershipTypeCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "amountDue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "amountPaid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "arrearsAmount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "invoiceNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "invoiceEmailSent": {
+            "type": "boolean"
+          }
+        }
+      },
+      "InvoiceRunStatsDto": {
+        "required": [
+          "membersInArrears",
+          "membersReceived",
+          "membersNotReceived",
+          "totalArrears"
+        ],
+        "type": "object",
+        "properties": {
+          "membersInArrears": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "membersReceived": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "membersNotReceived": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalArrears": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -21386,6 +23148,49 @@
           }
         }
       },
+      "PagedResultOfInvoiceQueueRowDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InvoiceQueueRowDto"
+            }
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "PagedResultOfMemberListItemDto": {
         "type": "object",
         "properties": {
@@ -23374,6 +25179,15 @@
               "string"
             ],
             "format": "date"
+          },
+          "companyId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
           }
         }
       },
@@ -23384,6 +25198,14 @@
         "type": "object",
         "properties": {
           "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "ReplySupportTicketRequest": {
+        "type": "object",
+        "properties": {
+          "body": {
             "type": "string"
           }
         }
@@ -23443,6 +25265,9 @@
               "string"
             ],
             "format": "int32"
+          },
+          "requiresCompany": {
+            "type": "boolean"
           }
         }
       },
@@ -24097,11 +25922,13 @@
           "accountId",
           "memberName",
           "membershipNo",
+          "membershipType",
           "from",
           "to",
           "openingBalance",
           "closingBalance",
-          "html"
+          "clubName",
+          "lines"
         ],
         "type": "object",
         "properties": {
@@ -24117,6 +25944,12 @@
             "type": "string"
           },
           "membershipNo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "membershipType": {
             "type": [
               "null",
               "string"
@@ -24146,8 +25979,66 @@
             ],
             "format": "double"
           },
-          "html": {
+          "clubName": {
             "type": "string"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatementLineDto"
+            }
+          }
+        }
+      },
+      "StatementLineDto": {
+        "required": [
+          "date",
+          "fee",
+          "method",
+          "receipt",
+          "status",
+          "amount"
+        ],
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "fee": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "method": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "receipt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "amount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -24399,6 +26290,357 @@
           }
         }
       },
+      "SupportCategoryContactDto": {
+        "required": [
+          "name",
+          "email",
+          "companyName"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "companyName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "SupportCategoryDto": {
+        "required": [
+          "roleCode",
+          "roleName",
+          "contacts"
+        ],
+        "type": "object",
+        "properties": {
+          "roleCode": {
+            "type": "string"
+          },
+          "roleName": {
+            "type": "string"
+          },
+          "contacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupportCategoryContactDto"
+            }
+          }
+        }
+      },
+      "SupportDashboardDto": {
+        "required": [
+          "open",
+          "inProgress",
+          "resolved",
+          "closed",
+          "submittedToday",
+          "total",
+          "byCategory",
+          "byPriority"
+        ],
+        "type": "object",
+        "properties": {
+          "open": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "inProgress": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "resolved": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "closed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "submittedToday": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "byCategory": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupportNamedCountDto"
+            }
+          },
+          "byPriority": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupportNamedCountDto"
+            }
+          }
+        }
+      },
+      "SupportNamedCountDto": {
+        "required": [
+          "name",
+          "count"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "SupportTicketDetailDto": {
+        "required": [
+          "ticketId",
+          "ticketNo",
+          "subject",
+          "description",
+          "categoryRoleCode",
+          "categoryRoleName",
+          "categoryEmail",
+          "categoryAssigneeName",
+          "priority",
+          "status",
+          "createdByName",
+          "createdByUserId",
+          "attachmentFileName",
+          "attachmentUrl",
+          "createdAt",
+          "updatedAt",
+          "messages"
+        ],
+        "type": "object",
+        "properties": {
+          "ticketId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "ticketNo": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "categoryRoleCode": {
+            "type": "string"
+          },
+          "categoryRoleName": {
+            "type": "string"
+          },
+          "categoryEmail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "categoryAssigneeName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "priority": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "createdByName": {
+            "type": "string"
+          },
+          "createdByUserId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "attachmentFileName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "attachmentUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupportTicketMessageDto"
+            }
+          }
+        }
+      },
+      "SupportTicketListItemDto": {
+        "required": [
+          "ticketId",
+          "ticketNo",
+          "subject",
+          "categoryRoleCode",
+          "categoryRoleName",
+          "categoryEmail",
+          "categoryAssigneeName",
+          "priority",
+          "status",
+          "createdByName",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "ticketId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "ticketNo": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "categoryRoleCode": {
+            "type": "string"
+          },
+          "categoryRoleName": {
+            "type": "string"
+          },
+          "categoryEmail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "categoryAssigneeName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "priority": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "createdByName": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "SupportTicketMessageDto": {
+        "required": [
+          "messageId",
+          "authorName",
+          "isStaff",
+          "body",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "messageId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "authorName": {
+            "type": "string"
+          },
+          "isStaff": {
+            "type": "boolean"
+          },
+          "body": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "TenantPublicDto": {
         "required": [
           "tenantId",
@@ -24407,7 +26649,12 @@
           "shortName",
           "contactEmail",
           "contactPhone",
-          "addressLine"
+          "addressLine",
+          "logoUrl",
+          "countryId",
+          "countryCode",
+          "countryName",
+          "currencyCode"
         ],
         "type": "object",
         "properties": {
@@ -24448,6 +26695,39 @@
               "null",
               "string"
             ]
+          },
+          "logoUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "countryId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "countryCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "countryName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "currencyCode": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -24470,6 +26750,15 @@
             ]
           },
           "applicantProfileId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "companyId": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
               "null",
@@ -25067,6 +27356,15 @@
               "null",
               "string"
             ]
+          },
+          "companyId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
           }
         }
       },
@@ -25174,6 +27472,26 @@
             "items": {
               "type": "string"
             }
+          },
+          "companyId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "companyCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "companyName": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -25242,6 +27560,26 @@
             "items": {
               "type": "string"
             }
+          },
+          "companyId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "companyCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "companyName": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -25420,6 +27758,15 @@
     },
     {
       "name": "Tenants"
+    },
+    {
+      "name": "Support"
+    },
+    {
+      "name": "Apply"
+    },
+    {
+      "name": "ClubSetup"
     },
     {
       "name": "OfficePermissions"

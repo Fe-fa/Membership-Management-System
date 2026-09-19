@@ -6,11 +6,9 @@ export const Route = createFileRoute("/settings/")({
     if (typeof window === "undefined") return;
     const user = readUser();
     const mode = readPortalMode(user);
-    // Applicants / members use personal settings — skip admin settings.
     if (mode !== "admin") {
       throw redirect({ to: "/settings/account" });
     }
-    // Admin settings use the sidebar only — no duplicate card hub.
     throw redirect({ to: "/settings/rbac" });
   },
 });

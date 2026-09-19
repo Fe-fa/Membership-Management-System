@@ -1,8 +1,11 @@
 ﻿import { memo, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { TriangleAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { FileField, Grid, SectionTitle, SelectField, TextField } from "../fields";
+import type { ClubSetupDesignation } from "@/services/admin/clubSetup";
+import { apiRequest } from "@/services/membership/api";
 import { useLookup } from "@/services/membership/lookups";
 import type { ApplicationDraft } from "@/services/membership/schema";
 import type { ErrorMap } from "@/services/membership/useApplication";
@@ -96,6 +99,12 @@ export const StepPersonal = memo(function StepPersonal({
 
   const genders = useLookup("genders");
   const bloodGroups = useLookup("blood-groups");
+  const countries = useLookup("countries");
+  const designations = useQuery({
+    queryKey: ["apply-designations"],
+    queryFn: () => apiRequest<ClubSetupDesignation[]>("/api/apply/designations"),
+    staleTime: 5 * 60_000,
+  });
 
   return (
     <div className="space-y-8">
@@ -155,12 +164,13 @@ export const StepPersonal = memo(function StepPersonal({
             onChange={set("postalCode")}
             error={errors["postalCode"]}
           />
-          <TextField
+          <LookupSelect
             label="Country"
             required
             value={value.country}
             onChange={set("country")}
             error={errors["country"]}
+            query={countries}
           />
         </Grid>
       </section>
@@ -240,12 +250,13 @@ export const StepPersonal = memo(function StepPersonal({
             onChange={set("placeOfBirth")}
             error={errors["placeOfBirth"]}
           />
-          <TextField
+          <LookupSelect
             label="Country of residence"
             required
             value={value.countryOfResidence}
             onChange={set("countryOfResidence")}
             error={errors["countryOfResidence"]}
+            query={countries}
           />
           <LookupSelect
             label="Blood group"
@@ -282,11 +293,16 @@ export const StepPersonal = memo(function StepPersonal({
             onChange={set("company")}
             error={errors["company"]}
           />
-          <TextField
-            label="Role"
+          <SelectField
+            label="Designation"
             value={value.role ?? ""}
             onChange={set("role")}
             error={errors["role"]}
+            options={(designations.data ?? []).map((row) => ({
+              code: row.designationCode,
+              name: row.description,
+            }))}
+            placeholder={designations.isLoading ? "Loading…" : "Select designation"}
           />
         </Grid>
       </section>
@@ -334,24 +350,28 @@ export const StepPersonal = memo(function StepPersonal({
             error={errors["idPassport"]}
             hint="PDF or image of your national ID or passport."
           />
-          <FileField
-            label="Annual subscription"
-            purpose="chequeAnnual"
-            accept="application/pdf,image/png,image/jpeg,image/webp,.doc,.docx"
-            value={value.annualCheque ?? null}
-            onChange={(file) => onChange({ annualCheque: file })}
-            error={errors["annualCheque"]}
-            hint="Cheque image, PDF or Word for the annual subscription fee."
-          />
-          <FileField
-            label="Joining fee"
-            purpose="chequeJoining"
-            accept="application/pdf,image/png,image/jpeg,image/webp,.doc,.docx"
-            value={value.joiningCheque ?? null}
-            onChange={(file) => onChange({ joiningCheque: file })}
-            error={errors["joiningCheque"]}
-            hint="Cheque image, PDF or Word for the joining / entrance fee."
-          />
+          {hidePhotoField ? null : (
+            <>
+              <FileField
+                label="Annual subscription"
+                purpose="chequeAnnual"
+                accept="application/pdf,image/png,image/jpeg,image/webp,.doc,.docx"
+                value={value.annualCheque ?? null}
+                onChange={(file) => onChange({ annualCheque: file })}
+                error={errors["annualCheque"]}
+                hint="Cheque image, PDF or Word for the annual subscription fee."
+              />
+              <FileField
+                label="Joining fee"
+                purpose="chequeJoining"
+                accept="application/pdf,image/png,image/jpeg,image/webp,.doc,.docx"
+                value={value.joiningCheque ?? null}
+                onChange={(file) => onChange({ joiningCheque: file })}
+                error={errors["joiningCheque"]}
+                hint="Cheque image, PDF or Word for the joining / entrance fee."
+              />
+            </>
+          )}
         </Grid>
       </section>
     </div>

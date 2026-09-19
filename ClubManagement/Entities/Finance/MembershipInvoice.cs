@@ -44,6 +44,9 @@ public class MembershipInvoice
     [Column("sent_to_email")]
     public string? SentToEmail { get; set; }
 
+    [Column("published_to_member")]
+    public bool PublishedToMember { get; set; }
+
     [Column("created_at")]
     public DateTime CreatedAt { get; set; }
 

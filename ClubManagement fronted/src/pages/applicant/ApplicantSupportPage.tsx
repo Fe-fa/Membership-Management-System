@@ -1,53 +1,30 @@
 import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
-  Bold,
   CreditCard,
-  FileText,
-  Italic,
-  Link2,
-  List,
-  ListOrdered,
   MessageCircle,
-  Paperclip,
   Phone,
-  Redo2,
   Search,
-  Strikethrough,
-  Underline,
-  Undo2,
   Users,
   UsersRound,
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { CreateTicketForm } from "@/components/support/CreateTicketForm";
 import { PageFrame, PageHeader } from "@/components/layout/PageFrame";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { readUser } from "@/lib/auth";
+import { extractErrorMessage } from "@/services/membership/api";
+import {
+  getSupportTicket,
+  listSupportTickets,
+  replySupportTicket,
+  statusClass,
+  statusLabel,
+} from "@/services/support";
 import { cn } from "@/utils/cn";
-
-type TicketStatus = "Open" | "Replied" | "Closed";
-type Department = "Membership Manager" | "Finance Desk" | "Endorsements";
-
-type TicketMessage = {
-  id: string;
-  author: string;
-  role: "applicant" | "staff";
-  body: string;
-  at: string;
-  attachments?: string[];
-};
-
-type Ticket = {
-  id: string;
-  subject: string;
-  status: TicketStatus;
-  department: Department;
-  updatedAt: string;
-  messages: TicketMessage[];
-};
 
 const KB_TOPICS = [
   {
@@ -58,6 +35,8 @@ const KB_TOPICS = [
     icon: Users,
     action: "Manager chat",
     actionIcon: MessageCircle,
+    category: "GENERAL_MANAGER",
+    subject: "Application guidance",
   },
   {
     id: "payment",
@@ -67,6 +46,8 @@ const KB_TOPICS = [
     icon: CreditCard,
     action: "Create ticket",
     actionIcon: ArrowRight,
+    category: "TREASURER",
+    subject: "Payment verification",
   },
   {
     id: "endorsement",
@@ -76,50 +57,8 @@ const KB_TOPICS = [
     icon: UsersRound,
     action: "Quick-contact options",
     actionIcon: Phone,
-  },
-];
-
-const SEED_TICKETS: Ticket[] = [
-  {
-    id: "3070010",
-    subject: "M-Pesa code verification",
-    status: "Open",
-    department: "Finance Desk",
-    updatedAt: "Today, 13:33",
-    messages: [
-      {
-        id: "m1",
-        author: "You",
-        role: "applicant",
-        body: "Hi — my M-Pesa payment for the joining fee (Ksh 156,200) did not clear. Please help verify the reference.",
-        at: "Today, 13:33",
-      },
-    ],
-  },
-  {
-    id: "3070013",
-    subject: "M-Pesa code verification",
-    status: "Replied",
-    department: "Membership Manager",
-    updatedAt: "28 Jan 2024",
-    messages: [
-      {
-        id: "m2",
-        author: "You",
-        role: "applicant",
-        body: "Hi — asking about M-Pesa payment validation for Ksh 156,200 and bank reference verification.",
-        at: "17 Jan 2024",
-        attachments: ["Payment proof.pdf", "Bank reference.png"],
-      },
-      {
-        id: "m3",
-        author: "Membership Manager",
-        role: "staff",
-        body: "Thank you for your verification details. Finance will confirm the reference and update your application status.",
-        at: "28 Jan 2024",
-        attachments: ["Acknowledgement.pdf"],
-      },
-    ],
+    category: "CHAIRMAN",
+    subject: "Endorsement follow-up",
   },
 ];
 
@@ -135,46 +74,35 @@ const BTN_TONE: Record<(typeof KB_TOPICS)[number]["tone"], string> = {
   rose: "border-rose-500 text-rose-800 hover:bg-rose-100",
 };
 
-function statusClass(status: TicketStatus) {
-  if (status === "Open") return "border-amber-200 bg-amber-50 text-amber-900";
-  if (status === "Replied") return "border-emerald-200 bg-emerald-50 text-emerald-900";
-  return "border-border bg-muted text-muted-foreground";
-}
-
-function storageKey(userId?: number) {
-  return `acea-applicant-support-tickets:${userId ?? "guest"}`;
-}
-
-function loadTickets(userId?: number): Ticket[] {
-  if (typeof window === "undefined") return SEED_TICKETS;
-  try {
-    const raw = window.localStorage.getItem(storageKey(userId));
-    if (!raw) return SEED_TICKETS;
-    const parsed = JSON.parse(raw) as Ticket[];
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : SEED_TICKETS;
-  } catch {
-    return SEED_TICKETS;
-  }
-}
-
-function saveTickets(userId: number | undefined, tickets: Ticket[]) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(storageKey(userId), JSON.stringify(tickets));
-}
-
 export function ApplicantSupportPage() {
-  const user = readUser();
+  const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
-  const [tickets, setTickets] = useState<Ticket[]>(() => loadTickets(user?.userAccountId));
-  const [selectedId, setSelectedId] = useState<string | null>(tickets[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [filter, setFilter] = useState<"active" | "all">("active");
   const [reply, setReply] = useState("");
-  const [createOpen, setCreateOpen] = useState(false);
-  const [newSubject, setNewSubject] = useState("");
-  const [newBody, setNewBody] = useState("");
-  const [newDept, setNewDept] = useState<Department>("Membership Manager");
+  const [create, setCreate] = useState<{ category?: string; subject?: string } | null>(null);
 
-  const selected = tickets.find((t) => t.id === selectedId) ?? null;
+  const tickets = useQuery({
+    queryKey: ["support-tickets", "mine"],
+    queryFn: () => listSupportTickets({ scope: "mine" }),
+  });
+
+  const detail = useQuery({
+    queryKey: ["support-ticket", selectedId],
+    queryFn: () => getSupportTicket(selectedId!),
+    enabled: selectedId != null,
+  });
+
+  const replyMut = useMutation({
+    mutationFn: () => replySupportTicket(selectedId!, reply),
+    onSuccess: () => {
+      setReply("");
+      toast.success("Reply sent.");
+      void queryClient.invalidateQueries({ queryKey: ["support-tickets"] });
+      void queryClient.invalidateQueries({ queryKey: ["support-ticket", selectedId] });
+    },
+    onError: (error) => toast.error(extractErrorMessage(error)),
+  });
 
   const filteredTopics = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -184,111 +112,14 @@ export function ApplicantSupportPage() {
     );
   }, [query]);
 
-  const visibleTickets = useMemo(() => {
-    if (filter === "all") return tickets;
-    return tickets.filter((t) => t.status !== "Closed");
-  }, [tickets, filter]);
-
-  const history = useMemo(
-    () =>
-      [...tickets]
-        .sort((a, b) => b.id.localeCompare(a.id))
-        .map((t) => ({
-          id: t.id,
-          updatedAt: t.updatedAt,
-          department: t.department,
-        })),
-    [tickets],
-  );
-
-  function persist(next: Ticket[]) {
-    setTickets(next);
-    saveTickets(user?.userAccountId, next);
-  }
-
-  function openCategory(id: string) {
-    if (id === "application") {
-      setNewDept("Membership Manager");
-      setNewSubject("Application guidance");
-      setCreateOpen(true);
-      return;
-    }
-    if (id === "payment") {
-      setNewDept("Finance Desk");
-      setNewSubject("Payment verification");
-      setCreateOpen(true);
-      return;
-    }
-    setNewDept("Endorsements");
-    setNewSubject("Endorsement follow-up");
-    setCreateOpen(true);
-  }
-
-  function createTicket() {
-    if (!newSubject.trim() || !newBody.trim()) {
-      toast.error("Subject and message are required.");
-      return;
-    }
-    const id = String(3070000 + tickets.length + Math.floor(Math.random() * 80));
-    const ticket: Ticket = {
-      id,
-      subject: newSubject.trim(),
-      status: "Open",
-      department: newDept,
-      updatedAt: "Just now",
-      messages: [
-        {
-          id: `m-${Date.now()}`,
-          author: user?.fullName || "You",
-          role: "applicant",
-          body: newBody.trim(),
-          at: "Just now",
-        },
-      ],
-    };
-    const next = [ticket, ...tickets];
-    persist(next);
-    setSelectedId(id);
-    setCreateOpen(false);
-    setNewSubject("");
-    setNewBody("");
-    toast.success("Support ticket created.");
-  }
-
-  function sendReply() {
-    if (!selected) return;
-    if (!reply.trim()) {
-      toast.error("Type a reply first.");
-      return;
-    }
-    const next = tickets.map((t) => {
-      if (t.id !== selected.id) return t;
-      return {
-        ...t,
-        status: "Open" as TicketStatus,
-        updatedAt: "Just now",
-        messages: [
-          ...t.messages,
-          {
-            id: `m-${Date.now()}`,
-            author: user?.fullName || "You",
-            role: "applicant" as const,
-            body: reply.trim(),
-            at: "Just now",
-          },
-        ],
-      };
-    });
-    persist(next);
-    setReply("");
-    toast.success("Reply sent.");
-  }
+  const rows = tickets.data ?? [];
+  const visibleTickets = filter === "all" ? rows : rows.filter((t) => t.status !== "CLOSED");
 
   return (
     <PageFrame width="lg">
       <PageHeader
         title=""
-        description="Search guidance, open a ticket with Membership or Finance, and follow replies in one place."
+        description="Search guidance, open a ticket to an office role, and follow replies in one place."
       />
 
       <label className="relative block">
@@ -306,10 +137,7 @@ export function ApplicantSupportPage() {
           const Icon = topic.icon;
           const ActionIcon = topic.actionIcon;
           return (
-            <div
-              key={topic.id}
-              className={cn("flex flex-col gap-3 rounded-xl border p-4", TONE[topic.tone])}
-            >
+            <div key={topic.id} className={cn("flex flex-col gap-3 rounded-xl border p-4", TONE[topic.tone])}>
               <div className="flex size-9 items-center justify-center rounded-lg bg-white/80 text-foreground shadow-sm">
                 <Icon className="size-4" />
               </div>
@@ -322,7 +150,7 @@ export function ApplicantSupportPage() {
                 size="sm"
                 variant={topic.tone === "sky" ? "default" : "outline"}
                 className={cn("mt-auto w-fit gap-1.5", topic.tone !== "sky" && BTN_TONE[topic.tone])}
-                onClick={() => openCategory(topic.id)}
+                onClick={() => setCreate({ category: topic.category, subject: topic.subject })}
               >
                 <ActionIcon className="size-3.5" />
                 {topic.action}
@@ -346,7 +174,9 @@ export function ApplicantSupportPage() {
             </select>
           </div>
 
-          {visibleTickets.length === 0 ? (
+          {tickets.isLoading ? (
+            <p className="px-4 py-8 text-sm text-muted-foreground">Loading tickets…</p>
+          ) : visibleTickets.length === 0 ? (
             <p className="px-4 py-8 text-sm text-muted-foreground">No tickets yet. Create one from a help category above.</p>
           ) : (
             <div className="overflow-x-auto">
@@ -361,45 +191,33 @@ export function ApplicantSupportPage() {
                 </thead>
                 <tbody>
                   {visibleTickets.map((ticket) => {
-                    const open = selectedId === ticket.id;
+                    const open = selectedId === ticket.ticketId;
+                    const thread = open ? detail.data : null;
                     return (
-                      <tr key={ticket.id} className="border-t border-border align-top">
-                        <td className="px-4 py-3 font-medium tabular-nums">{ticket.id}</td>
+                      <tr key={ticket.ticketId} className="border-t border-border align-top">
+                        <td className="px-4 py-3 font-medium tabular-nums">{ticket.ticketNo}</td>
                         <td className="px-2 py-3">
                           <button
                             type="button"
                             className="text-left font-medium hover:underline"
-                            onClick={() => setSelectedId(ticket.id)}
+                            onClick={() => setSelectedId(ticket.ticketId)}
                           >
                             {ticket.subject}
                           </button>
-                          {open ? (
+                          {thread ? (
                             <div className="mt-3 space-y-3 rounded-lg border border-border bg-muted/30 p-3">
-                              {ticket.messages.map((msg) => (
-                                <div key={msg.id} className="space-y-1.5">
+                              {thread.messages.map((msg) => (
+                                <div key={msg.messageId} className="space-y-1.5">
                                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                    <span className="font-medium text-foreground">{msg.author}</span>
-                                    {msg.role === "staff" ? (
+                                    <span className="font-medium text-foreground">{msg.authorName}</span>
+                                    {msg.isStaff ? (
                                       <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-800">
                                         Replied
                                       </span>
                                     ) : null}
-                                    <span>{msg.at}</span>
+                                    <span>{new Date(msg.createdAt).toLocaleString("en-KE")}</span>
                                   </div>
                                   <p className="text-sm leading-relaxed">{msg.body}</p>
-                                  {msg.attachments?.length ? (
-                                    <div className="flex flex-wrap gap-2">
-                                      {msg.attachments.map((file) => (
-                                        <span
-                                          key={file}
-                                          className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs"
-                                        >
-                                          <FileText className="size-3" />
-                                          {file}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  ) : null}
                                 </div>
                               ))}
                             </div>
@@ -412,10 +230,12 @@ export function ApplicantSupportPage() {
                               statusClass(ticket.status),
                             )}
                           >
-                            {ticket.status}
+                            {statusLabel(ticket.status)}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-muted-foreground">{ticket.updatedAt}</td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {new Date(ticket.updatedAt ?? ticket.createdAt).toLocaleString("en-KE")}
+                        </td>
                       </tr>
                     );
                   })}
@@ -440,19 +260,21 @@ export function ApplicantSupportPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {history.map((row) => (
-                    <tr key={row.id} className="border-t border-border">
+                  {rows.map((row) => (
+                    <tr key={row.ticketId} className="border-t border-border">
                       <td className="px-4 py-2.5 tabular-nums">
                         <button
                           type="button"
                           className="font-medium hover:underline"
-                          onClick={() => setSelectedId(row.id)}
+                          onClick={() => setSelectedId(row.ticketId)}
                         >
-                          {row.id}
+                          {row.ticketNo}
                         </button>
                       </td>
-                      <td className="px-2 py-2.5 text-muted-foreground">{row.updatedAt}</td>
-                      <td className="px-4 py-2.5">{row.department}</td>
+                      <td className="px-2 py-2.5 text-muted-foreground">
+                        {new Date(row.updatedAt ?? row.createdAt).toLocaleDateString("en-KE")}
+                      </td>
+                      <td className="px-4 py-2.5">{row.categoryRoleName}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -462,36 +284,28 @@ export function ApplicantSupportPage() {
 
           <section className="rounded-xl border border-border bg-card p-4">
             <h3 className="text-sm font-semibold">
-              Reply{selected ? ` · #${selected.id}` : ""}
+              Reply{detail.data ? ` · #${detail.data.ticketNo}` : ""}
             </h3>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {selected
-                ? `Responding on “${selected.subject}” to ${selected.department}.`
+              {detail.data
+                ? `Responding on “${detail.data.subject}” to ${detail.data.categoryRoleName}${
+                    detail.data.categoryEmail ? ` (${detail.data.categoryEmail})` : ""
+                  }.`
                 : "Select a ticket to reply."}
             </p>
-            <div className="mt-3 flex flex-wrap gap-1 rounded-lg border border-border bg-muted/40 p-1.5 text-muted-foreground">
-              {[Bold, Italic, Underline, Strikethrough, Link2, Paperclip, List, ListOrdered, Undo2, Redo2].map(
-                (Icon, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    className="inline-flex size-7 items-center justify-center rounded-md hover:bg-background hover:text-foreground"
-                    title="Formatting (visual)"
-                  >
-                    <Icon className="size-3.5" />
-                  </button>
-                ),
-              )}
-            </div>
             <Textarea
-              className="mt-2 min-h-[120px] rounded-xl"
+              className="mt-3 min-h-[120px] rounded-xl"
               value={reply}
               onChange={(e) => setReply(e.target.value)}
               placeholder="Type your reply here…"
-              disabled={!selected}
+              disabled={!detail.data}
             />
             <div className="mt-3 flex justify-end">
-              <Button type="button" disabled={!selected} onClick={sendReply}>
+              <Button
+                type="button"
+                disabled={!detail.data || !reply.trim() || replyMut.isPending}
+                onClick={() => replyMut.mutate()}
+              >
                 Send
               </Button>
             </div>
@@ -499,47 +313,25 @@ export function ApplicantSupportPage() {
         </div>
       </div>
 
-      {createOpen ? (
+      {create ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl border border-border bg-background p-5 shadow-lg">
-            <h3 className="text-base font-semibold">Create support ticket</h3>
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-border bg-background p-5 shadow-lg">
+            <h3 className="text-base font-semibold">Create New Support Ticket</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Membership or Finance will reply on this thread.
+              Category is an office role. The selected role’s email is shown, and they see this ticket on their
+              support dashboard.
             </p>
-            <div className="mt-4 grid gap-3">
-              <label className="grid gap-1 text-sm">
-                <span className="text-muted-foreground">Department</span>
-                <select
-                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                  value={newDept}
-                  onChange={(e) => setNewDept(e.target.value as Department)}
-                >
-                  <option value="Membership Manager">Membership Manager</option>
-                  <option value="Finance Desk">Finance Desk</option>
-                  <option value="Endorsements">Endorsements</option>
-                </select>
-              </label>
-              <label className="grid gap-1 text-sm">
-                <span className="text-muted-foreground">Subject</span>
-                <Input value={newSubject} onChange={(e) => setNewSubject(e.target.value)} />
-              </label>
-              <label className="grid gap-1 text-sm">
-                <span className="text-muted-foreground">Message</span>
-                <Textarea
-                  rows={4}
-                  value={newBody}
-                  onChange={(e) => setNewBody(e.target.value)}
-                  placeholder="Describe the issue…"
-                />
-              </label>
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="button" onClick={createTicket}>
-                Submit ticket
-              </Button>
+            <div className="mt-4">
+              <CreateTicketForm
+                initialCategory={create.category}
+                initialSubject={create.subject}
+                onCancel={() => setCreate(null)}
+                onCreated={(ticketId) => {
+                  setCreate(null);
+                  setSelectedId(ticketId);
+                  void queryClient.invalidateQueries({ queryKey: ["support-tickets"] });
+                }}
+              />
             </div>
           </div>
         </div>

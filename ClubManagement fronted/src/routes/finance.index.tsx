@@ -1,7 +1,9 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { ModuleDashboardPage } from "@/pages/admin/ModuleDashboardPage";
 
 export const Route = createFileRoute("/finance/")({
-  beforeLoad: () => {
-    throw redirect({ to: "/finance/desk" });
-  },
+  head: () => ({
+    meta: [{ title: "Finance dashboard" }],
+  }),
+  component: () => <ModuleDashboardPage moduleId="finance" />,
 });

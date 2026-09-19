@@ -91,6 +91,25 @@ public record SubscriptionRowDto(
     string? MembershipTypeCode = null,
     string? AccountStatus = null,
     string? AccountStatusCode = null);
+public record InvoiceQueueRowDto(
+    long AccountId,
+    long SubscriptionId,
+    string MembershipNo,
+    string MemberName,
+    string? MembershipType,
+    string? MembershipTypeCode,
+    decimal AmountDue,
+    decimal AmountPaid,
+    decimal ArrearsAmount,
+    string? Email,
+    string? InvoiceNo,
+    bool InvoiceEmailSent);
+public record InvoiceIssueBatchResult(int Issued, int Emailed, int Published, int SkippedNoEmail);
+public record InvoiceRunStatsDto(
+    int MembersInArrears,
+    int MembersReceived,
+    int MembersNotReceived,
+    decimal TotalArrears);
 public record PaymentListFilter(
     long? AccountId = null,
     string? Status = null,
@@ -138,15 +157,24 @@ public record InvoiceDocumentDto(
     string MpesaPaybill,
     string BankName,
     string BankAccount);
+public record StatementLineDto(
+    DateOnly? Date,
+    string? Fee,
+    string? Method,
+    string? Receipt,
+    string? Status,
+    decimal Amount);
 public record StatementDocumentDto(
     long AccountId,
     string MemberName,
     string? MembershipNo,
+    string? MembershipType,
     DateOnly From,
     DateOnly To,
     decimal OpeningBalance,
     decimal ClosingBalance,
-    string Html);
+    string ClubName,
+    IReadOnlyList<StatementLineDto> Lines);
 public record FinanceDeskSummaryDto(
     int PendingClearance,
     decimal TodaysCollections,
@@ -300,14 +328,25 @@ public interface IFinanceService
         int? year,
         bool sendEmail,
         long? actorUserId,
+        CancellationToken cancellationToken,
+        bool publishToMember = true);
+    Task<InvoiceDocumentDto?> GetSubscriptionInvoiceAsync(
+        long accountId,
+        int? year,
+        CancellationToken cancellationToken,
+        bool memberPortalOnly = false);
+    Task<PagedResult<InvoiceQueueRowDto>> ListInvoiceQueueAsync(
+        SubscriptionListFilter filter,
+        PagedRequest paging,
         CancellationToken cancellationToken);
-    Task<InvoiceDocumentDto?> GetSubscriptionInvoiceAsync(long accountId, int? year, CancellationToken cancellationToken);
-    Task<int> IssueAnnualInvoicesForYearAsync(
+    Task<InvoiceRunStatsDto> GetInvoiceRunStatsAsync(int year, string? membershipType, CancellationToken cancellationToken);
+    Task<InvoiceIssueBatchResult> IssueAnnualInvoicesForYearAsync(
         int year,
         long? actorUserId,
         bool sendEmail,
         CancellationToken cancellationToken,
-        IReadOnlyList<long>? accountIds = null);
+        IReadOnlyList<long>? accountIds = null,
+        bool publishToMember = true);
     Task ReconcileAccountDuesAsync(long accountId, CancellationToken cancellationToken);
     Task<StatementDocumentDto> GetMemberStatementAsync(
         long accountId,
@@ -423,11 +462,17 @@ BEGIN
         status NVARCHAR(40) NOT NULL,
         sent_at DATETIME2 NULL,
         sent_to_email NVARCHAR(200) NULL,
+        published_to_member BIT NOT NULL CONSTRAINT DF_inv_published DEFAULT(0),
         created_at DATETIME2 NOT NULL,
         created_by_user_id BIGINT NULL
     );
     CREATE UNIQUE INDEX UX_membership_invoice_account_year ON dbo.Membership_invoice(account_id, year);
     CREATE UNIQUE INDEX UX_membership_invoice_no ON dbo.Membership_invoice(invoice_no);
+END
+IF COL_LENGTH(N'dbo.Membership_invoice', N'published_to_member') IS NULL
+BEGIN
+    ALTER TABLE dbo.Membership_invoice ADD published_to_member BIT NOT NULL CONSTRAINT DF_inv_published DEFAULT(0);
+    EXEC(N'UPDATE dbo.Membership_invoice SET published_to_member = 1 WHERE sent_at IS NOT NULL');
 END
 ", cancellationToken);
     }

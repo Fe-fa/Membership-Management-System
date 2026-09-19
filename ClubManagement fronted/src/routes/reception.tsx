@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ReceptionDashboardPage } from "@/pages/admin/ReceptionDashboardPage";
 
-const SECTIONS = ["lookup", "visit", "onsite", "policy"] as const;
+const SECTIONS = ["lookup", "visit", "onsite", "policy", "dashboard"] as const;
 
 export const Route = createFileRoute("/reception")({
   validateSearch: (search: Record<string, unknown>) => {

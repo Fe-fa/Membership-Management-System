@@ -5,6 +5,7 @@ import {
   CreditCard,
   FileText,
   Landmark,
+  LifeBuoy,
   Receipt,
   Settings,
   Users,
@@ -115,6 +116,14 @@ export function MemberHomePage({ me }: { me: MemberDashboard }) {
       icon: FileText,
       tone: "slate" as const,
       locked: !me.cards.documents,
+    },
+    {
+      id: "support",
+      title: "Support",
+      description: "Help desk, tickets and queries to Chairman, Treasurer or other offices.",
+      to: "/support",
+      icon: LifeBuoy,
+      tone: "violet" as const,
     },
     {
       id: "settings",

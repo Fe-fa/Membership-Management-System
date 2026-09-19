@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, ScrollText } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -13,8 +14,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { readUser } from "@/lib/auth";
 import { apiRequest, extractErrorMessage } from "@/services/membership/api";
-import { printHtmlDocument } from "@/utils/financeExport";
+import { tenantDocumentBrand, useCurrentTenant } from "@/services/tenant";
+import { buildStatementHtml, printHtmlDocument, type StatementDocument } from "@/utils/financeExport";
 import { cn } from "@/utils/cn";
 
 type SettlementMemberHit = {
@@ -25,11 +28,6 @@ type SettlementMemberHit = {
   membershipType?: string | null;
 };
 
-type StatementDoc = {
-  html: string;
-  memberName: string;
-  membershipNo?: string | null;
-};
 
 type Props = {
   open: boolean;
@@ -48,6 +46,7 @@ function todayIso() {
 }
 
 export function MemberStatementDialog({ open, onClose, mode, year }: Props) {
+  const tenant = useCurrentTenant();
   const y = year ?? new Date().getFullYear();
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -57,6 +56,18 @@ export function MemberStatementDialog({ open, onClose, mode, year }: Props) {
   const [hits, setHits] = useState<SettlementMemberHit[]>([]);
   const [searching, setSearching] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const closeLockTimer = useRef<number | null>(null);
+
+  function dismiss() {
+    if (closeLockTimer.current != null) window.clearTimeout(closeLockTimer.current);
+    setClosing(true);
+    onClose();
+    closeLockTimer.current = window.setTimeout(() => {
+      setClosing(false);
+      closeLockTimer.current = null;
+    }, 400);
+  }
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebounced(search.trim()), 250);
@@ -64,18 +75,29 @@ export function MemberStatementDialog({ open, onClose, mode, year }: Props) {
   }, [search]);
 
   useEffect(() => {
+    return () => {
+      if (closeLockTimer.current != null) window.clearTimeout(closeLockTimer.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (open && closing) onClose();
+  }, [open, closing, onClose]);
+
+  useEffect(() => {
     if (!open) return;
+    if (closing) return;
     setSearch("");
     setDebounced("");
     setPicked(null);
     setHits([]);
     setFrom(yearStart(y));
     setTo(todayIso());
-  }, [open, y]);
+  }, [open, y, closing]);
 
   useEffect(() => {
-    if (!open || mode !== "staff" || debounced.length < 2) {
-      setHits([]);
+    if (!open || closing || mode !== "staff" || picked != null || debounced.length < 2) {
+      if (picked != null || debounced.length < 2) setHits([]);
       return;
     }
     let cancelled = false;
@@ -106,17 +128,24 @@ export function MemberStatementDialog({ open, onClose, mode, year }: Props) {
       setPrinting(true);
       const doc =
         mode === "self"
-          ? await apiRequest<StatementDoc>(`/api/members/me/statement?from=${from}&to=${to}`)
-          : await apiRequest<StatementDoc>(
+          ? await apiRequest<StatementDocument>(`/api/members/me/statement?from=${from}&to=${to}`)
+          : await apiRequest<StatementDocument>(
               `/api/finance/statements/${picked!.accountId}?from=${from}&to=${to}`,
             );
-      printHtmlDocument(doc.html);
+      const user = readUser();
+      printHtmlDocument(
+        buildStatementHtml({
+          ...doc,
+          ...tenantDocumentBrand(tenant.data),
+          issuedBy: user?.fullName?.trim() || user?.username || "—",
+        }),
+      );
       toast.success(
         mode === "self"
           ? "Your statement is ready to print."
           : `Statement for ${doc.membershipNo ?? picked?.membershipNo} · ${doc.memberName}.`,
       );
-      onClose();
+      dismiss();
     } catch (err) {
       toast.error(extractErrorMessage(err));
     } finally {
@@ -127,12 +156,28 @@ export function MemberStatementDialog({ open, onClose, mode, year }: Props) {
   const canPrint = mode === "self" || picked != null;
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent className="sm:max-w-lg">
+    <Dialog open={open && !closing} onOpenChange={(next) => { if (!next) dismiss(); }}>
+      <DialogContent
+        className="z-[80] sm:max-w-lg"
+        onCloseAutoFocus={(event) => event.preventDefault()}
+        onPointerDownOutside={(event) => {
+          event.preventDefault();
+          dismiss();
+        }}
+        onEscapeKeyDown={(event) => {
+          event.preventDefault();
+          dismiss();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>
             {mode === "self" ? "My statement of account" : "Print member statement"}
           </DialogTitle>
+          <DialogDescription>
+            {mode === "self"
+              ? "Choose a period and print your statement of account."
+              : "Look up a member and print their statement of account."}
+          </DialogDescription>
         </DialogHeader>
 
         {mode === "staff" ? (
@@ -201,9 +246,11 @@ export function MemberStatementDialog({ open, onClose, mode, year }: Props) {
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
+          <DialogClose asChild>
+            <Button type="button" variant="outline" onClick={dismiss}>
+              Cancel
+            </Button>
+          </DialogClose>
           <Button type="button" disabled={!canPrint || printing} onClick={() => void printStatement()}>
             {printing ? <Loader2 className="size-4 animate-spin" /> : <ScrollText className="size-4" />}
             Print statement

@@ -29,7 +29,7 @@ export {
   PaymentDeskBody,
   PaymentHistoryPanel,
 } from "./PaymentDesk";
-export { PaymentHistoryTable } from "./PaymentHistoryTable";
+export { PaymentContextBar } from "./PaymentContextBar";
 export {
   SubscriptionStatusBanners,
   SubscriptionSummaryCards,

@@ -3,6 +3,7 @@ import { emptyDraft, normalizeDraft } from "./schema";
 import { kenyaTodayISO } from "@/utils/kenyaDate";
 import { authHeaders, readUser } from "@/lib/auth";
 
+import { applyCompanyId, applyTenantCode } from "@/services/applyCompany";
 import { API_BASE, TENANT_CODE } from "@/config/env";
 export { API_BASE };
 
@@ -32,6 +33,9 @@ export type ApplicationRecord = {
 type ApplicationDetailDto = {
   applicationId: number | string;
   applicationNo: string;
+  companyId?: number | null;
+  companyCode?: string | null;
+  companyName?: string | null;
   applicationStatusId?: number;
   statusCode?: string;
   submittedAt?: string | null;
@@ -149,7 +153,7 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
   const auth = authHeaders();
   const authorization = auth["Authorization"];
   if (authorization) headers.set("Authorization", authorization);
-  if (!headers.has("X-Tenant-Code")) headers.set("X-Tenant-Code", TENANT_CODE);
+  if (!headers.has("X-Tenant-Code")) headers.set("X-Tenant-Code", applyTenantCode() || TENANT_CODE);
 
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -340,6 +344,7 @@ async function submitApplicationRemote(
     completedSteps,
     electionTypeId: 1,
     applicantProfileId: profileId,
+    companyId: readUser()?.tenantId ?? applyCompanyId() ?? undefined,
     proposerProfileId: asProfileId(supporter.proposer.memberProfileId),
     seconderProfileId: asProfileId(supporter.seconder.memberProfileId),
   };

@@ -36,21 +36,34 @@ public sealed class TenantResolutionMiddleware
 
     public async Task InvokeAsync(HttpContext http, ITenantContext tenant, ApplicationModuleDbContext db)
     {
+        var claimId = http.User.FindFirstValue("tenantId");
+        var parsedJwt = long.TryParse(claimId, out var fromJwt);
+
+        if (parsedJwt && fromJwt > 0)
+        {
+            var jwtCode = http.User.FindFirstValue("tenantCode");
+            tenant.Set(fromJwt, string.IsNullOrWhiteSpace(jwtCode) ? "" : jwtCode.Trim().ToUpperInvariant());
+            await _next(http);
+            return;
+        }
+
+        // Global admin has no company. Do not fall back to ACEA via header — that would hide other companies.
+        var authenticated = http.User.Identity?.IsAuthenticated == true;
+        if (authenticated && http.User.IsInRole("ADMIN") && (!parsedJwt || fromJwt <= 0))
+        {
+            await _next(http);
+            return;
+        }
+
         var code = http.User.FindFirstValue("tenantCode")
             ?? http.Request.Headers[HeaderName].FirstOrDefault()
             ?? DefaultTenantCode;
         code = code.Trim().ToUpperInvariant();
 
-        var claimId = http.User.FindFirstValue("tenantId");
-        if (long.TryParse(claimId, out var fromJwt) && fromJwt > 0)
-        {
-            tenant.Set(fromJwt, code);
-            await _next(http);
-            return;
-        }
-
         var row = await db.Tenants.AsNoTracking().IgnoreQueryFilters()
-            .FirstOrDefaultAsync(t => t.IsActive && t.Code == code, http.RequestAborted);
+            .FirstOrDefaultAsync(t => t.IsActive && t.Code == code, http.RequestAborted)
+            ?? await db.Tenants.AsNoTracking().IgnoreQueryFilters()
+                .FirstOrDefaultAsync(t => t.IsActive && t.Slug != null && t.Slug.ToLower() == code.ToLowerInvariant(), http.RequestAborted);
         if (row is null && !string.Equals(code, DefaultTenantCode, StringComparison.OrdinalIgnoreCase))
         {
             row = await db.Tenants.AsNoTracking().IgnoreQueryFilters()

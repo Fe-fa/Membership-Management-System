@@ -7,12 +7,12 @@ export const Route = createFileRoute("/members")({
     const tab = search.tab;
     if (tab === "register" || tab === "privileges") return { tab } as const;
     const view =
-      search.view === "authorize" || search.view === "manager"
-        ? (search.view as "authorize" | "manager")
+      search.view === "authorize" || search.view === "manager" || search.view === "dashboard"
+        ? (search.view as "authorize" | "manager" | "dashboard")
         : undefined;
     const section =
-      search.section === "pending" || search.section === "history"
-        ? (search.section as "pending" | "history")
+      search.section === "pending" || search.section === "history" || search.section === "dashboard"
+        ? (search.section as "pending" | "history" | "dashboard")
         : undefined;
     const edit = search.edit === true || search.edit === "true" || search.edit === "1";
     return {

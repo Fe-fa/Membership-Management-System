@@ -1,10 +1,12 @@
 ﻿import { Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { ClubLogo } from "@/components/brand/ClubLogo";
 import { Button } from "@/components/ui/button";
 import { persistSession, type AuthResponse } from "@/lib/auth";
 import { TENANT_CODE } from "@/config/env";
+import { applyCompanyId, applyTenantCode, persistApplyCompany, type ApplyCompanyContext } from "@/services/applyCompany";
 import { saveApplicantPath } from "@/services/membership/applicantPath";
 import { API_BASE, extractErrorMessage } from "@/services/membership/api";
 import { cn } from "@/utils/cn";
@@ -43,8 +45,13 @@ type ParentEligibility = {
 
 const inputClass = "mt-1 w-full rounded-md border border-input bg-background px-3 py-2";
 
-export function RegisterPage() {
+export function RegisterPage({ company }: { company?: ApplyCompanyContext }) {
   const navigate = useNavigate();
+  const tenantCode = company?.companyCode || applyTenantCode() || TENANT_CODE;
+  const companyId = company?.companyId ?? applyCompanyId();
+  useEffect(() => {
+    if (company) persistApplyCompany(company);
+  }, [company]);
   const [category, setCategory] = useState<Category>("STANDARD");
   const [step, setStep] = useState<"lookup" | "account">("lookup");
   const [lookup, setLookup] = useState({ guestName: "", phone: "", visitSlipCode: "" });
@@ -80,7 +87,7 @@ export function RegisterPage() {
     try {
       const res = await fetch(`${API_BASE}/api/guests/eligibility`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Tenant-Code": TENANT_CODE },
+        headers: { "Content-Type": "application/json", "X-Tenant-Code": tenantCode },
         body: JSON.stringify({
           guestName: lookup.guestName.trim() || null,
           phone: lookup.phone.trim() || null,
@@ -113,7 +120,7 @@ export function RegisterPage() {
     try {
       const res = await fetch(`${API_BASE}/api/guests/parent-eligibility`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Tenant-Code": TENANT_CODE },
+        headers: { "Content-Type": "application/json", "X-Tenant-Code": tenantCode },
         body: JSON.stringify({
           applicantFullName: child.fullName.trim(),
           email: child.email.trim() || null,
@@ -164,7 +171,7 @@ export function RegisterPage() {
     try {
       const res = await fetch(`${API_BASE}/api/auth/register`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Tenant-Code": TENANT_CODE },
+        headers: { "Content-Type": "application/json", "X-Tenant-Code": tenantCode },
         body: JSON.stringify({
           ...form,
           guestId: category === "STANDARD" ? eligibility?.guestId : null,
@@ -173,6 +180,7 @@ export function RegisterPage() {
           parentAccountId: parent?.parentAccountId ?? null,
           parentMembershipNo: parent?.parentMembershipNo ?? null,
           parentFullName: child.parentFullName.trim() || parent?.parentName || null,
+          companyId,
         }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({ message: "Registration failed" }))).message);
@@ -191,9 +199,12 @@ export function RegisterPage() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-lg space-y-4 rounded-2xl border border-border bg-card p-8 shadow-sm">
         <div>
+          <ClubLogo className="mb-4 h-12" />
           <h1 className="text-2xl">Sign up</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Welcome back!
+            {company?.companyName
+              ? `Apply to ${company.companyName}.`
+              : "Welcome back!"}
           </p>
         </div>
 

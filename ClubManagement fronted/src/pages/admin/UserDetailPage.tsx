@@ -17,7 +17,9 @@ import {
   type ManagedUser,
   type RoleOption,
 } from "@/services/admin/userManagement";
+import { listClubCompanies } from "@/services/admin/clubSetup";
 import { apiRequest, extractErrorMessage } from "@/services/membership/api";
+import { roleRequiresCompany } from "@/lib/auth";
 import { cn } from "@/utils/cn";
 
 const routeApi = getRouteApi("/user-management/$userAccountId");
@@ -26,7 +28,14 @@ export function UserDetailPage() {
   const { userAccountId } = routeApi.useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", mobile: "", username: "" });
+  const [form, setForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    mobile: "",
+    username: "",
+    companyId: "",
+  });
   const [roleCodes, setRoleCodes] = useState<string[]>([]);
   const [newPassword, setNewPassword] = useState("");
 
@@ -40,6 +49,11 @@ export function UserDetailPage() {
     queryFn: () => apiRequest<RoleOption[]>("/api/users/roles"),
   });
 
+  const companies = useQuery({
+    queryKey: ["club-setup-companies"],
+    queryFn: listClubCompanies,
+  });
+
   useEffect(() => {
     if (!detail.data) return;
     setForm({
@@ -48,6 +62,7 @@ export function UserDetailPage() {
       email: detail.data.email ?? "",
       mobile: detail.data.mobile ?? "",
       username: detail.data.username,
+      companyId: detail.data.companyId ? String(detail.data.companyId) : "",
     });
     setRoleCodes(detail.data.roles ?? []);
   }, [detail.data]);
@@ -60,7 +75,14 @@ export function UserDetailPage() {
     mutationFn: () =>
       apiRequest(`/api/users/${userAccountId}`, {
         method: "PUT",
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          firstName: form.firstName,
+          lastName: form.lastName,
+          email: form.email,
+          mobile: form.mobile,
+          username: form.username,
+          companyId: roleRequiresCompany(roleCodes) && form.companyId ? Number(form.companyId) : null,
+        }),
       }),
     onSuccess: () => {
       toast.success("Details saved.");
@@ -72,9 +94,15 @@ export function UserDetailPage() {
   const assignRoles = useMutation({
     mutationFn: () => {
       if (!roleCodes.length) throw new Error("Select at least one role.");
+      if (roleRequiresCompany(roleCodes) && !form.companyId) {
+        throw new Error("Company is required for applicant, member, officer, and receptionist accounts.");
+      }
       return apiRequest(`/api/users/${userAccountId}/roles`, {
         method: "PUT",
-        body: JSON.stringify({ roleCodes }),
+        body: JSON.stringify({
+          roleCodes,
+          companyId: roleRequiresCompany(roleCodes) && form.companyId ? Number(form.companyId) : null,
+        }),
       });
     },
     onSuccess: () => {
@@ -87,8 +115,12 @@ export function UserDetailPage() {
   function toggleRole(code: string) {
     setRoleCodes((prev) => {
       const has = prev.includes(code);
-      const next = has ? prev.filter((c) => c !== code) : [...prev, code];
-      return next.length ? next : prev;
+      if (has) {
+        const next = prev.filter((c) => c !== code);
+        return next.length ? next : prev;
+      }
+      if (code.toUpperCase() === "ADMIN") return ["ADMIN"];
+      return [...prev.filter((c) => c.toUpperCase() !== "ADMIN"), code];
     });
   }
 
@@ -178,7 +210,9 @@ export function UserDetailPage() {
       <PageBackLink to="/user-management" label="Back to user management" />
       <PageHeader
         title={user.fullName}
-        description={`${user.username} Â· ${user.email || "No email"}`}
+        description={`${user.username} · ${user.email || "No email"} · ${
+          user.companyId ? user.companyName || user.companyCode || `Company ${user.companyId}` : "No company"
+        }`}
         actions={
           <span
             className={cn(
@@ -244,6 +278,26 @@ export function UserDetailPage() {
                   onChange={(e) => setForm({ ...form, username: e.target.value })}
                 />
               </label>
+              {roleRequiresCompany(roleCodes) ? (
+                <label className="grid gap-1 text-sm">
+                  <Label>Company</Label>
+                  <select
+                    required
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={form.companyId}
+                    onChange={(e) => setForm({ ...form, companyId: e.target.value })}
+                  >
+                    <option value="">Select company</option>
+                    {(companies.data ?? []).map((company) => (
+                      <option key={company.id} value={String(company.id)}>
+                        {company.companyName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <p className="text-xs text-muted-foreground">Admin does not belong to a company.</p>
+              )}
               <Button type="submit" disabled={busy}>
                 {save.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
                 Save details
@@ -256,8 +310,9 @@ export function UserDetailPage() {
           <CardHeader>
             <CardTitle>Roles</CardTitle>
             <CardDescription>
-              Assign or revoke roles from System_role. Access is the union of all selected roles.
-              Applicants are not assigned here.
+              Admin is system-wide and cannot be combined with company roles. Member hats
+              (Chairman, General Manager, Treasurer, Committee Member) and receptionist require a
+              company. Applicants are not assigned here.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">

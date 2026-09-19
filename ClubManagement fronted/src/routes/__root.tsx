@@ -19,7 +19,7 @@ import { isAuthenticated, isClubMember, readPortalMode, readUser, subscribeAuthC
 const PUBLIC_PATHS = new Set(["/", "/login", "/register", "/set-password"]);
 
 function isPublicPath(pathname: string) {
-  return PUBLIC_PATHS.has(pathname);
+  return PUBLIC_PATHS.has(pathname) || pathname.startsWith("/apply/");
 }
 
 function NotFoundComponent() {
@@ -183,6 +183,7 @@ function RootComponent() {
     !ready ||
     pathname === "/login" ||
     pathname === "/register" ||
+    pathname.startsWith("/apply/") ||
     pathname === "/set-password" ||
     (pathname === "/" && !authed);
 

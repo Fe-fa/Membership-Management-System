@@ -23,6 +23,12 @@ export function kenyaYear(date = new Date()) {
   return Number(kenyaParts(date).year);
 }
 
+/** Current Kenya calendar period as `YYYY/MM`. */
+export function kenyaYearMonth(date = new Date()) {
+  const { year, month } = kenyaParts(date);
+  return `${year}/${month}`;
+}
+
 /** Display a stored ISO date (`yyyy-MM-dd` or datetime) as Kenya DD/MM/YYYY. */
 export function formatKenyaDate(value?: string | null) {
   if (!value) return "—";

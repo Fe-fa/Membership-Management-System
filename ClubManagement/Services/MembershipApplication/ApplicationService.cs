@@ -4,6 +4,7 @@ using ClubManagement.DTOs.Common;
 using ClubManagement.DTOs.MembershipApplication;
 using ClubManagement.Entities;
 using ClubManagement.Entities.Lookups;
+using ClubManagement.Entities.Tenancy;
 using ClubManagement.Entities.Settings;
 using ClubManagement.Entities.Subscriptions;
 using Microsoft.EntityFrameworkCore;
@@ -94,8 +95,9 @@ public class ApplicationService : IApplicationService
         var total = await ordered.CountAsync(cancellationToken);
         var rows = await ordered.Skip(paging.Skip).Take(paging.PageSize).ToListAsync(cancellationToken);
         var paymentByProfile = await LoadPaymentStatusByProfileAsync(cancellationToken);
+        var companies = await LoadCompaniesAsync(rows.Select(x => x.TenantId), cancellationToken);
 
-        return Paging.Create(rows.Select(x => MapListItem(x, paymentByProfile)), paging, total);
+        return Paging.Create(rows.Select(x => MapListItem(x, paymentByProfile, companies)), paging, total);
     }
 
     public async Task<IReadOnlyList<ApplicationListItemDto>> GetMineAsync(long applicantProfileId, CancellationToken cancellationToken = default)
@@ -114,6 +116,7 @@ public class ApplicationService : IApplicationService
             .ToListAsync(cancellationToken);
 
         var paymentByProfile = await LoadPaymentStatusByProfileAsync(cancellationToken, applicantProfileId);
+        var companies = await LoadCompaniesAsync(rows.Select(x => x.TenantId), cancellationToken);
         var ids = rows.Select(r => r.ApplicationId).ToList();
         var openBallot = ids.Count == 0
             ? new HashSet<long>()
@@ -124,7 +127,7 @@ public class ApplicationService : IApplicationService
 
         return rows.Select(x =>
         {
-            var dto = MapListItem(x, paymentByProfile);
+            var dto = MapListItem(x, paymentByProfile, companies);
             dto.ApplicantBallotLabel = ApplicantBallotCopy(x, openBallot.Contains(x.ApplicationId));
             dto.ExcludedUntilDate = x.ApplicationExclusions
                 .Where(e => e.IsActive)
@@ -206,7 +209,8 @@ public class ApplicationService : IApplicationService
 
     private ApplicationListItemDto MapListItem(
         MApplication x,
-        Dictionary<long, (string Code, string Name)> paymentByProfile)
+        Dictionary<long, (string Code, string Name)> paymentByProfile,
+        IReadOnlyDictionary<long, Tenant>? companies = null)
     {
         var applicantDateOfBirth = ResolveApplicantDateOfBirth(x);
         var statusCode = NormalizeStatusCode(x.Status?.Code);
@@ -237,6 +241,9 @@ public class ApplicationService : IApplicationService
             ApplicationNo = x.ApplicationNo,
             ApplicantProfileId = x.ApplicantProfileId,
             ApplicantName = BuildName(x.Applicant?.Title, x.Applicant?.FirstName, x.Applicant?.MiddleName, x.Applicant?.LastName),
+            CompanyId = x.TenantId,
+            CompanyCode = companies is not null && companies.TryGetValue(x.TenantId, out var company) ? company.Code : null,
+            CompanyName = companies is not null && companies.TryGetValue(x.TenantId, out company) ? company.Name : null,
             ApplicantCity = x.Applicant?.City,
             ApplicantCountry = x.Applicant?.Country?.CountryName,
             ApplicantDateOfBirth = applicantDateOfBirth,
@@ -263,6 +270,15 @@ public class ApplicationService : IApplicationService
             EndorsementsRequired = sponsor.RequiredCount,
             LastRejectionReason = LatestRejectionReason(x),
         };
+    }
+
+    private async Task<Dictionary<long, Tenant>> LoadCompaniesAsync(IEnumerable<long> tenantIds, CancellationToken cancellationToken)
+    {
+        var ids = tenantIds.Where(id => id > 0).Distinct().ToList();
+        if (ids.Count == 0) return new Dictionary<long, Tenant>();
+        return await _dbContext.Tenants.AsNoTracking().IgnoreQueryFilters()
+            .Where(t => ids.Contains(t.TenantId))
+            .ToDictionaryAsync(t => t.TenantId, cancellationToken);
     }
 
     private static string? ApplicantBallotCopy(MApplication x, bool ballotOpen)
@@ -397,6 +413,7 @@ public class ApplicationService : IApplicationService
                 ? GenerateApplicationNo()
                 : request.ApplicationNo,
             ApplicantProfileId = request.ApplicantProfileId ?? 0,
+            TenantId = request.CompanyId is > 0 ? request.CompanyId.Value : 0,
             ApplicationFormVersionId = request.ApplicationFormVersionId,
             ElectionTypeId = request.ElectionTypeId ?? 1,
             ProposerProfileId = request.ProposerProfileId,
@@ -417,6 +434,12 @@ public class ApplicationService : IApplicationService
             CreatedByUserId = request.CreatedByUserId,
             CurrentHandlerUserId = request.CreatedByUserId
         };
+
+        if (request.CompanyId is > 0 && request.ApplicantProfileId is > 0)
+        {
+            var profile = await _dbContext.Profiles.FirstOrDefaultAsync(p => p.ProfileId == request.ApplicantProfileId.Value, cancellationToken);
+            if (profile is not null) profile.TenantId = request.CompanyId.Value;
+        }
 
         _dbContext.Applications.Add(entity);
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -455,6 +478,12 @@ public class ApplicationService : IApplicationService
             entity.ApplicationNo = request.ApplicationNo;
         if (request.ApplicantProfileId.HasValue)
             entity.ApplicantProfileId = request.ApplicantProfileId.Value;
+        if (request.CompanyId is > 0)
+        {
+            entity.TenantId = request.CompanyId.Value;
+            var profile = await _dbContext.Profiles.FirstOrDefaultAsync(p => p.ProfileId == entity.ApplicantProfileId, cancellationToken);
+            if (profile is not null) profile.TenantId = request.CompanyId.Value;
+        }
         if (request.ApplicationFormVersionId.HasValue)
             entity.ApplicationFormVersionId = request.ApplicationFormVersionId;
         if (request.ElectionTypeId.HasValue)
@@ -1313,6 +1342,7 @@ public class ApplicationService : IApplicationService
             ApplicationNo = entity.ApplicationNo,
             ApplicantProfileId = entity.ApplicantProfileId,
             ApplicantName = BuildName(entity.Applicant?.Title, entity.Applicant?.FirstName, entity.Applicant?.MiddleName, entity.Applicant?.LastName),
+            CompanyId = entity.TenantId,
             ApplicationFormVersionId = entity.ApplicationFormVersionId,
             ElectionTypeId = entity.ElectionTypeId,
             ProposerProfileId = entity.ProposerProfileId,

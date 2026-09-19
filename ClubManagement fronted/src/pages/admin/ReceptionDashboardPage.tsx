@@ -31,6 +31,7 @@ import { formatKenyaDate, kenyaTodayISO } from "@/utils/kenyaDate";
 
 import { RegisterGuestCard } from "./reception/RegisterGuestCard";
 import type { ReceptionHost, ReceptionVisitRow } from "./reception/types";
+import { ModuleDashboardPage } from "@/pages/admin/ModuleDashboardPage";
 
 const routeApi = getRouteApi("/reception");
 const VISIT_PAGE_SIZE = 50;
@@ -66,7 +67,7 @@ export function ReceptionDashboardPage() {
       apiRequest<PagedResult<ReceptionVisitRow>>(
         `/api/reception/visits?${pagedQuery({ page: 1, pageSize: 50 })}&currentOnly=true`,
       ),
-    enabled: section !== "visit",
+    enabled: section !== "visit" && section !== "dashboard",
   });
 
   const signOut = useMutation({
@@ -106,6 +107,10 @@ export function ReceptionDashboardPage() {
     });
     setViewing(null);
     if (section === "visit") void navigate({ to: "/reception", search: {} });
+  }
+
+  if (section === "dashboard") {
+    return <ModuleDashboardPage moduleId="guest-visits" />;
   }
 
   if (section === "visit" && canViewAll) {

@@ -77,7 +77,7 @@ public class UsersController : ControllerBase
             var codes = (request.RoleCodes ?? [])
                 .Concat(string.IsNullOrWhiteSpace(request.RoleCode) ? [] : [request.RoleCode!])
                 .ToList();
-            var result = await _users.AssignRolesAsync(userAccountId, codes, User.UserId(), cancellationToken);
+            var result = await _users.AssignRolesAsync(userAccountId, codes, User.UserId(), cancellationToken, request.CompanyId);
             return result is null ? NotFound() : Ok(result);
         }
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }

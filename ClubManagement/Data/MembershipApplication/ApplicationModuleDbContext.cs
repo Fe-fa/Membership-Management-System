@@ -113,6 +113,8 @@ public partial class ApplicationModuleDbContext : DbContext
     public DbSet<DisciplinaryAction> DisciplinaryActions => Set<DisciplinaryAction>();
     public DbSet<Reinstatement> Reinstatements => Set<Reinstatement>();
     public DbSet<Complaint> Complaints => Set<Complaint>();
+    public DbSet<SupportTicket> SupportTickets => Set<SupportTicket>();
+    public DbSet<SupportTicketMessage> SupportTicketMessages => Set<SupportTicketMessage>();
     public DbSet<CreditFacility> CreditFacilities => Set<CreditFacility>();
     public DbSet<DataSharingConsent> DataSharingConsents => Set<DataSharingConsent>();
     public DbSet<MemberGuarantorship> MemberGuarantorships => Set<MemberGuarantorship>();
@@ -805,6 +807,12 @@ public partial class ApplicationModuleDbContext : DbContext
             entity.HasOne(x => x.Voter).WithMany().HasForeignKey(x => x.VoterProfileId).OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<SupportTicketMessage>(entity =>
+        {
+            entity.HasKey(x => x.SupportTicketMessageId);
+            entity.HasOne(x => x.Ticket).WithMany(x => x.Messages).HasForeignKey(x => x.SupportTicketId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<ElectionNomination>(entity =>
         {
             entity.HasKey(x => x.ElectionNominationId);
@@ -826,6 +834,7 @@ public partial class ApplicationModuleDbContext : DbContext
         modelBuilder.Entity<MembershipType>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
         modelBuilder.Entity<ClubSetting>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
         modelBuilder.Entity<Committee>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
+        modelBuilder.Entity<SupportTicket>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == 0 || e.TenantId == CurrentTenantId);
     }
 
     public override int SaveChanges()
@@ -842,12 +851,15 @@ public partial class ApplicationModuleDbContext : DbContext
 
     private void StampTenantIds()
     {
-        if (_tenant is not { IsResolved: true }) return;
-        var tid = _tenant.TenantId!.Value;
+        var inheritId = _tenant is { IsResolved: true } ? _tenant.TenantId : null;
         foreach (var entry in ChangeTracker.Entries<ITenantScoped>())
         {
-            if (entry.State == EntityState.Added && entry.Entity.TenantId <= 0)
-                entry.Entity.TenantId = tid;
+            if (entry.State != EntityState.Added) continue;
+            // -1 = explicit "no company" (Admin). 0 = unset, inherit current tenant when resolved.
+            if (entry.Entity.TenantId < 0)
+                entry.Entity.TenantId = 0;
+            else if (entry.Entity.TenantId == 0 && inheritId is > 0)
+                entry.Entity.TenantId = inheritId.Value;
         }
     }
 

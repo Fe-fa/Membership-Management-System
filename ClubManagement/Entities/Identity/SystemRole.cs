@@ -13,6 +13,13 @@ namespace ClubManagement.Entities.Identity
         [Key]
         public long SystemRoleId { get; set; }
 
+        /// <summary>Company this designation belongs to. Null means global (all companies).</summary>
+        [Column("tenant_id")]
+        public long? TenantId { get; set; }
+
+        [NotMapped]
+        public long? CompanyId { get => TenantId; set => TenantId = value; }
+
         [Column("code")]
         [Required]
         public string Code { get; set; }

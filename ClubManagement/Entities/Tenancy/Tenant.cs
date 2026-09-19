@@ -19,6 +19,10 @@ public class Tenant
     [MaxLength(40)]
     public string Code { get; set; } = string.Empty;
 
+    [Column("slug")]
+    [MaxLength(80)]
+    public string? Slug { get; set; }
+
     [Column("name")]
     [Required]
     [MaxLength(200)]
@@ -39,6 +43,24 @@ public class Tenant
     [Column("address_line")]
     [MaxLength(400)]
     public string? AddressLine { get; set; }
+
+    [Column("logo_url")]
+    public string? LogoUrl { get; set; }
+
+    [Column("physical_location")]
+    [MaxLength(400)]
+    public string? PhysicalLocation { get; set; }
+
+    [Column("town")]
+    [MaxLength(120)]
+    public string? Town { get; set; }
+
+    [Column("pin_number")]
+    [MaxLength(40)]
+    public string? PinNumber { get; set; }
+
+    [Column("country_id")]
+    public long? CountryId { get; set; }
 
     [Column("is_active")]
     public bool IsActive { get; set; } = true;

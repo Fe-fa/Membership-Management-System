@@ -11,6 +11,7 @@ using ClubManagement.Services.Identity;
 using ClubManagement.Services.MembershipAccount;
 using ClubManagement.Services.MembershipApplication;
 using ClubManagement.Services.Settings;
+using ClubManagement.Services.Support;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -66,9 +67,11 @@ builder.Services.AddScoped<ClubManagement.Services.Governance.IElectionService, 
 builder.Services.AddScoped<IFinanceService, FinanceService>();
 builder.Services.AddScoped<INonMembershipBillingService, NonMembershipBillingService>();
 builder.Services.AddScoped<ILookupAdminService, LookupAdminService>();
+builder.Services.AddScoped<IClubSetupService, ClubSetupService>();
 builder.Services.AddScoped<IOfficePermissionService, OfficePermissionService>();
 builder.Services.AddScoped<IGuestService, GuestService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<ISupportService, SupportService>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -153,6 +156,8 @@ using (var scope = app.Services.CreateScope())
         await nmBilling.EnsureSchemaAsync(CancellationToken.None);
         var finance = scope.ServiceProvider.GetRequiredService<IFinanceService>();
         await finance.EnsureSchemaAsync(CancellationToken.None);
+        var supportDesk = scope.ServiceProvider.GetRequiredService<ISupportService>();
+        await supportDesk.EnsureSchemaAsync(CancellationToken.None);
         await db.Database.ExecuteSqlRawAsync(@"
 IF COL_LENGTH(N'dbo.Aplication_document', N'is_verified') IS NULL
     ALTER TABLE dbo.Aplication_document ADD is_verified BIT NOT NULL CONSTRAINT DF_appdoc_is_verified DEFAULT(0);");
@@ -328,6 +333,8 @@ if (app.Environment.IsDevelopment())
         await nmBilling.EnsureSchemaAsync(CancellationToken.None);
         var finance = scope.ServiceProvider.GetRequiredService<IFinanceService>();
         await finance.EnsureSchemaAsync(CancellationToken.None);
+        var supportDesk = scope.ServiceProvider.GetRequiredService<ISupportService>();
+        await supportDesk.EnsureSchemaAsync(CancellationToken.None);
         await db.Database.ExecuteSqlRawAsync(@"
 IF OBJECT_ID(N'dbo.Membership_fee_schedule', N'U') IS NULL
 BEGIN
@@ -398,6 +405,45 @@ VALUES (N'ACEA', N'Aero Club of East Africa', N'ACEA', N'info@aeroclubea.com', N
     await EnsureTenantColumnClubSettingAsync(db);
     await EnsureClubSettingValueMaxAsync(db);
     await EnsureTenantColumnCommitteeAsync(db);
+    await EnsureTenantCompanyColumnsAsync(db);
+    await EnsureSystemRoleCompanyColumnAsync(db);
+}
+
+static async Task EnsureSystemRoleCompanyColumnAsync(ApplicationModuleDbContext db)
+{
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.System_role', N'tenant_id') IS NULL ALTER TABLE dbo.System_role ADD tenant_id BIGINT NULL;");
+}
+
+static async Task EnsureTenantCompanyColumnsAsync(ApplicationModuleDbContext db)
+{
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.Tenant', N'logo_url') IS NULL ALTER TABLE dbo.Tenant ADD logo_url NVARCHAR(MAX) NULL;");
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.Tenant', N'physical_location') IS NULL ALTER TABLE dbo.Tenant ADD physical_location NVARCHAR(400) NULL;");
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.Tenant', N'town') IS NULL ALTER TABLE dbo.Tenant ADD town NVARCHAR(120) NULL;");
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.Tenant', N'pin_number') IS NULL ALTER TABLE dbo.Tenant ADD pin_number NVARCHAR(40) NULL;");
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.Tenant', N'country_id') IS NULL ALTER TABLE dbo.Tenant ADD country_id BIGINT NULL;");
+    await db.Database.ExecuteSqlRawAsync(
+        "IF COL_LENGTH(N'dbo.Tenant', N'slug') IS NULL ALTER TABLE dbo.Tenant ADD slug NVARCHAR(80) NULL;");
+    await db.Database.ExecuteSqlRawAsync(@"
+UPDATE dbo.Tenant
+SET slug = N'aero-club'
+WHERE code = N'ACEA' AND (slug IS NULL OR LTRIM(RTRIM(slug)) = N'');");
+    await db.Database.ExecuteSqlRawAsync(@"
+UPDATE t
+SET country_id = c.country_id
+FROM dbo.Tenant t
+CROSS APPLY (
+    SELECT TOP 1 country_id
+    FROM dbo.Country
+    WHERE country_code IN (N'KE', N'KEN') OR country_name LIKE N'Kenya%'
+    ORDER BY CASE WHEN country_code IN (N'KE', N'KEN') THEN 0 ELSE 1 END
+) c
+WHERE t.country_id IS NULL;");
 }
 
 static async Task EnsureTenantColumnUserAccountAsync(ApplicationModuleDbContext db)

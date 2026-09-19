@@ -26,8 +26,9 @@ import {
   type RoleOption,
   type UserListResponse,
 } from "@/services/admin/userManagement";
+import { listClubCompanies } from "@/services/admin/clubSetup";
 import { apiRequest, extractErrorMessage } from "@/services/membership/api";
-import { roleRequiresMembershipNo } from "@/lib/auth";
+import { readUser, roleRequiresCompany, roleRequiresMembershipNo } from "@/lib/auth";
 import { DEFAULT_PAGE_SIZE, pagedQuery } from "@/lib/pagination";
 import { cn } from "@/utils/cn";
 
@@ -66,8 +67,8 @@ export function UserManagementPage() {
     <PageFrame width="lg">
       <PageBackLink to="/admin" label="Back to admin dashboard" />
       <PageHeader
-        title="User management"
-        description="Admin or General Manager assigns staff and receptionist accounts. They verify by email and set a password. Applicants register on the website after three logged guest visits."
+        title=""
+        description="Manage users"
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <UserPlus className="size-4" />
@@ -136,6 +137,7 @@ export function UserManagementPage() {
             <tr>
               <th className="px-4 py-3 font-medium">User</th>
               <th className="px-4 py-3 font-medium">Role</th>
+              <th className="px-4 py-3 font-medium">Company</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium">Last login</th>
               <th className="px-4 py-3 font-medium text-right">Actions</th>
@@ -144,7 +146,7 @@ export function UserManagementPage() {
           <tbody>
             {(data?.items.length ?? 0) === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
+                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
                   No users match these filters.
                 </td>
               </tr>
@@ -154,7 +156,7 @@ export function UserManagementPage() {
                   <td className="px-4 py-3">
                     <p className="font-medium">{row.fullName}</p>
                     <p className="text-xs text-muted-foreground">
-                      {row.username} Â· {row.email || "No email"}
+                      {row.username} · {row.email || "No email"}
                     </p>
                   </td>
                   <td className="px-4 py-3">
@@ -170,6 +172,11 @@ export function UserManagementPage() {
                           ))
                         : "—"}
                     </div>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {row.companyId
+                      ? row.companyName || row.companyCode || `Company ${row.companyId}`
+                      : "None"}
                   </td>
                   <td className="px-4 py-3">
                     <span
@@ -234,6 +241,8 @@ function CreateUserDialog({
   roles: RoleOption[];
   onCreated: () => void;
 }) {
+  const actorTenantId = readUser()?.tenantId ?? 0;
+  const actorCompanyId = actorTenantId > 0 ? String(actorTenantId) : "";
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
@@ -242,21 +251,34 @@ function CreateUserDialog({
     username: "",
     roleCodes: ["MEMBER"] as string[],
     membershipNo: "",
+    companyId: actorCompanyId,
   });
   const [invite, setInvite] = useState<InviteResult | null>(null);
+
+  const companies = useQuery({
+    queryKey: ["club-setup-companies"],
+    queryFn: listClubCompanies,
+    enabled: open,
+  });
 
   const options = useMemo(
     () => (roles.length ? roles : [{ code: "MEMBER", name: "Member" }]),
     [roles],
   );
   const needsMembershipNo = roleRequiresMembershipNo(form.roleCodes);
+  const needsCompany = roleRequiresCompany(form.roleCodes);
 
   function toggleRole(code: string) {
     setForm((prev) => {
       const has = prev.roleCodes.includes(code);
-      const roleCodes = has
-        ? prev.roleCodes.filter((c) => c !== code)
-        : [...prev.roleCodes, code];
+      let roleCodes: string[];
+      if (has) {
+        roleCodes = prev.roleCodes.filter((c) => c !== code);
+      } else if (code.toUpperCase() === "ADMIN") {
+        roleCodes = ["ADMIN"];
+      } else {
+        roleCodes = [...prev.roleCodes.filter((c) => c.toUpperCase() !== "ADMIN"), code];
+      }
       return { ...prev, roleCodes: roleCodes.length ? roleCodes : prev.roleCodes };
     });
   }
@@ -269,6 +291,9 @@ function CreateUserDialog({
       if (needsMembershipNo && !form.membershipNo.trim()) {
         throw new Error("Membership number is required for the selected role(s).");
       }
+      if (needsCompany && !form.companyId) {
+        throw new Error("Company is required for applicant, member, officer, and receptionist accounts.");
+      }
       return apiRequest<{ user: unknown; inviteUrl: string; emailSent: boolean }>("/api/users", {
         method: "POST",
         body: JSON.stringify({
@@ -279,6 +304,7 @@ function CreateUserDialog({
           username: form.username || null,
           roleCodes: form.roleCodes,
           membershipNo: needsMembershipNo ? form.membershipNo.trim() : null,
+          companyId: needsCompany ? Number(form.companyId) : null,
         }),
       });
     },
@@ -305,6 +331,7 @@ function CreateUserDialog({
       username: "",
       roleCodes: ["MEMBER"],
       membershipNo: "",
+      companyId: actorCompanyId,
     });
   }
 
@@ -314,9 +341,9 @@ function CreateUserDialog({
         <DialogHeader>
           <DialogTitle>Add new user</DialogTitle>
           <DialogDescription>
-            Creates a staff, receptionist or member account. Receptionist accounts are assigned by
-            Admin or General Manager and do not need a membership number. Other club roles require
-            a membership number. Applicants must use the public registration page.
+            Admin accounts are system-wide and must not belong to a company. Applicant, member
+            (including Chairman, General Manager, Treasurer, Committee Member), and receptionist
+            accounts must belong to a company. Applicants still self-register on the public page.
           </DialogDescription>
         </DialogHeader>
 
@@ -402,10 +429,31 @@ function CreateUserDialog({
                 })}
               </div>
               <p className="text-xs text-muted-foreground">
-                Select one or more roles from System_role. Permissions are the union of all assigned
-                roles.
+                Admin cannot be combined with company roles. Other roles are the union of assigned
+                permissions and require a company.
               </p>
             </Field>
+            {needsCompany ? (
+              <Field label="Company">
+                <select
+                  required
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={form.companyId}
+                  onChange={(e) => setForm({ ...form, companyId: e.target.value })}
+                >
+                  <option value="">Select company</option>
+                  {(companies.data ?? []).map((company) => (
+                    <option key={company.id} value={String(company.id)}>
+                      {company.companyName}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Admin does not belong to a company.
+              </p>
+            )}
             {needsMembershipNo ? (
               <Field label="Membership no.">
                 <Input

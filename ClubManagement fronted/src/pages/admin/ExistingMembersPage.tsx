@@ -46,6 +46,8 @@ export function ExistingMembersPage() {
   const { tab } = routeApi.useSearch();
   const navigate = useNavigate({ from: "/existing-members/" });
 
+  if (tab === "dashboard") return null;
+
   return (
     <PageFrame width="lg">
       <PageBackLink to="/admin" label="Back to admin dashboard" />

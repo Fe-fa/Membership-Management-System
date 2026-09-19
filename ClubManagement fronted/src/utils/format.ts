@@ -1,11 +1,22 @@
 ﻿import { formatKenyaDate, KENYA_LOCALE, KENYA_TIME_ZONE } from "@/utils/kenyaDate";
 
+let activeCurrency = "KES";
+
+export function setActiveCurrency(code?: string | null) {
+  const next = (code ?? "").trim().toUpperCase();
+  activeCurrency = next || "KES";
+}
+
 export function formatKes(value: number) {
-  return new Intl.NumberFormat(KENYA_LOCALE, {
-    style: "currency",
-    currency: "KES",
-    maximumFractionDigits: 0,
-  }).format(value);
+  try {
+    return new Intl.NumberFormat(KENYA_LOCALE, {
+      style: "currency",
+      currency: activeCurrency,
+      maximumFractionDigits: 0,
+    }).format(value);
+  } catch {
+    return `${activeCurrency} ${Number(value || 0).toLocaleString(KENYA_LOCALE)}`;
+  }
 }
 
 export function formatDate(value?: string | null) {

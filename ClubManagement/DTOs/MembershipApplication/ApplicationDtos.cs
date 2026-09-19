@@ -10,6 +10,9 @@ public class ApplicationListItemDto
     public string ApplicationNo { get; set; } = string.Empty;
     public long ApplicantProfileId { get; set; }
     public string ApplicantName { get; set; } = string.Empty;
+    public long CompanyId { get; set; }
+    public string? CompanyCode { get; set; }
+    public string? CompanyName { get; set; }
 
     public string? ApplicantCity { get; set; }
     public string? ApplicantCountry { get; set; }
@@ -109,6 +112,9 @@ public class ApplicationDetailDto
     public string ApplicationNo { get; set; } = string.Empty;
     public long ApplicantProfileId { get; set; }
     public string ApplicantName { get; set; } = string.Empty;
+    public long CompanyId { get; set; }
+    public string? CompanyCode { get; set; }
+    public string? CompanyName { get; set; }
     public long? ApplicationFormVersionId { get; set; }
     public long ElectionTypeId { get; set; }
     public long? ProposerProfileId { get; set; }
@@ -152,6 +158,7 @@ public class CreateApplicationRequest
     // (formDataJson / completedSteps / supporters) without wiping scalars.
     public string? ApplicationNo { get; set; }
     public long? ApplicantProfileId { get; set; }
+    public long? CompanyId { get; set; }
     public long? ApplicationFormVersionId { get; set; }
     public long? ElectionTypeId { get; set; }
     public long? ProposerProfileId { get; set; }

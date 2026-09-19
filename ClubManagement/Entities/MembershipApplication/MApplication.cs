@@ -21,6 +21,10 @@ namespace ClubManagement.Entities
         [Column("tenant_id")]
         public long TenantId { get; set; }
 
+        /// <summary>Company the applicant is applying to. Same value as TenantId.</summary>
+        [NotMapped]
+        public long CompanyId { get => TenantId; set => TenantId = value; }
+
         [Column("application_no")]
         [Required]
         public string ApplicationNo { get; set; } = string.Empty;

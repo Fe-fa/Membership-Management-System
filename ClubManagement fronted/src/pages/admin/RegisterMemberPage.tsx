@@ -3,7 +3,7 @@ import { emptyDraft, type ApplicationDraft } from "@/services/membership/schema"
 import type { MemberRow, MembershipTypeRow } from "@/services/admin/membershipDesk";
 import { draftToMemberUpdate } from "@/services/admin/memberForm";
 import { StaffMembershipForm } from "@/components/membership/StaffMembershipForm";
-import { PageBackLink, PageFrame } from "@/components/layout/PageFrame";
+import { PageFrame } from "@/components/layout/PageFrame";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -76,8 +76,7 @@ export function RegisterMemberPage() {
   });
 
   return (
-    <PageFrame width="lg">
-      <PageBackLink to="/existing-members" label="Back to existing members" />
+    <PageFrame width="lg" className="max-w-[1120px]">
       <StaffMembershipForm
         variant="existingMember"
         draft={draft}

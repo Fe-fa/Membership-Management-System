@@ -1,7 +1,9 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { ModuleDashboardPage } from "@/pages/admin/ModuleDashboardPage";
 
 export const Route = createFileRoute("/committee-ballot/")({
-  beforeLoad: () => {
-    throw redirect({ to: "/committee-ballot/attendance" });
-  },
+  head: () => ({
+    meta: [{ title: "Committee Ballot" }],
+  }),
+  component: () => <ModuleDashboardPage moduleId="committee-ballot" />,
 });

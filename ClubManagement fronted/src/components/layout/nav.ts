@@ -2,6 +2,8 @@
   BadgeCheck,
   BedDouble,
   Bell,
+  Briefcase,
+  Building2,
   Clock,
   History,
   ClipboardCheck,
@@ -10,6 +12,7 @@
   Database,
   FileClock,
   FileText,
+  Globe,
   BookUser,
   CircleAlert,
   ClipboardPen,
@@ -18,6 +21,7 @@
   Landmark,
   LayoutGrid,
   LifeBuoy,
+  Plus,
   Receipt,
   Settings,
   ShieldCheck,
@@ -54,6 +58,20 @@ export type AppNavGroup = {
   collapsible?: boolean;
 };
 
+function dashboardItem(to: string, search?: Record<string, string>): AppNavItem {
+  return {
+    label: "Dashboard",
+    to,
+    icon: LayoutGrid,
+    search,
+    exact: !search,
+  };
+}
+
+function withDashboard(to: string, groups: AppNavGroup[], search?: Record<string, string>): AppNavGroup[] {
+  return [{ label: "Overview", items: [dashboardItem(to, search)] }, ...groups];
+}
+
 const APPLICANT_NAV: AppNavGroup[] = [
   {
     label: "Applicant",
@@ -83,7 +101,7 @@ function electedMemberModuleNav(pathname: string): AppNavGroup[] {
   }
   if (pathname === "/payment" || pathname.startsWith("/payment/")) {
     return memberCardNav("Subscriptions", {
-      label: "Subscriptions",
+      label: "payment",
       to: "/payment",
       icon: Receipt,
       card: "subscriptions",
@@ -207,7 +225,7 @@ function electedMemberModuleNav(pathname: string): AppNavGroup[] {
   return [];
 }
 
-const MEMBER_DESK_NAV: AppNavGroup[] = [
+const MEMBER_DESK_NAV: AppNavGroup[] = withDashboard("/members", [
   {
     label: "Applications",
     collapsible: true,
@@ -221,8 +239,11 @@ const MEMBER_DESK_NAV: AppNavGroup[] = [
       },
     ],
   },
+], { view: "dashboard" });
+
+const MANAGE_RECORDS_NAV: AppNavGroup[] = withDashboard("/existing-members", [
   {
-    label: "Members",
+    label: "Members management",
     collapsible: true,
     items: [
       {
@@ -251,10 +272,20 @@ const MEMBER_DESK_NAV: AppNavGroup[] = [
       },
     ],
   },
-];
+    {
+    label: "Club setup",
+    collapsible: true,
+    items: [
+      { label: "Country", to: "/club-setup/countries", icon: Globe },
+      { label: "Company", to: "/club-setup/companies", icon: Building2 },
+      { label: "Designation", to: "/club-setup/designations", icon: Briefcase },
+    ],
+  },
+  
+], { tab: "dashboard" });
 
 /** Own sidebar for the Notification admin card (Stage A). */
-const MANAGER_STAGE_NAV: AppNavGroup[] = [
+const MANAGER_STAGE_NAV: AppNavGroup[] = withDashboard("/members", [
   {
     label: "MANAGER REVIEW",
     items: [
@@ -272,21 +303,22 @@ const MANAGER_STAGE_NAV: AppNavGroup[] = [
       },
     ],
   },
-];
+], { view: "manager", section: "dashboard" });
 
-const FINANCE_NAV: AppNavGroup[] = [
+const FINANCE_NAV: AppNavGroup[] = withDashboard("/finance", [
   {
     label: "Finance",
     items: [
-      { label: "Finance desk", to: "/finance/desk", icon: Wallet, match: ["/finance/desk", "/finance"] },
+      { label: "Finance desk", to: "/finance/desk", icon: Wallet, match: ["/finance/desk"] },
+      { label: "Invoices", to: "/finance/invoices", icon: FileText },
       { label: "Accommodation", to: "/finance/non-membership/accommodation", icon: BedDouble },
       { label: "Corkage", to: "/finance/non-membership/corkage", icon: Wine },
       { label: "Custom charges", to: "/finance/non-membership/custom-charges", icon: Receipt },
     ],
   },
-];
+]);
 
-const COMMITTEE_MANAGE_NAV: AppNavGroup[] = [
+const COMMITTEE_MANAGE_NAV: AppNavGroup[] = withDashboard("/manage-committee", [
   {
     label: "Committee",
     collapsible: true,
@@ -331,9 +363,9 @@ const COMMITTEE_MANAGE_NAV: AppNavGroup[] = [
       },
     ],
   },
-];
+]);
 
-const COMMITTEE_BALLOT_NAV: AppNavGroup[] = [
+const COMMITTEE_BALLOT_NAV: AppNavGroup[] = withDashboard("/committee-ballot", [
   {
     label: "Committee Ballot",
     items: [
@@ -359,9 +391,9 @@ const COMMITTEE_BALLOT_NAV: AppNavGroup[] = [
       },
     ],
   },
-];
+]);
 
-const ELECTION_NAV: AppNavGroup[] = [
+const ELECTION_NAV: AppNavGroup[] = withDashboard("/election", [
   {
     label: "Election desk",
     collapsible: true,
@@ -374,39 +406,35 @@ const ELECTION_NAV: AppNavGroup[] = [
       { label: "Meeting minutes", to: "/election/minutes", icon: ScrollText, exact: true },
     ],
   },
-];
+]);
 
-const ACCOMMODATION_NAV: AppNavGroup[] = [
+const ACCOMMODATION_NAV: AppNavGroup[] = withDashboard("/accommodation", [
   {
     label: "Accommodation",
     items: [
-      { label: "Rooms & bookings", to: "/accommodation", icon: BedDouble },
+      { label: "Rooms & bookings", to: "/accommodation", icon: BedDouble, exact: true },
       {
         label: "Occupancy",
         to: "/accommodation",
         icon: LayoutGrid,
-        match: ["/accommodation"],
+        exact: true,
       },
     ],
   },
-];
+], { view: "dashboard" });
 
 const SUPPORT_NAV: AppNavGroup[] = [
   {
     label: "Support",
     items: [
-      { label: "Help desk", to: "/support", icon: Headset },
-      {
-        label: "Member queries",
-        to: "/support",
-        icon: LifeBuoy,
-        match: ["/support"],
-      },
+      { label: "Help desk", to: "/support", icon: Headset, exact: true },
+      { label: "My tickets", to: "/support/tickets", icon: LifeBuoy, match: ["/support/tickets"] },
+      { label: "Create ticket", to: "/support/new", icon: Plus, match: ["/support/new"] },
     ],
   },
 ];
 
-const RECEPTION_NAV: AppNavGroup[] = [
+const RECEPTION_NAV: AppNavGroup[] = withDashboard("/reception", [
   {
     label: "Reception",
     items: [
@@ -447,7 +475,7 @@ const RECEPTION_NAV: AppNavGroup[] = [
       },
     ],
   },
-];
+], { section: "dashboard" });
 
 const SETTINGS_NAV: AppNavGroup[] = [
   {
@@ -503,7 +531,7 @@ function currentView(search: unknown): string {
 function currentTab(search: unknown): string {
   if (search && typeof search === "object" && "tab" in search) {
     const tab = String((search as { tab?: unknown }).tab ?? "");
-    if (tab === "register" || tab === "privileges") return tab;
+    if (tab === "register" || tab === "privileges" || tab === "dashboard") return tab;
   }
   return "register";
 }
@@ -516,14 +544,18 @@ function currentSection(search: unknown): string {
 }
 
 function isMemberDeskPath(pathname: string) {
+  return pathname === "/members" || pathname.startsWith("/members/");
+}
+
+function isManageRecordsPath(pathname: string) {
   return (
-    pathname === "/members" ||
-    pathname.startsWith("/members/") ||
     pathname === "/existing-members" ||
     pathname.startsWith("/existing-members/") ||
     pathname === "/register-member" ||
     pathname === "/user-management" ||
-    pathname.startsWith("/user-management/")
+    pathname.startsWith("/user-management/") ||
+    pathname === "/club-setup" ||
+    pathname.startsWith("/club-setup/")
   );
 }
 
@@ -540,6 +572,7 @@ function staffModuleNav(pathname: string, search?: unknown): AppNavGroup[] {
 
   if (pathname === "/reception" || pathname.startsWith("/reception/")) return RECEPTION_NAV;
   if (isMemberDeskPath(pathname)) return MEMBER_DESK_NAV;
+  if (isManageRecordsPath(pathname)) return MANAGE_RECORDS_NAV;
   if (pathname === "/finance" || pathname.startsWith("/finance/")) return FINANCE_NAV;
   if (pathname === "/governance" || pathname.startsWith("/governance/") || pathname === "/manage-committee" || pathname.startsWith("/manage-committee/")) {
     return COMMITTEE_MANAGE_NAV;
@@ -567,14 +600,17 @@ export function navForUser(
 ): AppNavGroup[] {
   const mode = readPortalMode(user);
   const onSettings = pathname === "/settings" || pathname.startsWith("/settings/");
+  const onSupport = pathname === "/support" || pathname.startsWith("/support/");
   const groups =
     onSettings && !(isStaff(user) && mode === "admin")
       ? PERSONAL_SETTINGS_NAV
-      : isStaff(user) && mode === "admin"
-        ? staffModuleNav(pathname, search)
-        : mode === "member" || (mode !== "applicant" && isClubMember(user) && !isStaff(user))
-          ? electedMemberModuleNav(pathname)
-          : APPLICANT_NAV;
+      : onSupport
+        ? SUPPORT_NAV
+        : isStaff(user) && mode === "admin"
+          ? staffModuleNav(pathname, search)
+          : mode === "member" || (mode !== "applicant" && isClubMember(user) && !isStaff(user))
+            ? electedMemberModuleNav(pathname)
+            : APPLICANT_NAV;
 
   return groups
     .map((group) => ({
@@ -594,7 +630,12 @@ export function isNavActive(
   item: Pick<AppNavItem, "to" | "match" | "search" | "exact">,
 ) {
   if (item.exact) {
-    return pathname === item.to || pathname === `${item.to}/`;
+    const pathOk = pathname === item.to || pathname === `${item.to}/`;
+    if (!pathOk) return false;
+    if (item.search?.section) return currentSection(search) === item.search.section;
+    if (item.search?.view) return currentView(search) === item.search.view;
+    if (item.search?.tab) return currentTab(search) === item.search.tab;
+    return currentView(search) !== "dashboard" && currentSection(search) !== "dashboard" && currentTab(search) !== "dashboard";
   }
   if (item.search?.section) {
     const section = currentSection(search);
@@ -612,7 +653,8 @@ export function isNavActive(
     );
   }
   if (item.search?.tab) {
-    return pathname === item.to && currentTab(search) === item.search.tab;
+    const onPath = pathname === item.to || pathname === `${item.to}/`;
+    return onPath && currentTab(search) === item.search.tab;
   }
   // Default Pending applications: /members without manager/authorize view.
   if (item.to === "/members" && (!item.search || Object.keys(item.search).length === 0)) {
@@ -620,7 +662,8 @@ export function isNavActive(
     return (
       (pathname === "/members" || pathname.startsWith("/members/")) &&
       view !== "authorize" &&
-      view !== "manager"
+      view !== "manager" &&
+      view !== "dashboard"
     );
   }
   const targets = item.match ?? [item.to];

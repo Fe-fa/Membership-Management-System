@@ -1,8 +1,9 @@
 ﻿import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, LogOut, Menu, Plane } from "lucide-react";
+import { ChevronDown, LogOut, Menu } from "lucide-react";
 
+import { ClubLogo } from "@/components/brand/ClubLogo";
 import { AppBreadcrumb } from "@/components/layout/AppBreadcrumb";
 import { NotificationBell } from "@/components/layout/NotificationBell";
 import { isNavActive, navForUser, type AppNavGroup } from "@/components/layout/nav";
@@ -49,11 +50,9 @@ function BrandMark({ homeTo = "/" }: { homeTo?: "/" | "/admin" | "/reception" })
   const tenant = useCurrentTenant();
   const name = tenantDisplayName(tenant.data);
   return (
-    <Link to={homeTo} className="flex items-center gap-2.5 px-2">
-      <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground">
-        <Plane className="size-4 -rotate-45" />
-      </span>
-      <span className="text-sm font-semibold tracking-tight text-foreground">{name}</span>
+    <Link to={homeTo} className="flex flex-col items-start gap-1.5 px-1">
+      <ClubLogo className="h-8" />
+      <span className="text-sm font-semibold tracking-tight">{name}</span>
     </Link>
   );
 }
@@ -323,7 +322,7 @@ export const SidebarShell = memo(function SidebarShell({
     <div className={cn("min-h-screen", showSidebar ? "bg-background" : "bg-slate-50")}>
       <div className={cn("mx-auto flex w-full", showSidebar ? "max-w-[1440px]" : "max-w-none")}>
         {showSidebar ? (
-          <aside className="sticky top-0 hidden h-screen w-64 shrink-0 overflow-y-auto border-r border-border bg-sidebar px-4 py-6 lg:block">
+          <aside className="sticky top-0 hidden h-screen w-64 shrink-0 overflow-y-auto border-r border-sidebar-border bg-sidebar px-4 py-6 text-sidebar-foreground lg:block">
             <BrandMark homeTo={homeTo} />
             <div className="mt-8">
               <NavList pathname={pathname} search={search} user={currentUser} />

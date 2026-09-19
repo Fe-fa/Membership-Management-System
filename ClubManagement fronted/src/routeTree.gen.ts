@@ -14,6 +14,7 @@ import { Route as AccommodationRouteImport } from './routes/accommodation'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as ApplicationRouteImport } from './routes/application'
 import { Route as ApplicationsRouteImport } from './routes/applications'
+import { Route as ClubSetupRouteImport } from './routes/club-setup'
 import { Route as CommitteeBallotRouteImport } from './routes/committee-ballot'
 import { Route as CorkageRouteImport } from './routes/corkage'
 import { Route as CustomChargesRouteImport } from './routes/custom-charges'
@@ -36,6 +37,11 @@ import { Route as SetPasswordRouteImport } from './routes/set-password'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SupportRouteImport } from './routes/support'
 import { Route as UserManagementRouteImport } from './routes/user-management'
+import { Route as ApplyCompanySlugRouteImport } from './routes/apply.$companySlug'
+import { Route as ClubSetupIndexRouteImport } from './routes/club-setup.index'
+import { Route as ClubSetupCompaniesRouteImport } from './routes/club-setup.companies'
+import { Route as ClubSetupCountriesRouteImport } from './routes/club-setup.countries'
+import { Route as ClubSetupDesignationsRouteImport } from './routes/club-setup.designations'
 import { Route as CommitteeBallotIndexRouteImport } from './routes/committee-ballot.index'
 import { Route as CommitteeBallotAttendanceRouteImport } from './routes/committee-ballot.attendance'
 import { Route as CommitteeBallotCandidatesRouteImport } from './routes/committee-ballot.candidates'
@@ -52,6 +58,7 @@ import { Route as ExistingMembersIndexRouteImport } from './routes/existing-memb
 import { Route as ExistingMembersAccountIdRouteImport } from './routes/existing-members.$accountId'
 import { Route as FinanceIndexRouteImport } from './routes/finance.index'
 import { Route as FinanceDeskRouteImport } from './routes/finance.desk'
+import { Route as FinanceInvoicesRouteImport } from './routes/finance.invoices'
 import { Route as ManageCommitteeIndexRouteImport } from './routes/manage-committee.index'
 import { Route as ManageCommitteeCurrentTermRouteImport } from './routes/manage-committee.current-term'
 import { Route as ManageCommitteeMeetingsRouteImport } from './routes/manage-committee.meetings'
@@ -67,6 +74,9 @@ import { Route as SettingsClubRouteImport } from './routes/settings.club'
 import { Route as SettingsLookupsRouteImport } from './routes/settings.lookups'
 import { Route as SettingsPrivacyRouteImport } from './routes/settings.privacy'
 import { Route as SettingsRbacRouteImport } from './routes/settings.rbac'
+import { Route as SupportIndexRouteImport } from './routes/support.index'
+import { Route as SupportNewRouteImport } from './routes/support.new'
+import { Route as SupportTicketsRouteImport } from './routes/support.tickets'
 import { Route as UserManagementIndexRouteImport } from './routes/user-management.index'
 import { Route as UserManagementUserAccountIdRouteImport } from './routes/user-management.$userAccountId'
 import { Route as FinanceNonMembershipAccommodationRouteImport } from './routes/finance.non-membership.accommodation'
@@ -101,6 +111,11 @@ const ApplicationRoute = ApplicationRouteImport.update({
 const ApplicationsRoute = ApplicationsRouteImport.update({
   id: '/applications',
   path: '/applications',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ClubSetupRoute = ClubSetupRouteImport.update({
+  id: '/club-setup',
+  path: '/club-setup',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CommitteeBallotRoute = CommitteeBallotRouteImport.update({
@@ -213,6 +228,31 @@ const UserManagementRoute = UserManagementRouteImport.update({
   path: '/user-management',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApplyCompanySlugRoute = ApplyCompanySlugRouteImport.update({
+  id: '/apply/$companySlug',
+  path: '/apply/$companySlug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ClubSetupIndexRoute = ClubSetupIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ClubSetupRoute,
+} as any)
+const ClubSetupCompaniesRoute = ClubSetupCompaniesRouteImport.update({
+  id: '/companies',
+  path: '/companies',
+  getParentRoute: () => ClubSetupRoute,
+} as any)
+const ClubSetupCountriesRoute = ClubSetupCountriesRouteImport.update({
+  id: '/countries',
+  path: '/countries',
+  getParentRoute: () => ClubSetupRoute,
+} as any)
+const ClubSetupDesignationsRoute = ClubSetupDesignationsRouteImport.update({
+  id: '/designations',
+  path: '/designations',
+  getParentRoute: () => ClubSetupRoute,
+} as any)
 const CommitteeBallotIndexRoute = CommitteeBallotIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -297,6 +337,11 @@ const FinanceDeskRoute = FinanceDeskRouteImport.update({
   path: '/desk',
   getParentRoute: () => FinanceRoute,
 } as any)
+const FinanceInvoicesRoute = FinanceInvoicesRouteImport.update({
+  id: '/invoices',
+  path: '/invoices',
+  getParentRoute: () => FinanceRoute,
+} as any)
 const ManageCommitteeIndexRoute = ManageCommitteeIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -373,6 +418,21 @@ const SettingsRbacRoute = SettingsRbacRouteImport.update({
   path: '/rbac',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SupportIndexRoute = SupportIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SupportRoute,
+} as any)
+const SupportNewRoute = SupportNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => SupportRoute,
+} as any)
+const SupportTicketsRoute = SupportTicketsRouteImport.update({
+  id: '/tickets',
+  path: '/tickets',
+  getParentRoute: () => SupportRoute,
+} as any)
 const UserManagementIndexRoute = UserManagementIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -439,6 +499,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/application': typeof ApplicationRoute
   '/applications': typeof ApplicationsRoute
+  '/club-setup': typeof ClubSetupRouteWithChildren
   '/committee-ballot': typeof CommitteeBallotRouteWithChildren
   '/corkage': typeof CorkageRoute
   '/custom-charges': typeof CustomChargesRoute
@@ -459,8 +520,12 @@ export interface FileRoutesByFullPath {
   '/register-member': typeof RegisterMemberRoute
   '/set-password': typeof SetPasswordRoute
   '/settings': typeof SettingsRouteWithChildren
-  '/support': typeof SupportRoute
+  '/support': typeof SupportRouteWithChildren
   '/user-management': typeof UserManagementRouteWithChildren
+  '/apply/$companySlug': typeof ApplyCompanySlugRoute
+  '/club-setup/companies': typeof ClubSetupCompaniesRoute
+  '/club-setup/countries': typeof ClubSetupCountriesRoute
+  '/club-setup/designations': typeof ClubSetupDesignationsRoute
   '/committee-ballot/attendance': typeof CommitteeBallotAttendanceRoute
   '/committee-ballot/candidates': typeof CommitteeBallotCandidatesRoute
   '/committee-ballot/pending': typeof CommitteeBallotPendingRoute
@@ -473,6 +538,7 @@ export interface FileRoutesByFullPath {
   '/election/tally': typeof ElectionTallyRoute
   '/existing-members/$accountId': typeof ExistingMembersAccountIdRoute
   '/finance/desk': typeof FinanceDeskRoute
+  '/finance/invoices': typeof FinanceInvoicesRoute
   '/manage-committee/current-term': typeof ManageCommitteeCurrentTermRoute
   '/manage-committee/meetings': typeof ManageCommitteeMeetingsRouteWithChildren
   '/manage-committee/members': typeof ManageCommitteeMembersRoute
@@ -485,7 +551,10 @@ export interface FileRoutesByFullPath {
   '/settings/lookups': typeof SettingsLookupsRoute
   '/settings/privacy': typeof SettingsPrivacyRoute
   '/settings/rbac': typeof SettingsRbacRoute
+  '/support/new': typeof SupportNewRoute
+  '/support/tickets': typeof SupportTicketsRoute
   '/user-management/$userAccountId': typeof UserManagementUserAccountIdRoute
+  '/club-setup/': typeof ClubSetupIndexRoute
   '/committee-ballot/': typeof CommitteeBallotIndexRoute
   '/election/': typeof ElectionIndexRoute
   '/existing-members/': typeof ExistingMembersIndexRoute
@@ -493,6 +562,7 @@ export interface FileRoutesByFullPath {
   '/manage-committee/': typeof ManageCommitteeIndexRoute
   '/members/': typeof MembersIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/support/': typeof SupportIndexRoute
   '/user-management/': typeof UserManagementIndexRoute
   '/finance/non-membership/accommodation': typeof FinanceNonMembershipAccommodationRoute
   '/finance/non-membership/corkage': typeof FinanceNonMembershipCorkageRoute
@@ -522,7 +592,10 @@ export interface FileRoutesByTo {
   '/register': typeof RegisterRoute
   '/register-member': typeof RegisterMemberRoute
   '/set-password': typeof SetPasswordRoute
-  '/support': typeof SupportRoute
+  '/apply/$companySlug': typeof ApplyCompanySlugRoute
+  '/club-setup/companies': typeof ClubSetupCompaniesRoute
+  '/club-setup/countries': typeof ClubSetupCountriesRoute
+  '/club-setup/designations': typeof ClubSetupDesignationsRoute
   '/committee-ballot/attendance': typeof CommitteeBallotAttendanceRoute
   '/committee-ballot/candidates': typeof CommitteeBallotCandidatesRoute
   '/committee-ballot/pending': typeof CommitteeBallotPendingRoute
@@ -535,6 +608,7 @@ export interface FileRoutesByTo {
   '/election/tally': typeof ElectionTallyRoute
   '/existing-members/$accountId': typeof ExistingMembersAccountIdRoute
   '/finance/desk': typeof FinanceDeskRoute
+  '/finance/invoices': typeof FinanceInvoicesRoute
   '/manage-committee/current-term': typeof ManageCommitteeCurrentTermRoute
   '/manage-committee/members': typeof ManageCommitteeMembersRoute
   '/manage-committee/new-term': typeof ManageCommitteeNewTermRoute
@@ -546,7 +620,10 @@ export interface FileRoutesByTo {
   '/settings/lookups': typeof SettingsLookupsRoute
   '/settings/privacy': typeof SettingsPrivacyRoute
   '/settings/rbac': typeof SettingsRbacRoute
+  '/support/new': typeof SupportNewRoute
+  '/support/tickets': typeof SupportTicketsRoute
   '/user-management/$userAccountId': typeof UserManagementUserAccountIdRoute
+  '/club-setup': typeof ClubSetupIndexRoute
   '/committee-ballot': typeof CommitteeBallotIndexRoute
   '/election': typeof ElectionIndexRoute
   '/existing-members': typeof ExistingMembersIndexRoute
@@ -554,6 +631,7 @@ export interface FileRoutesByTo {
   '/manage-committee': typeof ManageCommitteeIndexRoute
   '/members': typeof MembersIndexRoute
   '/settings': typeof SettingsIndexRoute
+  '/support': typeof SupportIndexRoute
   '/user-management': typeof UserManagementIndexRoute
   '/finance/non-membership/accommodation': typeof FinanceNonMembershipAccommodationRoute
   '/finance/non-membership/corkage': typeof FinanceNonMembershipCorkageRoute
@@ -571,6 +649,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/application': typeof ApplicationRoute
   '/applications': typeof ApplicationsRoute
+  '/club-setup': typeof ClubSetupRouteWithChildren
   '/committee-ballot': typeof CommitteeBallotRouteWithChildren
   '/corkage': typeof CorkageRoute
   '/custom-charges': typeof CustomChargesRoute
@@ -591,8 +670,12 @@ export interface FileRoutesById {
   '/register-member': typeof RegisterMemberRoute
   '/set-password': typeof SetPasswordRoute
   '/settings': typeof SettingsRouteWithChildren
-  '/support': typeof SupportRoute
+  '/support': typeof SupportRouteWithChildren
   '/user-management': typeof UserManagementRouteWithChildren
+  '/apply/$companySlug': typeof ApplyCompanySlugRoute
+  '/club-setup/companies': typeof ClubSetupCompaniesRoute
+  '/club-setup/countries': typeof ClubSetupCountriesRoute
+  '/club-setup/designations': typeof ClubSetupDesignationsRoute
   '/committee-ballot/attendance': typeof CommitteeBallotAttendanceRoute
   '/committee-ballot/candidates': typeof CommitteeBallotCandidatesRoute
   '/committee-ballot/pending': typeof CommitteeBallotPendingRoute
@@ -605,6 +688,7 @@ export interface FileRoutesById {
   '/election/tally': typeof ElectionTallyRoute
   '/existing-members/$accountId': typeof ExistingMembersAccountIdRoute
   '/finance/desk': typeof FinanceDeskRoute
+  '/finance/invoices': typeof FinanceInvoicesRoute
   '/manage-committee/current-term': typeof ManageCommitteeCurrentTermRoute
   '/manage-committee/meetings': typeof ManageCommitteeMeetingsRouteWithChildren
   '/manage-committee/members': typeof ManageCommitteeMembersRoute
@@ -617,7 +701,10 @@ export interface FileRoutesById {
   '/settings/lookups': typeof SettingsLookupsRoute
   '/settings/privacy': typeof SettingsPrivacyRoute
   '/settings/rbac': typeof SettingsRbacRoute
+  '/support/new': typeof SupportNewRoute
+  '/support/tickets': typeof SupportTicketsRoute
   '/user-management/$userAccountId': typeof UserManagementUserAccountIdRoute
+  '/club-setup/': typeof ClubSetupIndexRoute
   '/committee-ballot/': typeof CommitteeBallotIndexRoute
   '/election/': typeof ElectionIndexRoute
   '/existing-members/': typeof ExistingMembersIndexRoute
@@ -625,6 +712,7 @@ export interface FileRoutesById {
   '/manage-committee/': typeof ManageCommitteeIndexRoute
   '/members/': typeof MembersIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/support/': typeof SupportIndexRoute
   '/user-management/': typeof UserManagementIndexRoute
   '/finance/non-membership/accommodation': typeof FinanceNonMembershipAccommodationRoute
   '/finance/non-membership/corkage': typeof FinanceNonMembershipCorkageRoute
@@ -643,6 +731,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/application'
     | '/applications'
+    | '/club-setup'
     | '/committee-ballot'
     | '/corkage'
     | '/custom-charges'
@@ -665,6 +754,10 @@ export interface FileRouteTypes {
     | '/settings'
     | '/support'
     | '/user-management'
+    | '/apply/$companySlug'
+    | '/club-setup/companies'
+    | '/club-setup/countries'
+    | '/club-setup/designations'
     | '/committee-ballot/attendance'
     | '/committee-ballot/candidates'
     | '/committee-ballot/pending'
@@ -677,6 +770,7 @@ export interface FileRouteTypes {
     | '/election/tally'
     | '/existing-members/$accountId'
     | '/finance/desk'
+    | '/finance/invoices'
     | '/manage-committee/current-term'
     | '/manage-committee/meetings'
     | '/manage-committee/members'
@@ -689,7 +783,10 @@ export interface FileRouteTypes {
     | '/settings/lookups'
     | '/settings/privacy'
     | '/settings/rbac'
+    | '/support/new'
+    | '/support/tickets'
     | '/user-management/$userAccountId'
+    | '/club-setup/'
     | '/committee-ballot/'
     | '/election/'
     | '/existing-members/'
@@ -697,6 +794,7 @@ export interface FileRouteTypes {
     | '/manage-committee/'
     | '/members/'
     | '/settings/'
+    | '/support/'
     | '/user-management/'
     | '/finance/non-membership/accommodation'
     | '/finance/non-membership/corkage'
@@ -726,7 +824,10 @@ export interface FileRouteTypes {
     | '/register'
     | '/register-member'
     | '/set-password'
-    | '/support'
+    | '/apply/$companySlug'
+    | '/club-setup/companies'
+    | '/club-setup/countries'
+    | '/club-setup/designations'
     | '/committee-ballot/attendance'
     | '/committee-ballot/candidates'
     | '/committee-ballot/pending'
@@ -739,6 +840,7 @@ export interface FileRouteTypes {
     | '/election/tally'
     | '/existing-members/$accountId'
     | '/finance/desk'
+    | '/finance/invoices'
     | '/manage-committee/current-term'
     | '/manage-committee/members'
     | '/manage-committee/new-term'
@@ -750,7 +852,10 @@ export interface FileRouteTypes {
     | '/settings/lookups'
     | '/settings/privacy'
     | '/settings/rbac'
+    | '/support/new'
+    | '/support/tickets'
     | '/user-management/$userAccountId'
+    | '/club-setup'
     | '/committee-ballot'
     | '/election'
     | '/existing-members'
@@ -758,6 +863,7 @@ export interface FileRouteTypes {
     | '/manage-committee'
     | '/members'
     | '/settings'
+    | '/support'
     | '/user-management'
     | '/finance/non-membership/accommodation'
     | '/finance/non-membership/corkage'
@@ -774,6 +880,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/application'
     | '/applications'
+    | '/club-setup'
     | '/committee-ballot'
     | '/corkage'
     | '/custom-charges'
@@ -796,6 +903,10 @@ export interface FileRouteTypes {
     | '/settings'
     | '/support'
     | '/user-management'
+    | '/apply/$companySlug'
+    | '/club-setup/companies'
+    | '/club-setup/countries'
+    | '/club-setup/designations'
     | '/committee-ballot/attendance'
     | '/committee-ballot/candidates'
     | '/committee-ballot/pending'
@@ -808,6 +919,7 @@ export interface FileRouteTypes {
     | '/election/tally'
     | '/existing-members/$accountId'
     | '/finance/desk'
+    | '/finance/invoices'
     | '/manage-committee/current-term'
     | '/manage-committee/meetings'
     | '/manage-committee/members'
@@ -820,7 +932,10 @@ export interface FileRouteTypes {
     | '/settings/lookups'
     | '/settings/privacy'
     | '/settings/rbac'
+    | '/support/new'
+    | '/support/tickets'
     | '/user-management/$userAccountId'
+    | '/club-setup/'
     | '/committee-ballot/'
     | '/election/'
     | '/existing-members/'
@@ -828,6 +943,7 @@ export interface FileRouteTypes {
     | '/manage-committee/'
     | '/members/'
     | '/settings/'
+    | '/support/'
     | '/user-management/'
     | '/finance/non-membership/accommodation'
     | '/finance/non-membership/corkage'
@@ -845,6 +961,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   ApplicationRoute: typeof ApplicationRoute
   ApplicationsRoute: typeof ApplicationsRoute
+  ClubSetupRoute: typeof ClubSetupRouteWithChildren
   CommitteeBallotRoute: typeof CommitteeBallotRouteWithChildren
   CorkageRoute: typeof CorkageRoute
   CustomChargesRoute: typeof CustomChargesRoute
@@ -865,8 +982,9 @@ export interface RootRouteChildren {
   RegisterMemberRoute: typeof RegisterMemberRoute
   SetPasswordRoute: typeof SetPasswordRoute
   SettingsRoute: typeof SettingsRouteWithChildren
-  SupportRoute: typeof SupportRoute
+  SupportRoute: typeof SupportRouteWithChildren
   UserManagementRoute: typeof UserManagementRouteWithChildren
+  ApplyCompanySlugRoute: typeof ApplyCompanySlugRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -904,6 +1022,13 @@ declare module '@tanstack/react-router' {
       path: '/applications'
       fullPath: '/applications'
       preLoaderRoute: typeof ApplicationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/club-setup': {
+      id: '/club-setup'
+      path: '/club-setup'
+      fullPath: '/club-setup'
+      preLoaderRoute: typeof ClubSetupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/committee-ballot': {
@@ -1060,6 +1185,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof UserManagementRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/apply/$companySlug': {
+      id: '/apply/$companySlug'
+      path: '/apply/$companySlug'
+      fullPath: '/apply/$companySlug'
+      preLoaderRoute: typeof ApplyCompanySlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/club-setup/': {
+      id: '/club-setup/'
+      path: '/'
+      fullPath: '/club-setup/'
+      preLoaderRoute: typeof ClubSetupIndexRouteImport
+      parentRoute: typeof ClubSetupRoute
+    }
+    '/club-setup/companies': {
+      id: '/club-setup/companies'
+      path: '/companies'
+      fullPath: '/club-setup/companies'
+      preLoaderRoute: typeof ClubSetupCompaniesRouteImport
+      parentRoute: typeof ClubSetupRoute
+    }
+    '/club-setup/countries': {
+      id: '/club-setup/countries'
+      path: '/countries'
+      fullPath: '/club-setup/countries'
+      preLoaderRoute: typeof ClubSetupCountriesRouteImport
+      parentRoute: typeof ClubSetupRoute
+    }
+    '/club-setup/designations': {
+      id: '/club-setup/designations'
+      path: '/designations'
+      fullPath: '/club-setup/designations'
+      preLoaderRoute: typeof ClubSetupDesignationsRouteImport
+      parentRoute: typeof ClubSetupRoute
+    }
     '/committee-ballot/': {
       id: '/committee-ballot/'
       path: '/'
@@ -1172,6 +1332,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FinanceDeskRouteImport
       parentRoute: typeof FinanceRoute
     }
+    '/finance/invoices': {
+      id: '/finance/invoices'
+      path: '/invoices'
+      fullPath: '/finance/invoices'
+      preLoaderRoute: typeof FinanceInvoicesRouteImport
+      parentRoute: typeof FinanceRoute
+    }
     '/manage-committee/': {
       id: '/manage-committee/'
       path: '/'
@@ -1277,6 +1444,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRbacRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/support/': {
+      id: '/support/'
+      path: '/'
+      fullPath: '/support/'
+      preLoaderRoute: typeof SupportIndexRouteImport
+      parentRoute: typeof SupportRoute
+    }
+    '/support/new': {
+      id: '/support/new'
+      path: '/new'
+      fullPath: '/support/new'
+      preLoaderRoute: typeof SupportNewRouteImport
+      parentRoute: typeof SupportRoute
+    }
+    '/support/tickets': {
+      id: '/support/tickets'
+      path: '/tickets'
+      fullPath: '/support/tickets'
+      preLoaderRoute: typeof SupportTicketsRouteImport
+      parentRoute: typeof SupportRoute
+    }
     '/user-management/': {
       id: '/user-management/'
       path: '/'
@@ -1350,6 +1538,24 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface ClubSetupRouteChildren {
+  ClubSetupCompaniesRoute: typeof ClubSetupCompaniesRoute
+  ClubSetupCountriesRoute: typeof ClubSetupCountriesRoute
+  ClubSetupDesignationsRoute: typeof ClubSetupDesignationsRoute
+  ClubSetupIndexRoute: typeof ClubSetupIndexRoute
+}
+
+const ClubSetupRouteChildren: ClubSetupRouteChildren = {
+  ClubSetupCompaniesRoute: ClubSetupCompaniesRoute,
+  ClubSetupCountriesRoute: ClubSetupCountriesRoute,
+  ClubSetupDesignationsRoute: ClubSetupDesignationsRoute,
+  ClubSetupIndexRoute: ClubSetupIndexRoute,
+}
+
+const ClubSetupRouteWithChildren = ClubSetupRoute._addFileChildren(
+  ClubSetupRouteChildren,
+)
+
 interface CommitteeBallotRouteChildren {
   CommitteeBallotAttendanceRoute: typeof CommitteeBallotAttendanceRoute
   CommitteeBallotCandidatesRoute: typeof CommitteeBallotCandidatesRoute
@@ -1410,6 +1616,7 @@ const ExistingMembersRouteWithChildren = ExistingMembersRoute._addFileChildren(
 
 interface FinanceRouteChildren {
   FinanceDeskRoute: typeof FinanceDeskRoute
+  FinanceInvoicesRoute: typeof FinanceInvoicesRoute
   FinanceIndexRoute: typeof FinanceIndexRoute
   FinanceNonMembershipAccommodationRoute: typeof FinanceNonMembershipAccommodationRoute
   FinanceNonMembershipCorkageRoute: typeof FinanceNonMembershipCorkageRoute
@@ -1418,6 +1625,7 @@ interface FinanceRouteChildren {
 
 const FinanceRouteChildren: FinanceRouteChildren = {
   FinanceDeskRoute: FinanceDeskRoute,
+  FinanceInvoicesRoute: FinanceInvoicesRoute,
   FinanceIndexRoute: FinanceIndexRoute,
   FinanceNonMembershipAccommodationRoute:
     FinanceNonMembershipAccommodationRoute,
@@ -1511,6 +1719,21 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
   SettingsRouteChildren,
 )
 
+interface SupportRouteChildren {
+  SupportNewRoute: typeof SupportNewRoute
+  SupportTicketsRoute: typeof SupportTicketsRoute
+  SupportIndexRoute: typeof SupportIndexRoute
+}
+
+const SupportRouteChildren: SupportRouteChildren = {
+  SupportNewRoute: SupportNewRoute,
+  SupportTicketsRoute: SupportTicketsRoute,
+  SupportIndexRoute: SupportIndexRoute,
+}
+
+const SupportRouteWithChildren =
+  SupportRoute._addFileChildren(SupportRouteChildren)
+
 interface UserManagementRouteChildren {
   UserManagementUserAccountIdRoute: typeof UserManagementUserAccountIdRoute
   UserManagementIndexRoute: typeof UserManagementIndexRoute
@@ -1531,6 +1754,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   ApplicationRoute: ApplicationRoute,
   ApplicationsRoute: ApplicationsRoute,
+  ClubSetupRoute: ClubSetupRouteWithChildren,
   CommitteeBallotRoute: CommitteeBallotRouteWithChildren,
   CorkageRoute: CorkageRoute,
   CustomChargesRoute: CustomChargesRoute,
@@ -1551,8 +1775,9 @@ const rootRouteChildren: RootRouteChildren = {
   RegisterMemberRoute: RegisterMemberRoute,
   SetPasswordRoute: SetPasswordRoute,
   SettingsRoute: SettingsRouteWithChildren,
-  SupportRoute: SupportRoute,
+  SupportRoute: SupportRouteWithChildren,
   UserManagementRoute: UserManagementRouteWithChildren,
+  ApplyCompanySlugRoute: ApplyCompanySlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

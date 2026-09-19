@@ -14,6 +14,9 @@ export type ManagedUser = {
   lastLoginAt?: string | null;
   createdAt: string;
   roles: string[];
+  companyId?: number;
+  companyCode?: string | null;
+  companyName?: string | null;
 };
 
 export type UserListResponse = {
@@ -31,6 +34,7 @@ export type RoleOption = {
   name: string;
   description?: string | null;
   sortOrder?: number;
+  requiresCompany?: boolean;
 };
 
 export type InviteResult = {

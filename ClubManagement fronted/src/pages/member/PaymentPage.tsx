@@ -8,6 +8,7 @@ import { PageBodyLoading } from "@/components/layout/PageLoading";
 import {
   MemberPaymentForm,
   PAYMENT_PAGE_DESCRIPTION,
+  PaymentContextBar,
   SubscriptionSummaryCards,
   applicationDuesToSubscription,
   useApplicationDues,
@@ -24,6 +25,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { isClubMember, readUser } from "@/lib/auth";
+import { tenantDocumentBrand, useCurrentTenant } from "@/services/tenant";
 import { fetchApplication, saveDraft, extractErrorMessage, apiRequest, ApiError } from "@/services/membership/api";
 import { buildInvoiceHtml, printHtmlDocument, type InvoiceDocument } from "@/utils/financeExport";
 import { fetchMembershipTypes } from "@/services/membership/membershipTypes";
@@ -40,6 +42,7 @@ export function PaymentPage() {
 }
 
 function MemberSubscriptionPage() {
+  const tenant = useCurrentTenant();
   const search = Route.useSearch();
   const [statementOpen, setStatementOpen] = useState(false);
   const sub = useMemberSubscription();
@@ -72,7 +75,8 @@ function MemberSubscriptionPage() {
 
   if (sub.isLoading) {
     return (
-      <PageFrame>
+      <PageFrame width="lg">
+        <PaymentContextBar />
         <PageHeader title="Payment" description={PAYMENT_PAGE_DESCRIPTION} />
         <PageBodyLoading label="Loading your dues…" />
       </PageFrame>
@@ -81,7 +85,8 @@ function MemberSubscriptionPage() {
 
   if (!sub.data) {
     return (
-      <PageFrame>
+      <PageFrame width="lg">
+        <PaymentContextBar />
         <PageHeader title="Payment" description="Membership account was not found." />
       </PageFrame>
     );
@@ -99,7 +104,8 @@ function MemberSubscriptionPage() {
   };
 
   return (
-    <PageFrame>
+    <PageFrame width="lg">
+      <PaymentContextBar year={invoiceYear ?? row.year} />
       <PageHeader
         title=""
         description={PAYMENT_PAGE_DESCRIPTION}
@@ -113,7 +119,7 @@ function MemberSubscriptionPage() {
                 type="button"
                 variant="outline"
                 onClick={() => {
-                  if (invoice.data) printHtmlDocument(buildInvoiceHtml(invoice.data));
+                  if (invoice.data) printHtmlDocument(buildInvoiceHtml({ ...invoice.data, ...tenantDocumentBrand(tenant.data) }));
                 }}
               >
                 Print invoice
@@ -124,7 +130,7 @@ function MemberSubscriptionPage() {
                 type="button"
                 variant="outline"
                 onClick={() => {
-                  if (invoice.data) printHtmlDocument(buildInvoiceHtml(invoice.data));
+                  if (invoice.data) printHtmlDocument(buildInvoiceHtml({ ...invoice.data, ...tenantDocumentBrand(tenant.data) }));
                 }}
               >
                 Print receipt
@@ -222,7 +228,8 @@ function ApplicantPaymentPage() {
 
   if (loading) {
     return (
-      <PageFrame>
+      <PageFrame width="lg">
+        <PaymentContextBar />
         <PageHeader
           title="Payment"
           description={PAYMENT_PAGE_DESCRIPTION}
@@ -233,7 +240,8 @@ function ApplicantPaymentPage() {
   }
 
   return (
-    <PageFrame>
+    <PageFrame width="lg">
+      <PaymentContextBar year={sub?.year} />
       <PageBackLink to="/" label="Back to home" />
       <PageHeader
         title="Payment"

@@ -1,9 +1,11 @@
 using System.Security.Cryptography;
+using ClubManagement.Auth;
 using ClubManagement.Data.MembershipApplication;
 using ClubManagement.DTOs.Common;
 using ClubManagement.DTOs.Identity;
 using ClubManagement.Entities;
 using ClubManagement.Entities.Identity;
+using ClubManagement.Entities.Tenancy;
 using ClubManagement.Services.MembershipAccount;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -19,7 +21,7 @@ public interface IUserManagementService
     Task<CreateStaffUserResponse> CreateAsync(CreateStaffUserRequest request, long? actorUserId, CancellationToken cancellationToken);
     Task<UserDetailDto?> UpdateAsync(long userAccountId, UpdateUserRequest request, long? actorUserId, CancellationToken cancellationToken);
     Task<UserDetailDto?> AssignRoleAsync(long userAccountId, string roleCode, long? actorUserId, CancellationToken cancellationToken);
-    Task<UserDetailDto?> AssignRolesAsync(long userAccountId, IReadOnlyList<string> roleCodes, long? actorUserId, CancellationToken cancellationToken);
+    Task<UserDetailDto?> AssignRolesAsync(long userAccountId, IReadOnlyList<string> roleCodes, long? actorUserId, CancellationToken cancellationToken, long? companyId = null);
     Task<UserDetailDto?> ChangeStatusAsync(long userAccountId, string status, long? actorUserId, CancellationToken cancellationToken);
     Task<UserDetailDto?> SetPasswordAsync(long userAccountId, string password, long? actorUserId, CancellationToken cancellationToken);
     Task<InviteResult?> SendResetLinkAsync(long userAccountId, long? actorUserId, CancellationToken cancellationToken);
@@ -45,13 +47,20 @@ public class UserManagementService : IUserManagementService
     private readonly IEmailSender _email;
     private readonly AppPublicOptions _app;
     private readonly IMemberAccountProvisioner _membership;
+    private readonly ITenantContext _tenant;
 
-    public UserManagementService(ApplicationModuleDbContext db, IEmailSender email, IOptions<AppPublicOptions> app, IMemberAccountProvisioner membership)
+    public UserManagementService(
+        ApplicationModuleDbContext db,
+        IEmailSender email,
+        IOptions<AppPublicOptions> app,
+        IMemberAccountProvisioner membership,
+        ITenantContext tenant)
     {
         _db = db;
         _email = email;
         _app = app.Value;
         _membership = membership;
+        _tenant = tenant;
     }
 
     public async Task EnsureSchemaAsync(CancellationToken cancellationToken)
@@ -96,6 +105,7 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
             }
         }
         await _db.SaveChangesAsync(cancellationToken);
+        await DetachAdminFromCompaniesAsync(cancellationToken);
     }
 
     public async Task<PagedResult<UserListItemDto>> ListAsync(string? search, string? status, string? role, PagedRequest paging, CancellationToken cancellationToken)
@@ -127,9 +137,10 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
             query = query.Where(x => x.UserRoles.Any(r => r.Role.Code == roleCode));
         }
 
+        var companies = await LoadCompaniesAsync(cancellationToken);
         return await query
             .OrderBy(x => x.Profile.LastName).ThenBy(x => x.Profile.FirstName)
-            .ToPagedResultAsync(paging, MapList, cancellationToken);
+            .ToPagedResultAsync(paging, user => MapList(user, companies), cancellationToken);
     }
 
     public async Task<IReadOnlyList<RoleOptionDto>> AssignableRolesAsync(CancellationToken cancellationToken)
@@ -147,7 +158,8 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
                 Code = x.Code,
                 Name = x.Name,
                 Description = x.Description,
-                SortOrder = x.SortOrder
+                SortOrder = x.SortOrder,
+                RequiresCompany = CompanyMembership.RequiresCompany(x.Code)
             })
             .ToList();
     }
@@ -155,15 +167,21 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
     public async Task<UserDetailDto?> GetAsync(long userAccountId, CancellationToken cancellationToken)
     {
         var user = await LoadAsync(userAccountId, cancellationToken);
-        return user is null ? null : MapDetail(user);
+        if (user is null) return null;
+        var companies = await LoadCompaniesAsync(cancellationToken);
+        return MapDetail(user, companies);
     }
 
     public async Task<CreateStaffUserResponse> CreateAsync(CreateStaffUserRequest request, long? actorUserId, CancellationToken cancellationToken)
     {
         var roleCodes = NormalizeRoleSet(request.RoleCodes, request.RoleCode, allowApplicant: false);
+        CompanyMembership.EnsureCompatible(roleCodes);
         var email = request.Email.Trim();
         if (string.IsNullOrWhiteSpace(request.FirstName) || string.IsNullOrWhiteSpace(request.LastName) || string.IsNullOrWhiteSpace(email))
             throw new InvalidOperationException("First name, last name and email are required.");
+
+        var companyId = await ResolveCompanyIdAsync(roleCodes, request.CompanyId, existingCompanyId: null, cancellationToken);
+        var stampCompanyId = companyId > 0 ? companyId : CompanyMembership.ExplicitNoCompany;
 
         var needsMembershipNo = RolesRequireMembershipNo(roleCodes);
         var membershipNo = (request.MembershipNo ?? "").Trim();
@@ -183,6 +201,7 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
         var now = DateTime.UtcNow;
         var profile = new MProfile
         {
+            TenantId = stampCompanyId,
             FirstName = request.FirstName.Trim(),
             LastName = request.LastName.Trim(),
             Email = email,
@@ -197,6 +216,7 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
 
         var user = new UserAccount
         {
+            TenantId = stampCompanyId,
             ProfileId = profile.ProfileId,
             Username = username,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(Convert.ToHexString(RandomNumberGenerator.GetBytes(16))),
@@ -255,9 +275,18 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
         var role = await _db.SystemRoles.FirstOrDefaultAsync(x => x.Code == code, cancellationToken)
             ?? throw new InvalidOperationException($"Role '{code}' was not found. Restart the API so roles can seed.");
 
+        var profile = await _db.Profiles.FirstOrDefaultAsync(x => x.ProfileId == profileId, cancellationToken)
+            ?? throw new InvalidOperationException("Member profile was not found.");
+        if (CompanyMembership.RequiresCompany(code) && profile.TenantId <= 0)
+            throw new InvalidOperationException("This member must belong to a company before a portal login can be created.");
+        var companyId = CompanyMembership.IsAdmin(code)
+            ? CompanyMembership.ExplicitNoCompany
+            : profile.TenantId;
+
         var now = DateTime.UtcNow;
         var user = new UserAccount
         {
+            TenantId = companyId,
             ProfileId = profileId,
             Username = userName,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(Convert.ToHexString(RandomNumberGenerator.GetBytes(16))),
@@ -300,8 +329,14 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
         user.Profile.Email = email;
         user.Profile.Mobile = string.IsNullOrWhiteSpace(request.Mobile) ? null : request.Mobile.Trim();
         user.Profile.UpdatedByUserId = actorUserId;
+
+        var currentRoles = user.UserRoles.Select(r => r.Role.Code).ToList();
+        var companyId = await ResolveCompanyIdAsync(currentRoles, request.CompanyId, user.TenantId, cancellationToken);
+        ApplyCompany(user, companyId);
+
         await _db.SaveChangesAsync(cancellationToken);
-        return MapDetail(user);
+        var companies = await LoadCompaniesAsync(cancellationToken);
+        return MapDetail(user, companies);
     }
 
     public async Task<UserDetailDto?> AssignRoleAsync(long userAccountId, string roleCode, long? actorUserId, CancellationToken cancellationToken) =>
@@ -311,12 +346,15 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
         long userAccountId,
         IReadOnlyList<string> roleCodes,
         long? actorUserId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        long? companyId = null)
     {
         var user = await LoadAsync(userAccountId, cancellationToken);
         if (user is null) return null;
 
         var codes = NormalizeRoleSet(roleCodes, null, allowApplicant: true);
+        CompanyMembership.EnsureCompatible(codes);
+        var resolvedCompanyId = await ResolveCompanyIdAsync(codes, companyId, user.TenantId, cancellationToken);
         var roles = await ResolveActiveRolesAsync(codes, cancellationToken);
 
         var current = user.UserRoles.Select(r => r.Role.Code).ToList();
@@ -355,6 +393,7 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
             });
         }
         user.UpdatedByUserId = actorUserId;
+        ApplyCompany(user, resolvedCompanyId);
         await _db.SaveChangesAsync(cancellationToken);
 
         if (codes.Contains("MEMBER", StringComparer.OrdinalIgnoreCase))
@@ -384,7 +423,7 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
         user.IsActive = next == "ACTIVE";
         user.UpdatedByUserId = actorUserId;
         await _db.SaveChangesAsync(cancellationToken);
-        return MapDetail(user);
+        return await GetAsync(userAccountId, cancellationToken);
     }
 
     public async Task<UserDetailDto?> SetPasswordAsync(long userAccountId, string password, long? actorUserId, CancellationToken cancellationToken)
@@ -404,7 +443,7 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
         }
         user.UpdatedByUserId = actorUserId;
         await _db.SaveChangesAsync(cancellationToken);
-        return MapDetail(user);
+        return await GetAsync(userAccountId, cancellationToken);
     }
 
     public async Task<InviteResult?> SendResetLinkAsync(long userAccountId, long? actorUserId, CancellationToken cancellationToken)
@@ -538,27 +577,33 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
             throw new InvalidOperationException("Password must be at least 8 characters.");
     }
 
-    private static UserListItemDto MapList(UserAccount user) => new()
+    private static UserListItemDto MapList(UserAccount user, IReadOnlyDictionary<long, Tenant> companies)
     {
-        UserAccountId = user.UserAccountId,
-        ProfileId = user.ProfileId,
-        Username = user.Username,
-        FullName = string.Join(" ", new[] { user.Profile.FirstName, user.Profile.LastName }.Where(v => !string.IsNullOrWhiteSpace(v))),
-        Email = user.Profile.Email,
-        Mobile = user.Profile.Mobile,
-        AccountStatus = user.AccountStatus,
-        IsActive = user.IsActive,
-        EmailVerified = user.EmailVerifiedAt.HasValue,
-        MustChangePassword = user.MustChangePassword,
-        LastLoginAt = user.LastLoginAt,
-        CreatedAt = user.CreatedAt,
-        // Always expose System_role.code so UI tags and permission checks stay consistent.
-        Roles = user.UserRoles.Where(r => r.Role.IsActive).Select(r => r.Role.Code).Distinct().ToList()
-    };
+        companies.TryGetValue(user.TenantId, out var company);
+        return new UserListItemDto
+        {
+            UserAccountId = user.UserAccountId,
+            ProfileId = user.ProfileId,
+            Username = user.Username,
+            FullName = string.Join(" ", new[] { user.Profile.FirstName, user.Profile.LastName }.Where(v => !string.IsNullOrWhiteSpace(v))),
+            Email = user.Profile.Email,
+            Mobile = user.Profile.Mobile,
+            AccountStatus = user.AccountStatus,
+            IsActive = user.IsActive,
+            EmailVerified = user.EmailVerifiedAt.HasValue,
+            MustChangePassword = user.MustChangePassword,
+            LastLoginAt = user.LastLoginAt,
+            CreatedAt = user.CreatedAt,
+            Roles = user.UserRoles.Where(r => r.Role.IsActive).Select(r => r.Role.Code).Distinct().ToList(),
+            CompanyId = user.TenantId,
+            CompanyCode = company?.Code,
+            CompanyName = company?.Name
+        };
+    }
 
-    private static UserDetailDto MapDetail(UserAccount user)
+    private static UserDetailDto MapDetail(UserAccount user, IReadOnlyDictionary<long, Tenant> companies)
     {
-        var list = MapList(user);
+        var list = MapList(user, companies);
         return new UserDetailDto
         {
             UserAccountId = list.UserAccountId,
@@ -574,9 +619,80 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
             LastLoginAt = list.LastLoginAt,
             CreatedAt = list.CreatedAt,
             Roles = list.Roles,
+            CompanyId = list.CompanyId,
+            CompanyCode = list.CompanyCode,
+            CompanyName = list.CompanyName,
             FirstName = user.Profile.FirstName,
             LastName = user.Profile.LastName,
             Title = user.Profile.Title
         };
+    }
+
+    private async Task<Dictionary<long, Tenant>> LoadCompaniesAsync(CancellationToken cancellationToken) =>
+        await _db.Tenants.AsNoTracking().IgnoreQueryFilters()
+            .ToDictionaryAsync(t => t.TenantId, cancellationToken);
+
+    private async Task<long> ResolveCompanyIdAsync(
+        IReadOnlyList<string> roleCodes,
+        long? requestedCompanyId,
+        long? existingCompanyId,
+        CancellationToken cancellationToken)
+    {
+        if (CompanyMembership.IsAdminOnly(roleCodes))
+            return 0;
+
+        if (!CompanyMembership.RequiresCompany(roleCodes))
+            return existingCompanyId is > 0 ? existingCompanyId.Value : 0;
+
+        var companyId = requestedCompanyId is > 0
+            ? requestedCompanyId.Value
+            : existingCompanyId is > 0
+                ? existingCompanyId.Value
+                : _tenant.TenantId ?? 0;
+        if (companyId <= 0)
+            throw new InvalidOperationException(
+                "Company is required for applicant, member (including Chairman, General Manager, Treasurer, Committee Member), and receptionist accounts.");
+
+        var exists = await _db.Tenants.IgnoreQueryFilters()
+            .AnyAsync(t => t.TenantId == companyId && t.IsActive, cancellationToken);
+        if (!exists)
+            throw new InvalidOperationException("That company is invalid or no longer active.");
+        return companyId;
+    }
+
+    private static void ApplyCompany(UserAccount user, long companyId)
+    {
+        user.TenantId = companyId;
+        if (user.Profile is not null)
+            user.Profile.TenantId = companyId;
+    }
+
+    private async Task DetachAdminFromCompaniesAsync(CancellationToken cancellationToken)
+    {
+        await _db.Database.ExecuteSqlRawAsync(@"
+UPDATE ua
+SET ua.tenant_id = 0
+FROM dbo.User_account ua
+WHERE EXISTS (
+    SELECT 1
+    FROM dbo.User_role ur
+    INNER JOIN dbo.System_role sr ON sr.system_role_id = ur.role_id
+    WHERE ur.user_account_id = ua.user_account_id AND sr.code = N'ADMIN'
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM dbo.User_role ur
+    INNER JOIN dbo.System_role sr ON sr.system_role_id = ur.role_id
+    WHERE ur.user_account_id = ua.user_account_id
+      AND sr.code IN (N'APPLICANT', N'MEMBER', N'GENERAL_MANAGER', N'CHAIRMAN', N'TREASURER', N'COMMITTEE_MEMBER', N'RECEPTIONIST')
+)
+AND ua.tenant_id <> 0;
+
+UPDATE p
+SET p.tenant_id = 0
+FROM dbo.MProfile p
+INNER JOIN dbo.User_account ua ON ua.profile_id = p.profile_id
+WHERE ua.tenant_id = 0 AND p.tenant_id <> 0;
+", cancellationToken);
     }
 }

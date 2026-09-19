@@ -13,6 +13,9 @@ export type ApplicationRow = {
   referenceNumber?: string | null;
   applicationNo?: string | null;
   applicantName?: string | null;
+  companyId?: number | null;
+  companyCode?: string | null;
+  companyName?: string | null;
   statusCode?: string | null;
   statusName?: string | null;
   membershipTypeName?: string | null;

@@ -178,7 +178,6 @@ export function FinanceReportTab({ year }: { year: number }) {
         </Button>
       </div>
 
-      {/* Report Table */}
       <div className="overflow-x-auto rounded-xl border border-border bg-card">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-border bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">

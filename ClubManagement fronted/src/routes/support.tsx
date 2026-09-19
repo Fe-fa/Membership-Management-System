@@ -1,9 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { SupportPage } from "@/pages/admin/SupportPage";
+import { Outlet, createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/support")({
   head: () => ({
-    meta: [{ title: "Applicant Support Center" }],
+    meta: [{ title: "Support" }],
   }),
-  component: SupportPage,
+  component: () => <Outlet />,
 });

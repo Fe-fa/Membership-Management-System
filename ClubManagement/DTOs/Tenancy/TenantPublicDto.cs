@@ -7,4 +7,9 @@ public record TenantPublicDto(
     string? ShortName,
     string? ContactEmail,
     string? ContactPhone,
-    string? AddressLine);
+    string? AddressLine,
+    string? LogoUrl,
+    long? CountryId,
+    string? CountryCode,
+    string? CountryName,
+    string? CurrencyCode);

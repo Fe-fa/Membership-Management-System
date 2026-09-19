@@ -27,7 +27,8 @@ public record RegisterRequest(
     long? ParentAccountId = null,
     string? ParentMembershipNo = null,
     string? ParentFullName = null,
-    DateOnly? DateOfBirth = null);
+    DateOnly? DateOfBirth = null,
+    long? CompanyId = null);
 /// <summary>Sign-in identifier: email (any role) or membership number (members / staff).</summary>
 public record LoginRequest(string Password, string? Login = null, string? Username = null, string? Email = null);
 public record AuthUserDto(
@@ -144,9 +145,18 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("An account with that email already exists.");
 
         var now = DateTime.UtcNow;
+        var companyId = request.CompanyId is > 0 ? request.CompanyId.Value : _tenant.TenantId ?? 0;
+        if (companyId <= 0)
+            throw new InvalidOperationException("Company context is required to register.");
+        var companyExists = await _db.Tenants.IgnoreQueryFilters()
+            .AnyAsync(t => t.TenantId == companyId && t.IsActive, cancellationToken);
+        if (!companyExists)
+            throw new InvalidOperationException("That company is invalid or no longer active.");
+
         var mobile = string.IsNullOrWhiteSpace(request.Mobile) ? guest?.Phone : request.Mobile.Trim();
         var profile = new MProfile
         {
+            TenantId = companyId,
             FirstName = request.FirstName.Trim(),
             LastName = request.LastName.Trim(),
             Email = email,
@@ -170,6 +180,7 @@ public class AuthService : IAuthService
 
         var user = new UserAccount
         {
+            TenantId = companyId,
             ProfileId = profile.ProfileId,
             Username = username,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
@@ -352,6 +363,22 @@ public class AuthService : IAuthService
         var name = string.Join(" ", new[] { user.Profile.Title, user.Profile.FirstName, user.Profile.MiddleName, user.Profile.LastName }
             .Where(v => !string.IsNullOrWhiteSpace(v)));
         var roles = user.UserRoles.Where(r => r.Role.IsActive).Select(r => r.Role.Code).Distinct().ToList();
+        if (CompanyMembership.IsAdminOnly(roles) || user.TenantId <= 0)
+        {
+            return new AuthUserDto(
+                user.UserAccountId,
+                user.ProfileId,
+                user.Username,
+                name,
+                user.Profile.Email,
+                roles,
+                user.MustChangePassword,
+                0,
+                "",
+                "System",
+                user.Profile.PhotoUrl);
+        }
+
         var tenant = _db.Tenants.AsNoTracking().IgnoreQueryFilters()
             .FirstOrDefault(t => t.TenantId == user.TenantId);
         return new AuthUserDto(

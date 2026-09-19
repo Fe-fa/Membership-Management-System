@@ -1,17 +1,19 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { ElectionPage } from "@/pages/member/ElectionPage";
+import { ModuleDashboardPage } from "@/pages/admin/ModuleDashboardPage";
 import { isStaff, readPortalMode, readUser } from "@/lib/auth";
 
+function ElectionIndexPage() {
+  const user = readUser();
+  if (isStaff(user) && readPortalMode(user) === "admin") {
+    return <ModuleDashboardPage moduleId="agm-election" />;
+  }
+  return <ElectionPage />;
+}
+
 export const Route = createFileRoute("/election/")({
-  beforeLoad: () => {
-    if (typeof window === "undefined") return;
-    const user = readUser();
-    if (isStaff(user) && readPortalMode(user) === "admin") {
-      throw redirect({ to: "/election/notice" });
-    }
-  },
   head: () => ({
     meta: [{ title: "AGM/EGM Election" }],
   }),
-  component: ElectionPage,
+  component: ElectionIndexPage,
 });

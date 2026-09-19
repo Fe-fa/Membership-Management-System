@@ -151,8 +151,38 @@ public class FinanceController : ControllerBase
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
-    public record BulkInvoiceRequest(int? Year = null, long[]? AccountIds = null, bool SendEmail = true);
-    public record BulkInvoiceResultDto(int Issued, int Year);
+    public record BulkInvoiceRequest(
+        int? Year = null,
+        long[]? AccountIds = null,
+        bool SendEmail = true,
+        bool PublishToMember = true);
+    public record BulkInvoiceResultDto(
+        int Issued,
+        int Year,
+        int Emailed = 0,
+        int Published = 0,
+        int SkippedNoEmail = 0);
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpGet("invoices/stats")]
+    public async Task<ActionResult<InvoiceRunStatsDto>> InvoiceStats(
+        [FromQuery] int? year,
+        [FromQuery] string? membershipType,
+        CancellationToken cancellationToken) =>
+        Ok(await _finance.GetInvoiceRunStatsAsync(year ?? DateTime.UtcNow.Year, membershipType, cancellationToken));
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpGet("invoices/queue")]
+    public async Task<ActionResult<PagedResult<InvoiceQueueRowDto>>> InvoiceQueue(
+        [FromQuery] PagedRequest paging,
+        [FromQuery] int? year,
+        [FromQuery] string? search,
+        [FromQuery] string? membershipType,
+        CancellationToken cancellationToken) =>
+        Ok(await _finance.ListInvoiceQueueAsync(
+            new SubscriptionListFilter(year, search, ArrearsOnly: true, membershipType),
+            paging,
+            cancellationToken));
 
     [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
     [HttpPost("invoices/bulk")]
@@ -164,13 +194,17 @@ public class FinanceController : ControllerBase
         {
             var year = request?.Year ?? DateTime.UtcNow.Year;
             var sendEmail = request?.SendEmail ?? true;
-            var issued = await _finance.IssueAnnualInvoicesForYearAsync(
+            var publishToMember = request?.PublishToMember ?? true;
+            if (!sendEmail && !publishToMember)
+                return BadRequest(new { message = "Choose email, member dashboard, or both." });
+            var result = await _finance.IssueAnnualInvoicesForYearAsync(
                 year,
                 User.UserId(),
                 sendEmail,
                 cancellationToken,
-                request?.AccountIds);
-            return Ok(new BulkInvoiceResultDto(issued, year));
+                request?.AccountIds,
+                publishToMember);
+            return Ok(new BulkInvoiceResultDto(result.Issued, year, result.Emailed, result.Published, result.SkippedNoEmail));
         }
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }

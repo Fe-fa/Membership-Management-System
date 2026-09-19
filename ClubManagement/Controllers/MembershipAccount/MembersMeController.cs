@@ -97,7 +97,11 @@ public class MembersMeController : ControllerBase
         if (me is null) return NotFound();
         try
         {
-            var invoice = await _finance.GetSubscriptionInvoiceAsync(me.AccountId, year, cancellationToken);
+            var invoice = await _finance.GetSubscriptionInvoiceAsync(
+                me.AccountId,
+                year,
+                cancellationToken,
+                memberPortalOnly: true);
             return invoice is null
                 ? NotFound(new { message = "No invoice has been issued for this year yet." })
                 : Ok(invoice);

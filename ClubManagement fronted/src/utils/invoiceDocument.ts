@@ -1,3 +1,5 @@
+import { clubLogoUrl } from "./clubLogo";
+
 export type InvoiceDocument = {
   invoiceId: number;
   invoiceNo: string;
@@ -15,6 +17,7 @@ export type InvoiceDocument = {
   emailSent: boolean;
   sentToEmail?: string | null;
   clubName?: string | null;
+  clubLogo?: string | null;
   clubAddress?: string | null;
   clubEmail?: string | null;
   clubPhone?: string | null;
@@ -38,20 +41,25 @@ const INVOICE_CSS = `
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      color: #0e2744;
+      color: #1f2554;
       background: #fff;
       font-family: "Segoe UI", Tahoma, sans-serif;
     }
     .invoice-page { page-break-after: always; }
     .invoice-page:last-child { page-break-after: auto; }
     .sheet { max-width: 760px; margin: 0 auto; padding: 0 8px 24px; }
-    .rule { height: 10px; background: #0a2744; }
-    .header { display: flex; justify-content: space-between; gap: 24px; padding: 28px 8px 18px; }
-    .brand { display: flex; align-items: flex-start; gap: 10px; }
-    .brand h1 { margin: 0; font-size: 26px; letter-spacing: -0.02em; }
-    .brand svg { margin-top: 4px; flex-shrink: 0; }
-    .contact { margin: 8px 0 0; color: #4b5563; font-size: 13px; line-height: 1.45; }
-    .masthead { text-align: right; }
+    .rule { height: 8px; background: #c9a46c; }
+    .header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 20px 8px 18px;
+    }
+    .brand { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .brand .logo { display: block; height: 56px; width: auto; margin: 0 auto; }
+    .brand h1 { margin: 0; font-size: 22px; letter-spacing: -0.02em; color: #1f2554; }
+    .contact { margin: 6px 0 0; color: #5b6472; font-size: 13px; line-height: 1.45; }
     .badge {
       display: inline-block;
       margin-bottom: 8px;
@@ -61,37 +69,34 @@ const INVOICE_CSS = `
       font-weight: 700;
       letter-spacing: 0.06em;
     }
-    .badge.unpaid { background: #d1fae5; color: #0f766e; }
-    .badge.partial { background: #e0f2fe; color: #075985; }
+    .badge.unpaid { background: #f4ead8; color: #1f2554; }
+    .badge.partial { background: #e8e6f4; color: #1f2554; }
     .badge.paid { background: #dcfce7; color: #166534; }
-    .wordmark { margin: 0; font-size: 34px; font-weight: 800; letter-spacing: 0.04em; line-height: 1; }
     .inv-no { margin: 8px 0 0; color: #6b7280; font-size: 15px; letter-spacing: 0.04em; }
     .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 32px; padding: 8px 8px 20px; }
     .meta-col { padding-left: 0; }
-    .meta-col + .meta-col { border-left: 1px solid #d1d5db; padding-left: 32px; }
-    .kicker { margin: 0 0 8px; color: #6b7280; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; }
+    .meta-col + .meta-col { border-left: 1px solid #e4d7bf; padding-left: 32px; }
+    .kicker { margin: 0 0 8px; color: #c9a46c; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; }
     .who { margin: 0; font-size: 22px; font-weight: 700; }
     .sub { margin: 6px 0 0; color: #4b5563; font-size: 14px; }
     .dates { margin: 0; font-size: 14px; line-height: 1.7; }
     .total {
       margin: 4px 8px 22px;
       padding: 18px 22px;
-      border: 1px solid #d1d5db;
+      border: 1.5px solid #c9a46c;
       border-radius: 14px;
       font-size: 26px;
       font-weight: 800;
       letter-spacing: 0.01em;
+      color: #1f2554;
     }
     table.lines { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 8px; }
     table.lines th, table.lines td { padding: 12px 16px; font-size: 14px; }
-    table.lines th { background: #0d3a4d; color: #fff; text-align: left; font-weight: 700; }
+    table.lines th { background: #1f2554; color: #fff; text-align: left; font-weight: 700; }
     table.lines th.amt, table.lines td.amt { text-align: right; white-space: nowrap; }
     table.lines td { border-bottom: 1px solid #e5e7eb; }
-    table.lines tr.stripe td { background: #f3f6f8; }
-    table.lines tr.balance td { background: #0d3a4d; color: #fff; font-weight: 700; border: 0; }
-    .pay { padding: 22px 8px 0; }
-    .pay h3 { margin: 0 0 8px; font-size: 14px; letter-spacing: 0.04em; }
-    .pay p { margin: 0; font-size: 14px; line-height: 1.6; }
+    table.lines tr.stripe td { background: #f8f4ec; }
+    table.lines tr.balance td { background: #1f2554; color: #fff; font-weight: 700; border: 0; }
     .note { padding: 18px 8px 0; color: #6b7280; font-size: 13px; font-style: italic; line-height: 1.5; }
 `;
 
@@ -161,20 +166,11 @@ function invoiceSheetInnerHtml(invoice: InvoiceDocument) {
   return `<div class="rule"></div>
   <div class="sheet">
     <div class="header">
-      <div>
-        <div class="brand">
-          <h1>${escapeHtml(clubName)}</h1>
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M2 16l8-3 3-8 2 6 7 2-7 2-2 7-3-8-8 3z" fill="#0a2744"/>
-          </svg>
-        </div>
-        <p class="contact">${escapeHtml(address)}<br />${escapeHtml(email)} | ${escapeHtml(phone)}</p>
+      <div class="brand">
+        <img class="logo" src="${escapeHtml(clubLogoUrl(invoice.clubLogo))}" alt="${escapeHtml(clubName)}" />
+        <h1>${escapeHtml(clubName)}</h1>
       </div>
-      <div class="masthead">
-        <span class="badge ${statusClass}">${status}</span>
-        <p class="wordmark">INVOICE</p>
-        <p class="inv-no">${escapeHtml(invoice.invoiceNo)}</p>
-      </div>
+      <p class="contact">${escapeHtml(address)}<br />${escapeHtml(email)} | ${escapeHtml(phone)}</p>
     </div>
     <div class="meta">
       <div class="meta-col">
@@ -185,9 +181,9 @@ function invoiceSheetInnerHtml(invoice: InvoiceDocument) {
       <div class="meta-col">
         <p class="kicker">INVOICE DETAILS</p>
         <p class="dates">Date Issued: ${escapeHtml(invoiceDate(invoice.issuedAt))}<br />Due Date: ${escapeHtml(invoiceDate(invoice.dueDate))}</p>
+        <p class="inv-no">${escapeHtml(invoice.invoiceNo)}</p>
       </div>
     </div>
-    <div class="total">TOTAL DUE: Ksh ${escapeHtml(money(invoice.balance))}</div>
     <table class="lines">
       <thead>
         <tr>
@@ -210,14 +206,6 @@ function invoiceSheetInnerHtml(invoice: InvoiceDocument) {
         </tr>
       </tbody>
     </table>
-    <div class="pay">
-      <h3>HOW TO PAY</h3>
-      <p>
-        M-Pesa Paybill ${escapeHtml(paybill)}<br />
-        Bank: ${escapeHtml(bankName)} · Account ${escapeHtml(bankAccount)}
-      </p>
-    </div>
-    <p class="note">One invoice is issued per member per year. Partial payments reduce the balance due.</p>
   </div>`;
 }
 
@@ -241,13 +229,13 @@ export function buildInvoiceHtml(invoice: InvoiceDocument) {
 
 export function buildInvoicePrintHtml(invoices: InvoiceDocument[]) {
   if (invoices.length === 0) return wrapInvoiceDocument("Invoices", "");
-  if (invoices.length === 1) return buildInvoiceHtml(invoices[0]);
+  if (invoices.length === 1) return buildInvoiceHtml(invoices[0]!);
   const sheets = invoices
     .map((invoice) => `<div class="invoice-page">${invoiceSheetInnerHtml(invoice)}</div>`)
     .join("\n");
   const title =
     invoices.length === 1
-      ? invoices[0].invoiceNo
+      ? invoices[0]!.invoiceNo
       : `${invoices.length} invoices`;
   return wrapInvoiceDocument(title, sheets);
 }

@@ -64,11 +64,13 @@ export const StepReview = memo(function StepReview({
   sectionStatus,
   onEdit,
   hideSteps = [],
+  hidePaymentUploads = false,
 }: {
   draft: ApplicationDraft;
   sectionStatus: Record<Exclude<StepId, "review">, boolean>;
   onEdit: (step: StepId) => void;
   hideSteps?: StepId[];
+  hidePaymentUploads?: boolean;
 }) {
   const hidden = useMemo(() => new Set(hideSteps), [hideSteps]);
 
@@ -80,6 +82,7 @@ export const StepReview = memo(function StepReview({
     const age = ageOn(p.dateOfBirth);
     const omitSupporters = hidden.has("supporters");
     const omitConsent = hidden.has("consent");
+    const omitPaymentUploads = hidePaymentUploads;
 
     const supporter = (key: "proposer" | "seconder"): Row[] => {
       const s = draft.supporters[key] as Record<string, unknown>;
@@ -123,8 +126,12 @@ export const StepReview = memo(function StepReview({
           { label: "Photo", value: dash(p.photo?.fileName) },
           { label: "CV", value: dash(p.cv?.fileName) },
           { label: "ID / Passport copy", value: dash(p.idPassport?.fileName) },
-          { label: "1. Annual subscription cheque", value: dash(p.annualCheque?.fileName) },
-          { label: "2. Joining fee / entrance fee cheque", value: dash(p.joiningCheque?.fileName) },
+          ...(omitPaymentUploads
+            ? []
+            : [
+                { label: "1. Annual subscription cheque", value: dash(p.annualCheque?.fileName) },
+                { label: "2. Joining fee / entrance fee cheque", value: dash(p.joiningCheque?.fileName) },
+              ]),
         ],
       },
       {
@@ -231,7 +238,7 @@ export const StepReview = memo(function StepReview({
             },
           ]),
     ];
-  }, [draft, hidden]);
+  }, [draft, hidden, hidePaymentUploads]);
 
   const seconderRows = useMemo(() => {
     if (hidden.has("supporters")) return null;

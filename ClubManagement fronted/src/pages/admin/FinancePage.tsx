@@ -6,7 +6,6 @@ import {
   Banknote,
   Check,
   Download,
-  FileText,
   Loader2,
   MoreHorizontal,
   Plus,
@@ -59,12 +58,9 @@ import { apiRequest, extractErrorMessage } from "@/services/membership/api";
 import { useLookup } from "@/services/membership/lookups";
 import { DEFAULT_PAGE_SIZE, emptyPage, pagedQuery, type PagedResult } from "@/lib/pagination";
 import {
-  buildInvoiceHtml,
   downloadExcelCsv,
-  printHtmlDocument,
   printHtmlReport,
   rowsToTableHtml,
-  type InvoiceDocument,
 } from "@/utils/financeExport";
 import { formatKes } from "@/utils/format";
 import { cn } from "@/utils/cn";
@@ -282,8 +278,6 @@ export function FinancePage() {
   const [reverseRow, setReverseRow] = useState<PaymentRow | null>(null);
   const [reverseReason, setReverseReason] = useState("");
   const [statementOpen, setStatementOpen] = useState(false);
-  const [invoiceBusyId, setInvoiceBusyId] = useState<number | null>(null);
-  const [invoiceBusy, setInvoiceBusy] = useState(false);
   const [receiptTxId, setReceiptTxId] = useState<number | null>(null);
   const [desk, setDesk] = useState<DeskTab>("pending");
   const [year, setYear] = useState(String(currentYear));
@@ -297,10 +291,8 @@ export function FinancePage() {
   const [subPage, setSubPage] = useState(1);
   const [subPageSize, setSubPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [selectedPayments, setSelectedPayments] = useState<Record<number, PaymentRow>>({});
-  const [selectedSubs, setSelectedSubs] = useState<Record<number, SubRow>>({});
   const [exportBusy, setExportBusy] = useState(false);
   const selectedPaymentIds = Object.values(selectedPayments).map((r) => r.transactionId);
-  const selectedSubIds = Object.values(selectedSubs).map((r) => r.subscriptionId);
   const [settlementOpen, setSettlementOpen] = useState(false);
   const [renewalBusy, setRenewalBusy] = useState(false);
   const [lastRenewal, setLastRenewal] = useState<RenewalRunResult | null>(null);
@@ -485,55 +477,6 @@ export function FinancePage() {
     onSettled: () => setBusyId(null),
   });
 
-  async function issueInvoice(row: SubRow, printAfter = false) {
-    try {
-      setInvoiceBusyId(row.subscriptionId);
-      const doc = await apiRequest<InvoiceDocument>(
-        `/api/finance/invoices/${row.accountId}?year=${row.year}&sendEmail=true`,
-        { method: "POST" },
-      );
-      toast.success(
-        doc.emailSent
-          ? `Invoice ${doc.invoiceNo} issued and emailed.`
-          : `Invoice ${doc.invoiceNo} issued. The member can print it from Payment.`,
-      );
-      if (printAfter) printHtmlDocument(buildInvoiceHtml(doc));
-    } catch (err) {
-      toast.error(extractErrorMessage(err));
-    } finally {
-      setInvoiceBusyId(null);
-    }
-  }
-
-  async function generateArrearsInvoices() {
-    const accountIds = [...new Set(Object.values(selectedSubs).map((r) => r.accountId))];
-    try {
-      setInvoiceBusy(true);
-      const result = await apiRequest<{ issued: number; year: number }>(
-        "/api/finance/invoices/bulk",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            year: yearNum,
-            sendEmail: true,
-            ...(accountIds.length > 0 ? { accountIds } : {}),
-          }),
-        },
-      );
-      toast.success(
-        accountIds.length > 0
-          ? `${result.issued} invoice(s) generated for the selected member(s). They will see Print invoice on Payment.`
-          : `${result.issued} invoice(s) generated for members in arrears for ${result.year}. Members will see Print invoice after this.`,
-      );
-      setSelectedSubs({});
-      await refreshDesk();
-    } catch (err) {
-      toast.error(extractErrorMessage(err));
-    } finally {
-      setInvoiceBusy(false);
-    }
-  }
-
   async function runAnnualRenewal() {
     try {
       setRenewalBusy(true);
@@ -572,12 +515,10 @@ export function FinancePage() {
     setPaymentPage(1);
     setSubPage(1);
     setSelectedPayments({});
-    setSelectedSubs({});
   }
 
   useEffect(() => {
     setSelectedPayments({});
-    setSelectedSubs({});
   }, [desk, membershipTypeFilter, methodFilter, feeTypeFilter, yearNum]);
 
   async function fetchAllPaymentsForExport(status: "PENDING" | "SETTLED") {
@@ -993,32 +934,6 @@ export function FinancePage() {
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
 
             <div className="flex flex-wrap gap-2">
-              {/* {canRunPosting ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={renewalBusy}
-                  onClick={() => void runAnnualRenewal()}
-                >
-                  {renewalBusy ? <Loader2 className="size-4 animate-spin" /> : null}
-                  Run annual renewal · {yearNum}
-                </Button>
-              ) : null} */}
-              {canAdjustLedger ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={invoiceBusy || subs.isLoading}
-                  onClick={() => void generateArrearsInvoices()}
-                >
-                  {invoiceBusy ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />}
-                  {selectedSubIds.length > 0
-                    ? `Generate invoices (${selectedSubIds.length})`
-                    : "Generate invoices"}
-                </Button>
-              ) : null}
               <Button
                 type="button"
                 size="sm"
@@ -1036,29 +951,9 @@ export function FinancePage() {
           ) : (
             <>
               <div className="overflow-x-auto rounded-lg border border-slate-200">
-                <table className="w-full min-w-[980px] text-sm">
+                <table className="w-full min-w-[860px] text-sm">
                   <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
-                      <th className="w-10 p-2">
-                        <input
-                          type="checkbox"
-                          aria-label="Select all arrears"
-                          checked={
-                            subPageData.items.length > 0
-                            && subPageData.items.every((r) => selectedSubIds.includes(r.subscriptionId))
-                          }
-                          onChange={(e) => {
-                            setSelectedSubs((prev) =>
-                              setRecordPage(
-                                prev,
-                                subPageData.items,
-                                (r) => r.subscriptionId,
-                                e.target.checked,
-                              ),
-                            );
-                          }}
-                        />
-                      </th>
                       <th className="p-2">Member</th>
                       <th className="p-2">Membership type</th>
                       <th className="p-2">Due</th>
@@ -1072,18 +967,6 @@ export function FinancePage() {
                     {subPageData.items.map((row) => (
                       <tr key={row.subscriptionId} className="border-t border-border">
                         <td className="p-2">
-                          <input
-                            type="checkbox"
-                            aria-label={`Select ${row.membershipNo}`}
-                            checked={selectedSubIds.includes(row.subscriptionId)}
-                            onChange={(e) => {
-                              setSelectedSubs((prev) =>
-                                setRecordEntry(prev, row.subscriptionId, row, e.target.checked),
-                              );
-                            }}
-                          />
-                        </td>
-                        <td className="p-2">
                           {row.membershipNo} · {row.memberName}
                         </td>
                         <td className="p-2">{row.membershipNo ? (row.membershipType || row.membershipTypeCode || "—") : "—"}</td>
@@ -1094,37 +977,19 @@ export function FinancePage() {
                         </td>
                         <td className="p-2">{row.accountStatus || row.status}</td>
                         <td className="p-2 text-right">
-                          <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
-                            {canAdjustLedger ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled={invoiceBusyId === row.subscriptionId}
-                                onClick={() => void issueInvoice(row)}
-                              >
-                                {invoiceBusyId === row.subscriptionId ? (
-                                  <Loader2 className="size-4 animate-spin" />
-                                ) : (
-                                  <FileText className="size-4" />
-                                )}
-                                Invoice
-                              </Button>
-                            ) : null}
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              onClick={() =>
-                                printArrearsRows(
-                                  [row],
-                                  `Arrears · ${row.membershipNo} · ${row.memberName}`,
-                                )
-                              }
-                            >
-                              Print
-                            </Button>
-                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              printArrearsRows(
+                                [row],
+                                `Arrears · ${row.membershipNo} · ${row.memberName}`,
+                              )
+                            }
+                          >
+                            Print
+                          </Button>
                         </td>
                       </tr>
                     ))}

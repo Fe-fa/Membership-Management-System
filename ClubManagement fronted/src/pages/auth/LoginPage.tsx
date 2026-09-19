@@ -1,8 +1,8 @@
 ﻿import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { Plane } from "lucide-react";
 import { toast } from "sonner";
 
+import { ClubLogo } from "@/components/brand/ClubLogo";
 import { Button } from "@/components/ui/button";
 import { TENANT_CODE } from "@/config/env";
 import { persistSession, homePathForUser, type AuthResponse } from "@/lib/auth";
@@ -45,10 +45,8 @@ export function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <form onSubmit={onSubmit} className="w-full max-w-md space-y-6 rounded-2xl border border-border bg-card p-8 shadow-sm">
-        <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-lg bg-primary text-primary-foreground">
-            <Plane className="size-5 -rotate-45" />
-          </span>
+        <div className="space-y-4">
+          <ClubLogo className="h-12" />
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
               {clubName}
@@ -84,7 +82,10 @@ export function LoginPage() {
           {busy ? "Signing in…" : "Sign in"}
         </Button>
         <p className="text-sm text-muted-foreground">
-          New applicant? <Link to="/register" className="text-primary underline">Create an account</Link>
+          New applicant?{" "}
+          <Link to="/apply/$companySlug" params={{ companySlug: "aero-club" }} className="text-primary underline">
+            Create an account
+          </Link>
         </p>
       </form>
     </div>

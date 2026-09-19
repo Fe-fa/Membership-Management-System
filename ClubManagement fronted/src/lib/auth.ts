@@ -1,3 +1,4 @@
+import { applyTenantCode } from "@/services/applyCompany";
 import { TENANT_CODE } from "@/config/env";
 
 const TOKEN_KEY = "acea.auth.token";
@@ -124,7 +125,7 @@ export function clearSession() {
 
 export function authHeaders(): Record<string, string> {
   const token = readToken();
-  const headers: Record<string, string> = { "X-Tenant-Code": TENANT_CODE };
+  const headers: Record<string, string> = { "X-Tenant-Code": applyTenantCode() || TENANT_CODE };
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
 }
@@ -159,6 +160,7 @@ function classifyPath(pathname: string): "public" | "admin" | "member" | "applic
   if (
     pathname === "/login" ||
     pathname === "/register" ||
+    pathname.startsWith("/apply/") ||
     pathname === "/set-password"
   ) {
     return "public";
@@ -173,6 +175,8 @@ function classifyPath(pathname: string): "public" | "admin" | "member" | "applic
     pathname === "/register-member" ||
     pathname === "/user-management" ||
     pathname.startsWith("/user-management/") ||
+    pathname === "/club-setup" ||
+    pathname.startsWith("/club-setup/") ||
     pathname === "/finance" ||
     pathname.startsWith("/finance/") ||
     pathname === "/manage-committee" ||
@@ -274,11 +278,36 @@ export function homePathForUser(user: AuthUser | null): "/" | "/admin" | "/recep
   return "/";
 }
 
+function normalizeRoleCodes(roleCodes: string | string[]) {
+  return (Array.isArray(roleCodes) ? roleCodes : [roleCodes]).map((c) => c.trim().toUpperCase());
+}
+
+/** Applicant, member/officer hats, and receptionist must belong to a company. Admin does not. */
+export const COMPANY_REQUIRED_ROLES = [
+  "APPLICANT",
+  "MEMBER",
+  "GENERAL_MANAGER",
+  "CHAIRMAN",
+  "TREASURER",
+  "COMMITTEE_MEMBER",
+  "RECEPTIONIST",
+] as const;
+
+export function roleRequiresCompany(roleCodes: string | string[]) {
+  const codes = normalizeRoleCodes(roleCodes);
+  return codes.some((code) =>
+    (COMPANY_REQUIRED_ROLES as readonly string[]).includes(code),
+  );
+}
+
+export function roleIsAdminWithoutCompany(roleCodes: string | string[]) {
+  const codes = normalizeRoleCodes(roleCodes);
+  return codes.includes("ADMIN") && !roleRequiresCompany(codes);
+}
+
 /** True if any selected role needs a club membership number (Admin / Receptionist do not). */
 export function roleRequiresMembershipNo(roleCodes: string | string[]) {
-  const codes = (Array.isArray(roleCodes) ? roleCodes : [roleCodes]).map((c) =>
-    c.trim().toUpperCase(),
-  );
+  const codes = normalizeRoleCodes(roleCodes);
   if (codes.length === 0) return false;
   return codes.some(
     (code) =>

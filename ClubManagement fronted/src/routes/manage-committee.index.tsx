@@ -1,4 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
+import { ModuleDashboardPage } from "@/pages/admin/ModuleDashboardPage";
 
 export const Route = createFileRoute("/manage-committee/")({
   validateSearch: (search: Record<string, unknown>) => {
@@ -18,6 +19,9 @@ export const Route = createFileRoute("/manage-committee/")({
     if (search.section === "meetings") {
       throw redirect({ to: "/manage-committee/meetings/pending" });
     }
-    throw redirect({ to: "/manage-committee/new-term" });
   },
+  head: () => ({
+    meta: [{ title: "Committee dashboard" }],
+  }),
+  component: () => <ModuleDashboardPage moduleId="committee-manage" />,
 });

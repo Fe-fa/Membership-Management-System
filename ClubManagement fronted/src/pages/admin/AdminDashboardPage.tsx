@@ -31,9 +31,10 @@ export function AdminDashboardPage() {
 
   const visibleModules = ADMIN_MODULES.filter((module) => {
     if (permissions.data) {
-      return canViewModule(permissions.data, module.id, user.roles);
+      const inMatrix = permissions.data.modules.some((row) => row.moduleId === module.id);
+      if (inMatrix) return canViewModule(permissions.data, module.id, user.roles);
     }
-    // Fallback if API unavailable after load.
+    // Fallback if API is unavailable or the catalog has a new module not yet stored.
     return !module.roles || hasAnyRole(user, module.roles);
   });
 

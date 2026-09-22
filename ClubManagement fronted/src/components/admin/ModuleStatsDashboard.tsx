@@ -19,7 +19,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { ModuleDashboardModel } from "@/services/admin/moduleDashboard";
+import type { DashboardKpi, ModuleDashboardModel } from "@/services/admin/moduleDashboard";
 import { cn } from "@/utils/cn";
 import { formatDate } from "@/utils/format";
 
@@ -62,6 +62,36 @@ function ChartCard({ title, children, className }: { title: string; children: Re
   );
 }
 
+export function DashboardKpiRow({ kpis }: { kpis: DashboardKpi[] }) {
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {kpis.map((kpi) => {
+        const Icon = kpi.icon;
+        return (
+          <article
+            key={kpi.id}
+            className="flex items-center gap-3 rounded-xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200/80"
+          >
+            <span className={cn("grid size-11 shrink-0 place-items-center rounded-full", KPI_TONE[kpi.tone])}>
+              <Icon className="size-5" strokeWidth={1.75} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-2xl font-semibold leading-none text-slate-800">{kpi.value}</p>
+              <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{kpi.label}</p>
+            </div>
+            <Sparkline
+              values={kpi.spark}
+              className={
+                kpi.tone === "rose" ? "text-rose-400" : kpi.tone === "emerald" ? "text-emerald-400" : "text-sky-400"
+              }
+            />
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ModuleStatsDashboard({ model }: { model: ModuleDashboardModel }) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -82,28 +112,7 @@ export function ModuleStatsDashboard({ model }: { model: ModuleDashboardModel })
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {model.kpis.map((kpi) => {
-          const Icon = kpi.icon;
-          return (
-            <article key={kpi.id} className="flex items-center gap-3 rounded-xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200/80">
-              <span className={cn("grid size-11 shrink-0 place-items-center rounded-full", KPI_TONE[kpi.tone])}>
-                <Icon className="size-5" strokeWidth={1.75} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-2xl font-semibold leading-none text-slate-800">{kpi.value}</p>
-                <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{kpi.label}</p>
-              </div>
-              <Sparkline
-                values={kpi.spark}
-                className={
-                  kpi.tone === "rose" ? "text-rose-400" : kpi.tone === "emerald" ? "text-emerald-400" : "text-sky-400"
-                }
-              />
-            </article>
-          );
-        })}
-      </div>
+      <DashboardKpiRow kpis={model.kpis} />
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[22rem_minmax(0,1fr)]">
         <ChartCard title={model.ratioTitle}>

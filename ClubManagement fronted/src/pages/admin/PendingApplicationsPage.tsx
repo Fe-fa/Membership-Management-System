@@ -1,13 +1,16 @@
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient, useQueries } from "@tanstack/react-query";
-import { useMemo, useState, useEffect, type ReactNode } from "react";
+import { useMemo, useState, useEffect, useRef, type ReactNode } from "react";
 import {
   BadgeCheck,
   ChevronDown,
   ChevronLeft,
+  Download,
+  FileUp,
   Loader2,
   Lock,
   Pencil,
+  Printer,
   RotateCcw,
   Search,
   Trash2,
@@ -16,10 +19,13 @@ import {
 import { toast } from "sonner";
 
 import { ManagerStagePanel, type ManagerReadiness, type PaymentRow } from "@/components/admin/ManagerStagePanel";
+import { DashboardKpiRow } from "@/components/admin/ModuleStatsDashboard";
 import { RejectApplicationDialog } from "@/components/admin/RejectApplicationDialog";
 import { ListPagination } from "@/components/common/ListPagination";
 import { PageBackLink, PageFrame, PageHeader } from "@/components/layout/PageFrame";
 import { PageDataGate } from "@/components/layout/PageLoading";
+import { ADMIN_OVERVIEW_QUERY_KEY, fetchAdminOverview } from "@/services/admin/dashboardData";
+import { applicantQueueKpis } from "@/services/admin/moduleDashboard";
 import { ApplicantReview, parseApplicationDraft } from "@/components/panels/ApplicantReview";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,6 +45,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   applicantDisplayName,
   applicationProgress,
@@ -55,14 +68,12 @@ import { isAuthenticated } from "@/lib/auth";
 import { apiRequest, extractErrorMessage } from "@/services/membership/api";
 import { DEFAULT_PAGE_SIZE, emptyPage, pagedQuery, type PagedResult } from "@/lib/pagination";
 import { cn } from "@/utils/cn";
-
-const MISSING_FILTERS = [
-  { id: "any", label: "Any" },
-  { id: "incomplete", label: "Incomplete sections" },
-  { id: "payment", label: "Missing payment" },
-  { id: "sponsor", label: "Missing sponsor" },
-  { id: "complete", label: "All pre-requisites met" },
-] as const;
+import {
+  downloadApplicationImportTemplate,
+  downloadApplicationsExcel,
+  parseApplicationImportFile,
+  printApplications,
+} from "@/utils/applicationDeskExport";
 
 const MANAGER_MISSING_FILTERS = [
   { id: "any", label: "Any" },
@@ -71,9 +82,7 @@ const MANAGER_MISSING_FILTERS = [
   { id: "complete", label: "Ready to authorize" },
 ] as const;
 
-type MissingFilter =
-  | (typeof MISSING_FILTERS)[number]["id"]
-  | (typeof MANAGER_MISSING_FILTERS)[number]["id"];
+type MissingFilter = (typeof MANAGER_MISSING_FILTERS)[number]["id"];
 
 function initials(name: string) {
   const parts = name.split(/\s+/).filter(Boolean);
@@ -234,7 +243,6 @@ function isSponsorOk(row: ApplicationRow) {
   );
 }
 
-/** Endorsement stage cannot advance until proposer + seconder have both endorsed. */
 function needsCompleteSponsors(statusCode?: string | null) {
   return statusCode === "Endorsement" || statusCode === "EndorsementReview";
 }
@@ -364,7 +372,7 @@ export function PendingApplicationsPage() {
       : "Track applicants through screening.";
 
   return (
-    <PageFrame width="lg">
+    <PageFrame width="lg" className="max-w-[1400px]">
       <PageBackLink to="/admin" label="Back to admin dashboard" />
       {/* <PageHeader
         title={title}
@@ -401,6 +409,9 @@ function PendingApplicationsPanel({
   const [verifyingId, setVerifyingId] = useState<number | null>(null);
   const [viewingFullDetails, setViewingFullDetails] = useState(false);
   const [rejectTarget, setRejectTarget] = useState<ApplicationRow | null>(null);
+  const [selected, setSelected] = useState<Record<number, ApplicationRow>>({});
+  const [exportBusy, setExportBusy] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   // Pending view shows the queue table; history view shows the previously
   // authorized list. Auto-verification panel only appears in pending view.
@@ -411,12 +422,16 @@ function PendingApplicationsPanel({
       page,
       pageSize,
       search,
+      dateFrom,
+      dateTo,
     ],
     queryFn: () => {
       const params = pagedQuery({
         page,
         pageSize,
         search: search.trim() || undefined,
+        fromDate: dateFrom || undefined,
+        toDate: dateTo || undefined,
       });
       if (showHistoryOnly) {
         return apiRequest<PagedResult<ApplicationRow>>(`/api/applications/manager-history?${params}`);
@@ -430,6 +445,12 @@ function PendingApplicationsPanel({
   });
 
   const pageData = data ?? emptyPage<ApplicationRow>(page, pageSize);
+  const showQueueStats = !authorize && !manager;
+  const overview = useQuery({
+    queryKey: ADMIN_OVERVIEW_QUERY_KEY,
+    queryFn: fetchAdminOverview,
+    enabled: isAuthenticated() && showQueueStats,
+  });
 
   const classOptions = useMemo(() => {
     const names = new Set<string>();
@@ -439,48 +460,197 @@ function PendingApplicationsPanel({
     return [...names].sort();
   }, [pageData.items]);
 
-  const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return pageData.items.filter((row) => {
-      if (showHistoryOnly) {
-        // History list is already pre-filtered server-side.
-      } else if (!manager && authorize) {
-        if (!isReviewStatus(row.statusCode) && row.statusCode !== "Approved") return false;
-      } else if (
-        !manager &&
-        !authorize &&
-        (isReviewStatus(row.statusCode) || row.statusCode === "Approved")
-      ) {
-        return false;
-      }
-      if (
-        !manager &&
-        (row.statusCode === "Draft" || row.statusCode === "Withdrawn")
-      ) {
-        return false;
-      }
-
-      if (classes.length > 0 && !classes.includes(row.membershipTypeName ?? "")) return false;
-
-      if (missing === "incomplete" && isSectionsComplete(row)) return false;
+  const matchesDeskFilters = (row: ApplicationRow) => {
+    if (showHistoryOnly) {
+      // History list is already pre-filtered server-side.
+    } else if (!manager && authorize) {
+      if (!isReviewStatus(row.statusCode) && row.statusCode !== "Approved") return false;
+    } else if (
+      !manager &&
+      !authorize &&
+      (isReviewStatus(row.statusCode) || row.statusCode === "Approved")
+    ) {
+      return false;
+    }
+    if (!manager && (row.statusCode === "Draft" || row.statusCode === "Withdrawn")) return false;
+    if (classes.length > 0 && !classes.includes(row.membershipTypeName ?? "")) return false;
+    if (manager) {
       if (missing === "payment" && isPaymentOk(row)) return false;
-      if (missing === "sponsor" && isSponsorOk(row)) return false;
       if (missing === "details" && isMemberDetailsOk(row)) return false;
       if (missing === "complete" && !isReadyToAuthorize(row)) return false;
+    }
+    const applied = dayStamp(row.appliedAt);
+    if (dateFrom && (!applied || applied < dateFrom)) return false;
+    if (dateTo && (!applied || applied > dateTo)) return false;
+    const query = search.trim().toLowerCase();
+    if (query) {
+      const haystack = `${applicantDisplayName(row)} ${applicationReference(row)}`.toLowerCase();
+      if (!haystack.includes(query)) return false;
+    }
+    return true;
+  };
 
-      const updated = dayStamp(row.updatedAt || row.appliedAt);
-      if (dateFrom && updated && updated < dateFrom) return false;
-      if (dateTo && updated && updated > dateTo) return false;
-
-      if (query) {
-        const haystack = `${applicantDisplayName(row)} ${applicationReference(row)}`.toLowerCase();
-        if (!haystack.includes(query)) return false;
-      }
-      return true;
-    });
-  }, [authorize, classes, dateFrom, dateTo, manager, missing, pageData.items, search, showHistoryOnly]);
+  const filtered = useMemo(
+    () => pageData.items.filter(matchesDeskFilters),
+    // matchesDeskFilters closes over the current filter state used below.
+    [authorize, classes, dateFrom, dateTo, manager, missing, pageData.items, search, showHistoryOnly],
+  );
 
   const rows = filtered;
+  const showDeskTools = !manager;
+  const selectedRows = Object.values(selected);
+  const selectedCount = selectedRows.length;
+  const allOnPageSelected = rows.length > 0 && rows.every((row) => Boolean(selected[row.applicationId]));
+  const someOnPageSelected = rows.some((row) => Boolean(selected[row.applicationId]));
+
+  async function fetchAllMatchingApplications() {
+    const collected: ApplicationRow[] = [];
+    let pageNum = 1;
+    let totalPages = 1;
+    do {
+      const params = pagedQuery({
+        page: pageNum,
+        pageSize: 100,
+        search: search.trim() || undefined,
+        fromDate: dateFrom || undefined,
+        toDate: dateTo || undefined,
+      });
+      const path = showHistoryOnly
+        ? `/api/applications/manager-history?${params}`
+        : manager
+          ? `/api/applications/manager-queue?${params}`
+          : `/api/applications?${params}`;
+      const result = await apiRequest<PagedResult<ApplicationRow>>(path);
+      collected.push(...result.items);
+      totalPages = Math.max(1, result.totalPages || 1);
+      pageNum += 1;
+    } while (pageNum <= totalPages);
+    return collected.filter(matchesDeskFilters);
+  }
+
+  function printRows(list: ApplicationRow[], title: string) {
+    if (list.length === 0) {
+      toast.error("Nothing to print.");
+      return;
+    }
+    const ok = printApplications(title, list);
+    if (!ok) toast.error("Could not open the print dialog. Try again.");
+  }
+
+  function exportRows(list: ApplicationRow[], filename: string) {
+    if (list.length === 0) {
+      toast.error("Nothing to export.");
+      return;
+    }
+    downloadApplicationsExcel(filename, list);
+    toast.success(`Downloaded ${list.length} application(s).`);
+  }
+
+  async function handlePrint() {
+    try {
+      setExportBusy(true);
+      if (selectedCount > 0) {
+        printRows(selectedRows, `Applications · selected (${selectedCount})`);
+        return;
+      }
+      const all = await fetchAllMatchingApplications();
+      printRows(all, "Pending applications");
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setExportBusy(false);
+    }
+  }
+
+  async function handleDownloadExcel() {
+    try {
+      setExportBusy(true);
+      if (selectedCount > 0) {
+        exportRows(selectedRows, `applications-selected-${selectedCount}.csv`);
+        return;
+      }
+      const all = await fetchAllMatchingApplications();
+      exportRows(all, "pending-applications.csv");
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setExportBusy(false);
+    }
+  }
+
+  async function handleSelectAllMatching() {
+    try {
+      setExportBusy(true);
+      const all = await fetchAllMatchingApplications();
+      const next: Record<number, ApplicationRow> = {};
+      for (const row of all) next[row.applicationId] = row;
+      setSelected(next);
+      toast.success(`Selected ${all.length} application(s).`);
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setExportBusy(false);
+    }
+  }
+
+  async function handleImportFile(file: File) {
+    if (file.name.toLowerCase().endsWith(".xlsx") || file.name.toLowerCase().endsWith(".xls")) {
+      toast.error("Save the workbook as CSV in Excel, then import that file.");
+      return;
+    }
+    try {
+      setExportBusy(true);
+      const text = await file.text();
+      const incoming = parseApplicationImportFile(text);
+      if (incoming.length === 0) {
+        toast.error("No applicant rows found. Use the template (FirstName, LastName, Email, Mobile, MembershipClass).");
+        return;
+      }
+      let created = 0;
+      const failures: string[] = [];
+      for (const row of incoming) {
+        try {
+          const profile = await apiRequest<{ profileId: number }>("/api/profiles", {
+            method: "POST",
+            body: JSON.stringify({
+              firstName: row.firstName,
+              lastName: row.lastName,
+              email: row.email || undefined,
+              mobile: row.mobile || undefined,
+            }),
+          });
+          await apiRequest("/api/applications", {
+            method: "POST",
+            body: JSON.stringify({
+              applicantProfileId: profile.profileId,
+              formDataJson: JSON.stringify({
+                personal: {
+                  firstName: row.firstName,
+                  lastName: row.lastName,
+                  email: row.email,
+                  mobile: row.mobile,
+                },
+                membership: { membershipType: row.membershipClass || "Full Membership" },
+              }),
+              completedSteps: ["personal"],
+            }),
+          });
+          created += 1;
+        } catch (err) {
+          failures.push(`${row.firstName} ${row.lastName}: ${extractErrorMessage(err)}`);
+        }
+      }
+      void queryClient.invalidateQueries({ queryKey: ["applications"] });
+      void queryClient.invalidateQueries({ queryKey: ADMIN_OVERVIEW_QUERY_KEY });
+      if (created) toast.success(`Imported ${created} application(s).`);
+      if (failures.length) toast.error(failures.slice(0, 3).join(" · "));
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setExportBusy(false);
+      if (importInputRef.current) importInputRef.current.value = "";
+    }
+  }
 
   const paymentLookups = useQueries({
     queries: manager
@@ -574,6 +744,7 @@ function PendingApplicationsPanel({
     onSuccess: () => {
       toast.success("Application is now under review.");
       void queryClient.invalidateQueries({ queryKey: ["applications"] });
+      void queryClient.invalidateQueries({ queryKey: ADMIN_OVERVIEW_QUERY_KEY });
     },
     onError: (error) => toast.error(extractErrorMessage(error)),
   });
@@ -601,6 +772,7 @@ function PendingApplicationsPanel({
       );
       setVerifyingId(null);
       void queryClient.invalidateQueries({ queryKey: ["applications"] });
+      void queryClient.invalidateQueries({ queryKey: ADMIN_OVERVIEW_QUERY_KEY });
       void queryClient.invalidateQueries({ queryKey: ["manager-readiness"] });
     },
     onError: (error) => toast.error(extractErrorMessage(error)),
@@ -618,6 +790,7 @@ function PendingApplicationsPanel({
       );
       setVerifyingId(null);
       void queryClient.invalidateQueries({ queryKey: ["applications"] });
+      void queryClient.invalidateQueries({ queryKey: ADMIN_OVERVIEW_QUERY_KEY });
     },
     onError: (error) => toast.error(extractErrorMessage(error)),
   });
@@ -643,6 +816,7 @@ function PendingApplicationsPanel({
       setRejectTarget(null);
       setVerifyingId(null);
       void queryClient.invalidateQueries({ queryKey: ["applications"] });
+      void queryClient.invalidateQueries({ queryKey: ADMIN_OVERVIEW_QUERY_KEY });
     },
     onError: (error) => toast.error(extractErrorMessage(error)),
   });
@@ -661,6 +835,7 @@ function PendingApplicationsPanel({
         "Application reopened at Committee stage. You can edit and process again.",
       );
       void queryClient.invalidateQueries({ queryKey: ["applications"] });
+      void queryClient.invalidateQueries({ queryKey: ADMIN_OVERVIEW_QUERY_KEY });
     },
     onError: (error) => toast.error(extractErrorMessage(error)),
   });
@@ -677,6 +852,7 @@ function PendingApplicationsPanel({
     onSuccess: () => {
       toast.success("Applicant record deleted.");
       void queryClient.invalidateQueries({ queryKey: ["applications"] });
+      void queryClient.invalidateQueries({ queryKey: ADMIN_OVERVIEW_QUERY_KEY });
     },
     onError: (error) => toast.error(extractErrorMessage(error)),
   });
@@ -694,16 +870,20 @@ function PendingApplicationsPanel({
       : classes.length <= 2
         ? classes.join(", ")
         : `${classes.length} classes`;
-  const missingOptions = manager ? MANAGER_MISSING_FILTERS : MISSING_FILTERS;
   const missingLabel =
-    missingOptions.find((item) => item.id === missing)?.label ?? "Any";
+    MANAGER_MISSING_FILTERS.find((item) => item.id === missing)?.label ?? "Any";
+  const showExtraColumns = manager;
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="space-y-4">
+      {showQueueStats ? (
+        <DashboardKpiRow kpis={applicantQueueKpis(overview.data, pageData.totalCount)} />
+      ) : null}
       <div
         className={cn(
           "grid grid-cols-1 gap-3 rounded-xl border border-border bg-card p-3",
-          manager ? "sm:grid-cols-3" : "sm:grid-cols-2 xl:grid-cols-4",
+          manager ? "sm:grid-cols-3" : "sm:grid-cols-2 xl:grid-cols-3",
         )}
       >
         <div className="grid min-w-0 gap-1 text-xs font-medium text-muted-foreground">
@@ -745,42 +925,43 @@ function PendingApplicationsPanel({
           </DropdownMenu>
         </div>
 
-        <div className="grid min-w-0 gap-1 text-xs font-medium text-muted-foreground">
-          Missing requirements
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                className="h-9 w-full min-w-0 justify-between font-normal text-foreground"
-              >
-                <span className="truncate">{missingLabel}</span>
-                <ChevronDown className="size-4 shrink-0 opacity-60" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
-              {missingOptions.map((option) => (
-                <DropdownMenuCheckboxItem
-                  key={option.id}
-                  checked={missing === option.id}
-                  onCheckedChange={() => {
-                    setMissing(option.id);
-                    setPage(1);
-                  }}
+        {manager ? (
+          <div className="grid min-w-0 gap-1 text-xs font-medium text-muted-foreground">
+            Missing requirements
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="h-9 w-full min-w-0 justify-between font-normal text-foreground"
                 >
-                  {option.label}
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        {!manager ? (
+                  <span className="truncate">{missingLabel}</span>
+                  <ChevronDown className="size-4 shrink-0 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                {MANAGER_MISSING_FILTERS.map((option) => (
+                  <DropdownMenuCheckboxItem
+                    key={option.id}
+                    checked={missing === option.id}
+                    onCheckedChange={() => {
+                      setMissing(option.id);
+                      setPage(1);
+                    }}
+                  >
+                    {option.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ) : (
           <div className="grid min-w-0 gap-1 text-xs font-medium text-muted-foreground">
             Date range
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
               <Input
                 type="date"
-                className="h-9 min-w-0"
+                aria-label="From date"
+                className="h-9 min-w-[9.5rem] text-sm [color-scheme:light]"
                 value={dateFrom}
                 onChange={(event) => {
                   setDateFrom(event.target.value);
@@ -790,16 +971,18 @@ function PendingApplicationsPanel({
               <span className="text-muted-foreground">–</span>
               <Input
                 type="date"
-                className="h-9 min-w-0"
+                aria-label="To date"
+                className="h-9 min-w-[9.5rem] text-sm [color-scheme:light]"
                 value={dateTo}
+                min={dateFrom || undefined}
                 onChange={(event) => {
                   setDateTo(event.target.value);
                   setPage(1);
-                }}
+                }}  
               />
             </div>
           </div>
-        ) : null}
+        )}
 
         <div className="grid min-w-0 gap-1 text-xs font-medium text-muted-foreground">
           Search
@@ -807,7 +990,7 @@ function PendingApplicationsPanel({
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={search}
-              placeholder="Search by applicant name or app #"
+              placeholder="Search by applicant name"
               className="h-9 min-w-0 pl-9"
               onChange={(event) => {
                 setSearch(event.target.value);
@@ -818,19 +1001,95 @@ function PendingApplicationsPanel({
         </div>
       </div>
 
+      {showDeskTools ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void handleImportFile(file);
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={exportBusy}
+            onClick={() => importInputRef.current?.click()}
+          >
+            {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <FileUp className="size-4" />}
+            Import Excel
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={exportBusy || pageData.totalCount === 0}
+            onClick={() => void handleSelectAllMatching()}
+          >
+            Select all
+          </Button>
+          {selectedCount > 0 ? (
+            <Button type="button" variant="ghost" size="sm" onClick={() => setSelected({})}>
+              Clear ({selectedCount})
+            </Button>
+          ) : null}
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={exportBusy}
+              onClick={() => void handlePrint()}
+            >
+              {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Printer className="size-4" />}
+              {selectedCount > 0 ? `Print (${selectedCount})` : "Print"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={exportBusy}
+              onClick={() => void handleDownloadExcel()}
+            >
+              {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+              {selectedCount > 0 ? `Download Excel (${selectedCount})` : "Download Excel"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <PageDataGate loading={isLoading} label="Loading applications…" minHeightClassName="min-h-[22rem]">
       <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-        <table className="w-full min-w-[980px] text-sm">
+        <table className={cn("w-full text-sm", showExtraColumns ? "min-w-[980px]" : "min-w-[720px]")}>
           <thead className="bg-secondary/40 text-left text-muted-foreground">
             <tr>
-              {[
-                "Applicant",
-                "Class",
-                "Status",
-                "Payment",
-                "Sponsors",
-                "Actions",
-              ].map((heading) => (
+              {showDeskTools ? (
+                <th className="w-10 px-3 py-3">
+                  <Checkbox
+                    checked={allOnPageSelected ? true : someOnPageSelected ? "indeterminate" : false}
+                    onCheckedChange={(value) => {
+                      const checked = value === true;
+                      setSelected((prev) => {
+                        const next = { ...prev };
+                        for (const row of rows) {
+                          if (checked) next[row.applicationId] = row;
+                          else delete next[row.applicationId];
+                        }
+                        return next;
+                      });
+                    }}
+                    aria-label="Select all on this page"
+                  />
+                </th>
+              ) : null}
+              {(showExtraColumns
+                ? ["Applicant", "Class", "Status", "Payment", "Sponsors", "Actions"]
+                : ["Applicant", "Class", "Status", "Actions"]
+              ).map((heading) => (
                 <th
                   key={heading}
                   className="px-4 py-3 text-xs font-semibold uppercase tracking-wide"
@@ -843,7 +1102,7 @@ function PendingApplicationsPanel({
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td className="px-4 py-8 text-muted-foreground" colSpan={6}>
+                <td className="px-4 py-8 text-muted-foreground" colSpan={(showExtraColumns ? 6 : 4) + (showDeskTools ? 1 : 0)}>
                   {manager ? (
                     <div className="space-y-1">
                       <p className="font-medium text-foreground">
@@ -880,8 +1139,26 @@ function PendingApplicationsPanel({
                     className={cn(
                       "border-t border-border align-middle",
                       expanded && "bg-primary/5",
+                      selected[row.applicationId] && "bg-primary/5",
                     )}
                   >
+                    {showDeskTools ? (
+                      <td className="px-3 py-3">
+                        <Checkbox
+                          checked={Boolean(selected[row.applicationId])}
+                          onCheckedChange={(value) => {
+                            const checked = value === true;
+                            setSelected((prev) => {
+                              if (checked) return { ...prev, [row.applicationId]: row };
+                              const next = { ...prev };
+                              delete next[row.applicationId];
+                              return next;
+                            });
+                          }}
+                          aria-label={`Select ${name}`}
+                        />
+                      </td>
+                    ) : null}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
@@ -907,26 +1184,30 @@ function PendingApplicationsPanel({
                         </StatusBadge>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <PaymentCell view={paymentView} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="min-w-[120px] space-y-1">
-                        <StatusBadge tone={sponsorTone(row)}>
-                          {row.sponsorStatus?.trim() || "Pending"}
-                        </StatusBadge>
-                        {isSponsorOk(row) && row.sponsorCompletedAt ? (
-                          <p className="text-xs text-muted-foreground">
-                            {formatMembershipDate(row.sponsorCompletedAt)}
-                          </p>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">
-                            {(row.endorsementsCompleted ?? 0)}/
-                            {row.endorsementsRequired ?? 2} endorsements
-                          </p>
-                        )}
-                      </div>
-                    </td>
+                    {showExtraColumns ? (
+                      <>
+                        <td className="px-4 py-3">
+                          <PaymentCell view={paymentView} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="min-w-[120px] space-y-1">
+                            <StatusBadge tone={sponsorTone(row)}>
+                              {row.sponsorStatus?.trim() || "Pending"}
+                            </StatusBadge>
+                            {isSponsorOk(row) && row.sponsorCompletedAt ? (
+                              <p className="text-xs text-muted-foreground">
+                                {formatMembershipDate(row.sponsorCompletedAt)}
+                              </p>
+                            ) : (
+                              <p className="text-xs text-muted-foreground">
+                                {(row.endorsementsCompleted ?? 0)}/
+                                {row.endorsementsRequired ?? 2} endorsements
+                              </p>
+                            )}
+                          </div>
+                        </td>
+                      </>
+                    ) : null}
                     <td className="px-4 py-3">
                       {authorize ? (
                         <AuthorizeActions
@@ -943,6 +1224,15 @@ function PendingApplicationsPanel({
                             }
                           }}
                           onAdvance={() => authorizeStage.mutate(row.applicationId)}
+                          onPrint={() =>
+                            printRows([row], `Application · ${applicantDisplayName(row)}`)
+                          }
+                          onExport={() =>
+                            exportRows(
+                              [row],
+                              `${applicationReference(row).toLowerCase()}.csv`,
+                            )
+                          }
                           canIssue={
                             processable &&
                             (row.statusCode === "Waitlist" ||
@@ -997,6 +1287,15 @@ function PendingApplicationsPanel({
                           onAuthorize={() => authorizeStage.mutate(row.applicationId)}
                           onElect={() => openChairmanElection(row.applicationId)}
                           onReject={() => setRejectTarget(row)}
+                          onPrint={() =>
+                            printRows([row], `Application · ${applicantDisplayName(row)}`)
+                          }
+                          onExport={() =>
+                            exportRows(
+                              [row],
+                              `${applicationReference(row).toLowerCase()}.csv`,
+                            )
+                          }
                           onDelete={() => {
                             if (
                               window.confirm(
@@ -1148,6 +1447,7 @@ function PendingApplicationsPanel({
         }}
       />
     </div>
+    </TooltipProvider>
   );
 }
 
@@ -1225,6 +1525,8 @@ function PendingActions({
   onAuthorize,
   onElect,
   onReject,
+  onPrint,
+  onExport,
   onDelete,
 }: {
   row: ApplicationRow;
@@ -1238,6 +1540,8 @@ function PendingActions({
   onAuthorize: () => void;
   onElect: () => void;
   onReject: () => void;
+  onPrint?: () => void;
+  onExport?: () => void;
   onDelete: () => void;
 }) {
   const paymentBlocking =
@@ -1265,7 +1569,7 @@ function PendingActions({
             to="/members/$applicationId"
             params={{ applicationId: String(row.applicationId) }}
           >
-            View details
+            Review
           </Link>
         </Button>
       )}
@@ -1349,6 +1653,26 @@ function PendingActions({
           {manager ? <UserRound className="size-4" /> : <Pencil className="size-4" />}
         </Link>
       </Button>
+      {onPrint ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button type="button" size="icon" variant="outline" className="size-8" onClick={onPrint}>
+              <Printer className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Print</TooltipContent>
+        </Tooltip>
+      ) : null}
+      {onExport ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button type="button" size="icon" variant="outline" className="size-8" onClick={onExport}>
+              <Download className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Download Excel</TooltipContent>
+        </Tooltip>
+      ) : null}
       <Button
         size="icon"
         variant="ghost"
@@ -1372,6 +1696,8 @@ function AuthorizeActions({
   onIssue,
   onRevoke,
   onAdvance,
+  onPrint,
+  onExport,
 }: {
   row: ApplicationRow;
   busy: boolean;
@@ -1381,6 +1707,8 @@ function AuthorizeActions({
   onIssue: () => void;
   onRevoke: () => void;
   onAdvance: () => void;
+  onPrint?: () => void;
+  onExport?: () => void;
 }) {
   return (
     <div className="flex items-center justify-end gap-0.5">
@@ -1404,6 +1732,26 @@ function AuthorizeActions({
           <Pencil className="size-4" />
         </Link>
       </Button>
+      {onPrint ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button type="button" size="icon" variant="ghost" className="size-8" onClick={onPrint}>
+              <Printer className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Print</TooltipContent>
+        </Tooltip>
+      ) : null}
+      {onExport ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button type="button" size="icon" variant="ghost" className="size-8" onClick={onExport}>
+              <Download className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Download Excel</TooltipContent>
+        </Tooltip>
+      ) : null}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button

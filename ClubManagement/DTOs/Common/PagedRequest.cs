@@ -4,7 +4,7 @@ public class PagedRequest
 {
     private int _page = 1;
     private int _pageSize = 10;
-    private const int MaxPageSize = 100;
+    private const int MaxPageSize = 5000;
 
     public int Page
     {

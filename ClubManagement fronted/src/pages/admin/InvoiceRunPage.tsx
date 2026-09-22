@@ -3,15 +3,18 @@ import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Banknote,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Download,
   FileText,
   Inbox,
-  LayoutDashboard,
   Loader2,
   Mail,
   MailCheck,
+  Printer,
   Search,
+  SlidersHorizontal,
   Users,
   Wallet,
 } from "lucide-react";
@@ -27,19 +30,33 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { DEFAULT_PAGE_SIZE, emptyPage, pagedQuery, type PagedResult } from "@/lib/pagination";
 import { apiRequest, extractErrorMessage } from "@/services/membership/api";
 import { useLookup } from "@/services/membership/lookups";
+import { useInvoiceSetup } from "@/services/finance/invoiceSetup";
 import { formatKes } from "@/utils/format";
 import { cn } from "@/utils/cn";
-import { buildInvoiceHtml, type InvoiceDocument } from "@/utils/financeExport";
+import {
+  buildInvoiceHtml,
+  buildInvoiceHtmlForEmail,
+  downloadExcelCsv,
+  printHtmlReport,
+  rowsToTableHtml,
+  type InvoiceDocument,
+} from "@/utils/financeExport";
+import type { InvoiceSetup } from "@/utils/invoiceSetup";
 
 type QueueRow = {
   accountId: number;
@@ -71,6 +88,8 @@ type InvoiceRunStats = {
   totalArrears: number;
 };
 
+type RosterRow = QueueRow & { invoiceReceived: boolean };
+
 type CategorySummary = {
   category: string;
   count: number;
@@ -79,39 +98,75 @@ type CategorySummary = {
   arrears: number;
 };
 
-type DeliveryMode = "both" | "email" | "dashboard";
+const QUEUE_FETCH_SIZE = 5000;
 
-const DELIVERY_OPTIONS: {
-  value: DeliveryMode;
-  title: string;
-  description: string;
-}[] = [
-  {
-    value: "both",
-    title: "Email and member dashboard",
-    description: "Send the invoice by email and publish it on the member Payment page.",
-  },
-  {
-    value: "email",
-    title: "Email only",
-    description: "Email the invoice. It will not appear on the member dashboard.",
-  },
-  {
-    value: "dashboard",
-    title: "Dashboard only",
-    description: "Publish to the member dashboard. No email will be sent.",
-  },
+const ROSTER_EXPORT_COLS = [
+  { header: "Member", value: (row: RosterRow) => row.memberName },
+  { header: "Member no.", value: (row: RosterRow) => row.membershipNo },
+  { header: "Category", value: (row: RosterRow) => categoryLabel(row) },
+  { header: "Email", value: (row: RosterRow) => row.email ?? "" },
+  { header: "Amount due", value: (row: RosterRow) => row.amountDue },
+  { header: "Arrears", value: (row: RosterRow) => row.arrearsAmount },
+  { header: "Invoice no.", value: (row: RosterRow) => row.invoiceNo ?? "" },
+  { header: "Invoice status", value: (row: RosterRow) => (row.invoiceReceived ? "Prepared" : "Not prepared") },
 ];
+
+async function fetchAllQueueRows(params: {
+  year: number;
+  search?: string;
+  membershipType?: string;
+}) {
+  const items: QueueRow[] = [];
+  let page = 1;
+  let total = Number.POSITIVE_INFINITY;
+  while (items.length < total) {
+    const batch = await apiRequest<PagedResult<QueueRow>>(
+      `/api/finance/invoices/queue?${pagedQuery({
+        year: params.year,
+        search: params.search,
+        membershipType: params.membershipType,
+        page,
+        pageSize: QUEUE_FETCH_SIZE,
+      })}`,
+    );
+    total = batch.totalCount;
+    items.push(...batch.items);
+    if (batch.items.length === 0) break;
+    page += 1;
+  }
+  return items;
+}
+
+async function fetchRosterRows(params: {
+  year: number;
+  search?: string;
+  membershipType?: string;
+  received?: boolean;
+}) {
+  const items: RosterRow[] = [];
+  let page = 1;
+  let total = Number.POSITIVE_INFINITY;
+  while (items.length < total) {
+    const batch = await apiRequest<PagedResult<RosterRow>>(
+      `/api/finance/invoices/roster?${pagedQuery({
+        year: params.year,
+        search: params.search,
+        membershipType: params.membershipType,
+        received: params.received,
+        page,
+        pageSize: QUEUE_FETCH_SIZE,
+      })}`,
+    );
+    total = batch.totalCount;
+    items.push(...batch.items);
+    if (batch.items.length === 0) break;
+    page += 1;
+  }
+  return items;
+}
 
 function categoryLabel(row: QueueRow) {
   return row.membershipType?.trim() || row.membershipTypeCode?.trim() || "Unspecified";
-}
-
-function deliveryFlags(mode: DeliveryMode) {
-  return {
-    sendEmail: mode === "both" || mode === "email",
-    publishToMember: mode === "both" || mode === "dashboard",
-  };
 }
 
 function invoiceDueDateIso(year: number) {
@@ -122,6 +177,7 @@ function queueRowToInvoice(
   row: QueueRow,
   year: number,
   brand?: { clubName: string; clubLogo: string | null },
+  setup?: InvoiceSetup | undefined,
 ): InvoiceDocument {
   return {
     invoiceId: 0,
@@ -141,6 +197,7 @@ function queueRowToInvoice(
     sentToEmail: row.email,
     clubName: brand?.clubName,
     clubLogo: brand?.clubLogo,
+    setup,
   };
 }
 
@@ -150,6 +207,7 @@ export function InvoiceRunPage() {
   const currentYear = new Date().getFullYear();
   const queryClient = useQueryClient();
   const membershipTypes = useLookup("membership-types");
+  const invoiceSetup = useInvoiceSetup();
   const [year, setYear] = useState(String(currentYear));
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
@@ -160,13 +218,14 @@ export function InvoiceRunPage() {
   const [sending, setSending] = useState(false);
   const [selectingAll, setSelectingAll] = useState(false);
   const [deliveryOpen, setDeliveryOpen] = useState(false);
-  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("both");
+  const [sendEmail, setSendEmail] = useState(false);
   const [previewIndex, setPreviewIndex] = useState(0);
+  const [exporting, setExporting] = useState<"print" | "download" | null>(null);
 
   const yearNum = Number(year) || currentYear;
   const selectedRows = Object.values(selected);
   const selectedCount = selectedRows.length;
-  const { sendEmail, publishToMember } = deliveryFlags(deliveryMode);
+  const publishToMember = true;
 
   const queue = useQuery({
     queryKey: ["invoice-queue", yearNum, appliedSearch, membershipType, page, pageSize],
@@ -200,8 +259,20 @@ export function InvoiceRunPage() {
 
   const categorySummary = useMemo(() => {
     const map = new Map<string, CategorySummary>();
+    const types = membershipTypes.data ?? [];
+    for (const type of types) {
+      map.set(type.name, {
+        category: type.name,
+        count: 0,
+        membershipNos: [],
+        amountDue: 0,
+        arrears: 0,
+      });
+    }
     for (const row of selectedRows) {
-      const category = categoryLabel(row);
+      const byName = row.membershipType?.trim();
+      const byCode = types.find((type) => type.code === row.membershipTypeCode?.trim())?.name;
+      const category = byName || byCode || categoryLabel(row);
       const current = map.get(category) ?? {
         category,
         count: 0,
@@ -215,16 +286,23 @@ export function InvoiceRunPage() {
       current.arrears += row.arrearsAmount;
       map.set(category, current);
     }
-    return [...map.values()].sort((a, b) => b.arrears - a.arrears);
-  }, [selectedRows]);
+    const ordered = types.map((type) => map.get(type.name)).filter((row): row is CategorySummary => Boolean(row));
+    for (const row of map.values()) {
+      if (!ordered.some((item) => item.category === row.category)) ordered.push(row);
+    }
+    return ordered;
+  }, [membershipTypes.data, selectedRows]);
 
   const expectedArrears = selectedRows.reduce((sum, row) => sum + row.arrearsAmount, 0);
   const expectedDue = selectedRows.reduce((sum, row) => sum + row.amountDue, 0);
   const missingEmail = selectedRows.filter((row) => !row.email?.trim()).length;
   const previewRow = selectedRows[Math.min(previewIndex, Math.max(selectedCount - 1, 0))];
   const previewHtml = useMemo(
-    () => (previewRow ? buildInvoiceHtml(queueRowToInvoice(previewRow, yearNum, brand)) : ""),
-    [previewRow, yearNum, brand],
+    () =>
+      previewRow
+        ? buildInvoiceHtml(queueRowToInvoice(previewRow, yearNum, brand, invoiceSetup.data))
+        : "",
+    [previewRow, yearNum, brand, invoiceSetup.data],
   );
 
   function applyFilters() {
@@ -257,7 +335,7 @@ export function InvoiceRunPage() {
       toast.error("Select one or more members first.");
       return;
     }
-    setDeliveryMode("both");
+    setSendEmail(false);
     setPreviewIndex(0);
     setDeliveryOpen(true);
   }
@@ -265,23 +343,57 @@ export function InvoiceRunPage() {
   async function selectAllInQueue() {
     try {
       setSelectingAll(true);
-      const all = await apiRequest<PagedResult<QueueRow>>(
-        `/api/finance/invoices/queue?${pagedQuery({
-          year: yearNum,
-          search: appliedSearch || undefined,
-          membershipType: membershipType || undefined,
-          page: 1,
-          pageSize: Math.min(Math.max(pageData.totalCount, 1), 5000),
-        })}`,
-      );
+      const all = await fetchAllQueueRows({
+        year: yearNum,
+        ...(appliedSearch ? { search: appliedSearch } : {}),
+        ...(membershipType ? { membershipType } : {}),
+      });
       const next: Record<number, QueueRow> = {};
-      for (const row of all.items) next[row.accountId] = row;
+      for (const row of all) next[row.accountId] = row;
       setSelected(next);
-      toast.success(`${all.items.length} member(s) waiting for an invoice selected.`);
+      toast.success(`${all.length} member(s) waiting for an invoice selected.`);
     } catch (err) {
       toast.error(extractErrorMessage(err));
     } finally {
       setSelectingAll(false);
+    }
+  }
+
+  async function exportRoster(kind: "waiting" | "prepared" | "all", mode: "print" | "download") {
+    try {
+      setExporting(mode);
+      const received = kind === "waiting" ? false : kind === "prepared" ? true : undefined;
+      const rows = await fetchRosterRows({
+        year: yearNum,
+        ...(appliedSearch ? { search: appliedSearch } : {}),
+        ...(membershipType ? { membershipType } : {}),
+        ...(received !== undefined ? { received } : {}),
+      });
+      if (rows.length === 0) {
+        toast.error("No members in that list for the current filters.");
+        return;
+      }
+      const label =
+        kind === "waiting"
+          ? "invoices not prepared"
+          : kind === "prepared"
+            ? "invoices prepared"
+            : "members with membership revenue";
+      if (mode === "download") {
+        downloadExcelCsv(`invoices-${kind}-${yearNum}.csv`, ROSTER_EXPORT_COLS, rows);
+        toast.success(`Downloaded ${rows.length} ${label}.`);
+      } else {
+        const ok = printHtmlReport(
+          `${label} · ${yearNum}`,
+          rowsToTableHtml(ROSTER_EXPORT_COLS, rows),
+          "Aero Club Invoices",
+        );
+        if (!ok) toast.error("Could not open the print dialog. Try again.");
+      }
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setExporting(null);
     }
   }
 
@@ -293,6 +405,16 @@ export function InvoiceRunPage() {
     try {
       setSending(true);
       const accountIds = selectedRows.map((row) => row.accountId);
+      const invoiceHtmlByAccountId: Record<string, string> = {};
+      if (sendEmail) {
+        await Promise.all(
+          selectedRows.map(async (row) => {
+            invoiceHtmlByAccountId[String(row.accountId)] = await buildInvoiceHtmlForEmail(
+              queueRowToInvoice(row, yearNum, brand, invoiceSetup.data),
+            );
+          }),
+        );
+      }
       const result = await apiRequest<BulkInvoiceResult>("/api/finance/invoices/bulk", {
         method: "POST",
         body: JSON.stringify({
@@ -300,6 +422,7 @@ export function InvoiceRunPage() {
           sendEmail,
           publishToMember,
           accountIds,
+          invoiceHtmlByAccountId: sendEmail ? invoiceHtmlByAccountId : undefined,
         }),
       });
       const issued = result.issued ?? 0;
@@ -309,26 +432,12 @@ export function InvoiceRunPage() {
 
       if (issued === 0) {
         toast.error("No invoices were generated.");
-      } else if (sendEmail && publishToMember) {
+      } else if (sendEmail) {
         toast.success(
           skipped > 0
             ? `${issued} invoice(s) generated. ${emailed} emailed and ${published} published to dashboards. ${skipped} had no email.`
             : `${issued} invoice(s) emailed and published to member dashboards.`,
         );
-      } else if (sendEmail) {
-        if (emailed > 0 && skipped === 0) {
-          toast.success(`${emailed} invoice(s) emailed. Those members have left this queue.`);
-        } else if (emailed > 0) {
-          toast.success(
-            `${emailed} emailed. ${skipped} stay here because they have no email or the send failed.`,
-          );
-        } else {
-          toast.error(
-            skipped > 0
-              ? "No invoices were emailed. Members without an email stay in the queue."
-              : "No invoices were sent.",
-          );
-        }
       } else {
         toast.success(`${published} invoice(s) published to member dashboards.`);
       }
@@ -351,43 +460,48 @@ export function InvoiceRunPage() {
     <PageFrame width="lg">
       <PageHeader
         title=""
-        description="Generate invoices for members with arrears and send them by email, to the member dashboard, or both."
+        description="Generate invoices for members with arrears."
         actions={
-          <Button type="button" variant="outline" asChild>
-            <Link to="/finance/desk">
-              <Wallet className="size-4" />
-              Finance desk
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" asChild>
+              <Link to="/finance/invoices/setup">
+                <SlidersHorizontal className="size-4" />
+                Payment setup
+              </Link>
+            </Button>
+            <Button type="button" variant="outline" asChild>
+              <Link to="/finance/desk">
+                <Wallet className="size-4" />
+                Finance desk
+              </Link>
+            </Button>
+          </div>
         }
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Members with arrears"
+          label="Members with revenue"
           value={runStats?.membersInArrears ?? "—"}
           hint={`Outstanding balances for ${yearNum}`}
           icon={Users}
           loading={stats.isLoading}
         />
         <StatCard
-          label="Received invoice"
+          label="Invoices prepared"
           value={runStats?.membersReceived ?? "—"}
-          hint="Emailed or published to dashboard"
           icon={MailCheck}
           loading={stats.isLoading}
         />
         <StatCard
-          label="Not received invoice"
+          label="Invoices not prepared"
           value={runStats?.membersNotReceived ?? "—"}
-          hint="Still waiting in this queue"
           icon={Inbox}
           loading={stats.isLoading}
         />
         <StatCard
-          label="Total arrears"
+          label="Total Memeber Revenue"
           value={runStats ? formatKes(runStats.totalArrears) : "—"}
-          hint="Amount outstanding for this year"
           icon={Banknote}
           loading={stats.isLoading}
         />
@@ -450,12 +564,49 @@ export function InvoiceRunPage() {
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="text-base font-semibold">Members with arrears</h2>
+              <h2 className="text-base font-semibold">Members with Membership Revenue</h2>
               <p className="text-sm text-muted-foreground">
                 {pageData.totalCount} waiting to receive an invoice · {yearNum}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button" variant="outline" size="sm" disabled={Boolean(exporting)}>
+                    {exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                    Print / download
+                    <ChevronDown className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuItem onClick={() => void exportRoster("waiting", "print")}>
+                    <Printer className="size-4" />
+                    Print not prepared
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void exportRoster("waiting", "download")}>
+                    <Download className="size-4" />
+                    Download not prepared
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => void exportRoster("prepared", "print")}>
+                    <Printer className="size-4" />
+                    Print invoices prepared
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void exportRoster("prepared", "download")}>
+                    <Download className="size-4" />
+                    Download invoices prepared
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => void exportRoster("all", "print")}>
+                    <Printer className="size-4" />
+                    Print all with revenue
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void exportRoster("all", "download")}>
+                    <Download className="size-4" />
+                    Download all with revenue
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button
                 type="button"
                 variant="outline"
@@ -562,20 +713,16 @@ export function InvoiceRunPage() {
               </div>
             </div>
             <div className="space-y-3 p-4 text-sm">
-              <p>
-                Amount due on selection:{" "}
-                <span className="font-semibold tabular-nums">{formatKes(expectedDue)}</span>
-              </p>
               {missingEmail > 0 ? (
                 <p className="rounded-md bg-amber-50 px-3 py-2 text-amber-900">
-                  {missingEmail} selected member(s) have no email. Choose dashboard only, or they stay in
-                  this queue if you email.
+                  {missingEmail} selected member(s) have no email. They will still publish to the dashboard.
+                  Enable email only for members who have an address.
                 </p>
               ) : null}
               <div className="flex flex-wrap gap-2 pt-1">
                 <Button type="button" disabled={sending || selectedCount === 0} onClick={openGenerateDialog}>
                   {sending ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
-                  Generate invoices{selectedCount > 0 ? ` (${selectedCount})` : ""}
+                  Invoices{selectedCount > 0 ? ` (${selectedCount})` : ""}
                 </Button>
               </div>
             </div>
@@ -584,7 +731,7 @@ export function InvoiceRunPage() {
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="text-base font-semibold">Summary by member category</h2>
             {categorySummary.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Select members to see category totals.</p>
+              <p className="text-sm text-muted-foreground">Membership categories will appear here.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
@@ -624,10 +771,6 @@ export function InvoiceRunPage() {
         <DialogContent className="flex h-[min(92vh,56rem)] w-[min(96vw,80rem)] max-w-[80rem] flex-col gap-4 overflow-hidden">
           <DialogHeader className="shrink-0">
             <DialogTitle>Send invoices</DialogTitle>
-            <DialogDescription>
-              Review {selectedCount} selected invoice{selectedCount === 1 ? "" : "s"}, then choose where they
-              should go.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
@@ -694,46 +837,32 @@ export function InvoiceRunPage() {
             </section>
 
             <section className="flex min-h-0 flex-col gap-3">
-              <h3 className="text-sm font-semibold text-foreground">Choose where they should go</h3>
-              <RadioGroup
-                value={deliveryMode}
-                onValueChange={(value) => setDeliveryMode(value as DeliveryMode)}
-                className="gap-2"
+              <h3 className="text-sm font-semibold text-foreground">Email (optional)</h3>
+              <label
+                htmlFor="invoice-send-email"
+                className={cn(
+                  "flex cursor-pointer gap-3 rounded-lg border p-3 transition-colors",
+                  sendEmail
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/40 hover:bg-muted/50",
+                )}
               >
-                {DELIVERY_OPTIONS.map((option) => {
-                  const selectedOption = deliveryMode === option.value;
-                  return (
-                    <label
-                      key={option.value}
-                      htmlFor={`invoice-delivery-${option.value}`}
-                      onClick={() => setDeliveryMode(option.value)}
-                      className={cn(
-                        "flex cursor-pointer gap-3 rounded-lg border p-3 transition-colors",
-                        selectedOption
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/40 hover:bg-muted/50",
-                      )}
-                    >
-                      <RadioGroupItem
-                        id={`invoice-delivery-${option.value}`}
-                        value={option.value}
-                        className="mt-0.5"
-                      />
-                      <span className="grid gap-1">
-                        <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-                          {option.value === "dashboard" ? (
-                            <LayoutDashboard className="size-4 text-primary" />
-                          ) : (
-                            <Mail className="size-4 text-primary" />
-                          )}
-                          {option.title}
-                        </span>
-                        <span className="text-sm text-muted-foreground">{option.description}</span>
-                      </span>
-                    </label>
-                  );
-                })}
-              </RadioGroup>
+                <Checkbox
+                  id="invoice-send-email"
+                  checked={sendEmail}
+                  onCheckedChange={(checked) => setSendEmail(checked === true)}
+                  className="mt-0.5"
+                />
+                <span className="grid gap-1">
+                  <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <Mail className="size-4 text-primary" />
+                    Also send by email
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    Off by default. Enable this to email the invoice as well as publishing it.
+                  </span>
+                </span>
+              </label>
               {sendEmail && missingEmail > 0 ? (
                 <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
                   {missingEmail} selected member(s) have no email and will stay in this queue if you send by
@@ -749,11 +878,7 @@ export function InvoiceRunPage() {
             </Button>
             <Button type="button" disabled={sending} onClick={() => void sendSelected()}>
               {sending ? <Loader2 className="size-4 animate-spin" /> : null}
-              {deliveryMode === "email"
-                ? "Send by email"
-                : deliveryMode === "dashboard"
-                  ? "Publish to dashboard"
-                  : "Send to email and dashboard"}
+              {sendEmail ? "Send to email and dashboard" : "Publish to dashboard"}
             </Button>
           </DialogFooter>
         </DialogContent>

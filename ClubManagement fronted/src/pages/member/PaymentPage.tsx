@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/card";
 import { isClubMember, readUser } from "@/lib/auth";
 import { tenantDocumentBrand, useCurrentTenant } from "@/services/tenant";
+import { useInvoiceSetup } from "@/services/finance/invoiceSetup";
 import { fetchApplication, saveDraft, extractErrorMessage, apiRequest, ApiError } from "@/services/membership/api";
 import { buildInvoiceHtml, printHtmlDocument, type InvoiceDocument } from "@/utils/financeExport";
 import { fetchMembershipTypes } from "@/services/membership/membershipTypes";
@@ -43,6 +44,7 @@ export function PaymentPage() {
 
 function MemberSubscriptionPage() {
   const tenant = useCurrentTenant();
+  const invoiceSetup = useInvoiceSetup();
   const search = Route.useSearch();
   const [statementOpen, setStatementOpen] = useState(false);
   const sub = useMemberSubscription();
@@ -105,12 +107,9 @@ function MemberSubscriptionPage() {
 
   return (
     <PageFrame width="lg">
-      <PaymentContextBar year={invoiceYear ?? row.year} />
-      <PageHeader
-        title=""
-        description={PAYMENT_PAGE_DESCRIPTION}
-        actions={
-          <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <PaymentContextBar year={invoiceYear ?? row.year} className="min-w-0 flex-1" />
+        <div className="flex shrink-0 flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={() => setStatementOpen(true)}>
               Print statement
             </Button>
@@ -119,7 +118,14 @@ function MemberSubscriptionPage() {
                 type="button"
                 variant="outline"
                 onClick={() => {
-                  if (invoice.data) printHtmlDocument(buildInvoiceHtml({ ...invoice.data, ...tenantDocumentBrand(tenant.data) }));
+                  if (invoice.data)
+                    printHtmlDocument(
+                      buildInvoiceHtml({
+                        ...invoice.data,
+                        ...tenantDocumentBrand(tenant.data),
+                        setup: invoiceSetup.data,
+                      }),
+                    );
                 }}
               >
                 Print invoice
@@ -130,15 +136,21 @@ function MemberSubscriptionPage() {
                 type="button"
                 variant="outline"
                 onClick={() => {
-                  if (invoice.data) printHtmlDocument(buildInvoiceHtml({ ...invoice.data, ...tenantDocumentBrand(tenant.data) }));
+                  if (invoice.data)
+                    printHtmlDocument(
+                      buildInvoiceHtml({
+                        ...invoice.data,
+                        ...tenantDocumentBrand(tenant.data),
+                        setup: invoiceSetup.data,
+                      }),
+                    );
                 }}
               >
                 Print receipt
               </Button>
             ) : null}
-          </div>
-        }
-      />
+        </div>
+      </div>
 
       <MemberStatementDialog
         open={statementOpen}
@@ -147,12 +159,7 @@ function MemberSubscriptionPage() {
         year={row.year}
       />
 
-      <SubscriptionSummaryCards
-        sub={row}
-        onPay={() =>
-          document.getElementById("member-make-payment")?.scrollIntoView({ behavior: "smooth", block: "start" })
-        }
-      />
+      <SubscriptionSummaryCards sub={row} />
 
       <MemberPaymentForm
         open
@@ -241,7 +248,7 @@ function ApplicantPaymentPage() {
 
   return (
     <PageFrame width="lg">
-      <PaymentContextBar year={sub?.year} />
+      <PaymentContextBar year={sub?.year ?? null} />
       <PageBackLink to="/" label="Back to home" />
       <PageHeader
         title="Payment"

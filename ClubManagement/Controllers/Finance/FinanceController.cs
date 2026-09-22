@@ -155,7 +155,8 @@ public class FinanceController : ControllerBase
         int? Year = null,
         long[]? AccountIds = null,
         bool SendEmail = true,
-        bool PublishToMember = true);
+        bool PublishToMember = true,
+        Dictionary<string, string>? InvoiceHtmlByAccountId = null);
     public record BulkInvoiceResultDto(
         int Issued,
         int Year,
@@ -185,7 +186,37 @@ public class FinanceController : ControllerBase
             cancellationToken));
 
     [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpGet("invoices/roster")]
+    public async Task<ActionResult<PagedResult<InvoiceRosterRowDto>>> InvoiceRoster(
+        [FromQuery] PagedRequest paging,
+        [FromQuery] int? year,
+        [FromQuery] string? search,
+        [FromQuery] string? membershipType,
+        [FromQuery] bool? received,
+        CancellationToken cancellationToken) =>
+        Ok(await _finance.ListInvoiceRosterAsync(
+            new SubscriptionListFilter(year, search, ArrearsOnly: true, membershipType),
+            paging,
+            received,
+            cancellationToken));
+
+    [Authorize]
+    [HttpGet("invoice-setup")]
+    [HttpGet("payment-setup")]
+    public async Task<ActionResult<PaymentSetupDto>> GetInvoiceSetup(CancellationToken cancellationToken) =>
+        Ok(await _finance.GetInvoiceSetupAsync(cancellationToken));
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpPut("invoice-setup")]
+    [HttpPut("payment-setup")]
+    public async Task<ActionResult<PaymentSetupDto>> SaveInvoiceSetup(
+        [FromBody] PaymentSetupDto? setup,
+        CancellationToken cancellationToken) =>
+        Ok(await _finance.SaveInvoiceSetupAsync(setup ?? new PaymentSetupDto(), User.UserId(), cancellationToken));
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
     [HttpPost("invoices/bulk")]
+    [RequestSizeLimit(52_428_800)]
     public async Task<ActionResult<BulkInvoiceResultDto>> IssueInvoicesBulk(
         [FromBody] BulkInvoiceRequest? request,
         CancellationToken cancellationToken)
@@ -203,7 +234,8 @@ public class FinanceController : ControllerBase
                 sendEmail,
                 cancellationToken,
                 request?.AccountIds,
-                publishToMember);
+                publishToMember,
+                ParseInvoiceHtmlMap(request?.InvoiceHtmlByAccountId));
             return Ok(new BulkInvoiceResultDto(result.Issued, year, result.Emailed, result.Published, result.SkippedNoEmail));
         }
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
@@ -348,4 +380,16 @@ public class FinanceController : ControllerBase
     [HttpPost("subscription-lifecycle")]
     public async Task<ActionResult<SubscriptionLifecycleResultDto>> SubscriptionLifecycle(CancellationToken cancellationToken) =>
         Ok(await _finance.EnforceSubscriptionLifecycleAsync(cancellationToken));
+
+    private static Dictionary<long, string>? ParseInvoiceHtmlMap(Dictionary<string, string>? source)
+    {
+        if (source is not { Count: > 0 }) return null;
+        var map = new Dictionary<long, string>();
+        foreach (var (key, html) in source)
+        {
+            if (long.TryParse(key, out var accountId) && !string.IsNullOrWhiteSpace(html))
+                map[accountId] = html;
+        }
+        return map.Count == 0 ? null : map;
+    }
 }

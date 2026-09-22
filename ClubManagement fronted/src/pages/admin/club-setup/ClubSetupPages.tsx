@@ -225,7 +225,7 @@ export function CompanyListingsPage() {
             { key: "code", header: "Company Code", render: (row) => row.companyCode },
             { key: "name", header: "Company Name", render: (row) => row.companyName },
             { key: "slug", header: "Apply slug", render: (row) => row.slug || "—" },
-            { key: "payroll", header: "Payroll Name", render: (row) => dash(row.payrollName) },
+            // { key: "payroll", header: "Payroll Name", render: (row) => dash(row.payrollName) },
             { key: "postal", header: "Postal Address", render: (row) => dash(row.postalAddress) },
             { key: "location", header: "Physical Location", render: (row) => dash(row.physicalLocation) },
             { key: "town", header: "Town", render: (row) => dash(row.town) },
@@ -255,11 +255,11 @@ export function CompanyListingsPage() {
               value={draft.slug ?? ""}
               onChange={(value) => setDraft((current) => ({ ...current, slug: value }))}
             />
-            <Field
+            {/* <Field
               label="Payroll name"
               value={draft.payrollName ?? ""}
               onChange={(value) => setDraft((current) => ({ ...current, payrollName: value }))}
-            />
+            /> */}
             <Field
               label="Pin number"
               value={draft.pinNumber ?? ""}

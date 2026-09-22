@@ -44,7 +44,7 @@ export function HelpdeskDashboardPage() {
           <p className="text-sm text-muted-foreground">Overview of your support tickets</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button
+          {/* <Button
             type="button"
             variant="outline"
             size="sm"
@@ -57,7 +57,7 @@ export function HelpdeskDashboardPage() {
           >
             <CircleHelp className="size-4" />
             Tour Guide
-          </Button>
+          </Button> */}
           <Button asChild size="sm">
             <Link to="/support/tickets" search={{ scope: "mine" }}>
               <Ticket className="size-4" />

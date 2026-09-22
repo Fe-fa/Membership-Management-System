@@ -233,10 +233,6 @@ export function MemberPaymentForm({
     purpose === "joining" || purpose === "annual"
       ? round2(suggestedAmount - allocated)
       : 0;
-  const remainingIsZero =
-    purpose === "accommodation" || purpose === "corkage" || purpose === "other"
-      ? allocated > EPSILON
-      : Math.abs(remaining) <= EPSILON && allocated > EPSILON;
 
   const queryClient = useQueryClient();
   const [submitting, setSubmitting] = useState(false);
@@ -485,55 +481,55 @@ export function MemberPaymentForm({
   const busy = submitting || stkPush.isPending || Boolean(chequeUploadingId);
 
   const formBody = (
-        <div className={cn("grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[0.9fr_1.15fr]", layout === "page" && "min-h-[28rem]")}>
-          {/* Left — transaction context */}
-          <aside className="space-y-4 overflow-y-auto border-b border-border bg-muted/40 px-5 py-5 lg:border-b-0 lg:border-r">
-            <div className="flex items-center justify-between gap-2">
-              <h4 className="text-sm font-semibold tracking-tight">Transaction Context</h4>
-              {sub.membershipNo ? (
-                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
-                  {sub.membershipNo}
-                </span>
-              ) : isApplicant ? (
-                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
-                  Application
-                </span>
-              ) : null}
-            </div>
+        <div className={cn(
+          "grid min-h-0 flex-1 overflow-hidden lg:grid-cols-2",
+          layout === "page" ? "gap-4" : "lg:grid-cols-[0.9fr_1.15fr]",
+        )}>
+          <aside className={cn(
+            "space-y-4",
+            layout === "page" && "rounded-xl border border-slate-200 bg-white p-5 shadow-sm",
+            layout === "dialog" && "overflow-y-auto border-b border-border bg-muted/40 px-5 py-5 lg:border-b-0 lg:border-r",
+          )}>
+            <StepHeading step={1} title="Review Dues" />
 
-            <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            <div className={cn(layout === "dialog" && "rounded-2xl border border-border bg-card p-4 shadow-sm")}>
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 Detailed summary
               </p>
               <div className="mt-3 space-y-2.5 text-sm">
                 <div className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">Joining balance</span>
-                  <strong>{formatKes(sub.joiningOutstanding)}</strong>
+                  <span className="text-muted-foreground">Annual Dues ({annualBillingYear})</span>
+                  <strong className="tabular-nums">{formatKes(sub.paysSubscription ? annualOutstanding : 0)}</strong>
                 </div>
+                {!isApplicant ? (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">Club Card Credit</span>
+                    <strong className="tabular-nums font-medium text-rose-400">
+                      ({formatKes(sub.clubCreditBalance ?? 0)})
+                    </strong>
+                  </div>
+                ) : null}
                 <div className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">
-                    {isApplicant
-                      ? `Annual subscription (${sub.year})`
-                      : `Annual arrears (${annualBillingYear})`}
-                  </span>
-                  <strong>{formatKes(sub.paysSubscription ? annualOutstanding : 0)}</strong>
+                  <span className="text-muted-foreground">Joining balance</span>
+                  <strong
+                    className={cn(
+                      "tabular-nums",
+                      sub.joiningOutstanding <= EPSILON && "text-emerald-600",
+                    )}
+                  >
+                    {formatKes(sub.joiningOutstanding)}
+                  </strong>
                 </div>
                 {!isApplicant && sub.upcomingYear && upcomingOutstanding > 0 && sub.outstanding > EPSILON ? (
                   <div className="flex justify-between gap-3 text-xs text-amber-800">
                     <span>{sub.upcomingYear} renewal also unpaid</span>
-                    <span>{formatKes(upcomingOutstanding)}</span>
-                  </div>
-                ) : null}
-                {!isApplicant ? (
-                  <div className="flex justify-between gap-3">
-                    <span className="text-muted-foreground">Club card credit</span>
-                    <strong className="text-success">{formatKes(sub.clubCreditBalance ?? 0)}</strong>
+                    <span className="tabular-nums">{formatKes(upcomingOutstanding)}</span>
                   </div>
                 ) : null}
                 <div className="my-1 border-t border-border" />
                 <div className="flex justify-between gap-3 text-base">
-                  <span className="font-semibold">Net dues</span>
-                  <strong className="text-primary">{formatKes(sub.balance)}</strong>
+                  <span className="font-semibold">Net Dues</span>
+                  <strong className="tabular-nums">{formatKes(sub.balance)}</strong>
                 </div>
                 <div className="flex justify-between gap-3 text-xs text-muted-foreground">
                   <span>Tier</span>
@@ -595,29 +591,15 @@ export function MemberPaymentForm({
             )}
           </aside>
 
-          {/* Right — payment allocation */}
-          <section className="flex min-h-0 flex-col overflow-hidden">
-            <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3">
-              <div>
-                <h4 className="text-sm font-semibold tracking-tight">Payment Allocation</h4>
-                <p className="text-xs text-muted-foreground">
-                  Allocated <strong>{formatKes(allocated)}</strong>
-{purpose === "joining" || purpose === "annual" ? (
-                    <>
-                      {" · Remaining "}
-                      <strong
-                        className={cn(
-                          remaining < 0 && "text-destructive",
-                          remainingIsZero && "text-success",
-                        )}
-                      >
-                        {formatKes(Math.abs(remaining))}
-                        {remaining < 0 ? " over" : remainingIsZero ? " balanced" : ""}
-                      </strong>
-                    </>
-                  ) : null}
-                </p>
-              </div>
+          <section className={cn(
+            "flex min-h-0 flex-col overflow-hidden",
+            layout === "page" && "rounded-xl border border-slate-200 bg-white shadow-sm",
+          )}>
+            <div className={cn(
+              "flex items-center justify-between gap-3",
+              layout === "page" ? "px-5 pt-5" : "border-b border-border px-5 py-3",
+            )}>
+              <StepHeading step={2} title="Payment Allocation" />
               <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={addRow} disabled={busy}>
                 <Plus className="size-4" /> Add row
               </Button>
@@ -970,14 +952,7 @@ export function MemberPaymentForm({
   );
 
   if (layout === "page") {
-    return (
-      <section
-        id="member-make-payment"
-        className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
-      >
-        {formBody}
-      </section>
-    );
+    return <div id="member-make-payment">{formBody}</div>;
   }
 
   return (
@@ -996,5 +971,16 @@ export function MemberPaymentForm({
         {formBody}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function StepHeading({ step, title }: { step: number; title: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
+        {step}
+      </span>
+      <h4 className="text-sm font-semibold tracking-tight">{title}</h4>
+    </div>
   );
 }

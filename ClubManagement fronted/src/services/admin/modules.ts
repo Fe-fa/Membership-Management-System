@@ -42,10 +42,9 @@ export const ADMIN_MODULES: AdminModule[] = [
   },
   {
     id: "applicant-queue",
-    title: "Manage Applicants",
+    title: "Applicant Management",
     description: "Pending applications and authorize applicants.",
     to: "/members",
-    search: { view: "dashboard" },
     icon: UsersRound,
     tone: "amber",
     roles: STAFF_OPS,

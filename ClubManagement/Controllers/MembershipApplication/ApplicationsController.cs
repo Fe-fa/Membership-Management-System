@@ -174,10 +174,12 @@ public class ApplicationsController : ControllerBase
     public async Task<ActionResult<PagedResult<ApplicationListItemDto>>> GetAll(
         [FromQuery] PagedRequest paging,
         [FromQuery] string? search,
+        [FromQuery] DateOnly? fromDate,
+        [FromQuery] DateOnly? toDate,
         CancellationToken cancellationToken)
     {
         if (!User.IsStaff()) return Forbid();
-        var result = await _applicationService.GetAllAsync(paging, search, cancellationToken);
+        var result = await _applicationService.GetAllAsync(paging, search, fromDate, toDate, cancellationToken);
         return Ok(result);
     }
 

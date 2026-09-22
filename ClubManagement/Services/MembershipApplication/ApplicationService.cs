@@ -25,7 +25,12 @@ public class ApplicationWorkflowOptions
 
 public interface IApplicationService
 {
-    Task<PagedResult<ApplicationListItemDto>> GetAllAsync(PagedRequest paging, string? search, CancellationToken cancellationToken = default);
+    Task<PagedResult<ApplicationListItemDto>> GetAllAsync(
+        PagedRequest paging,
+        string? search,
+        DateOnly? fromDate = null,
+        DateOnly? toDate = null,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ApplicationListItemDto>> GetMineAsync(long applicantProfileId, CancellationToken cancellationToken = default);
     Task<ApplicationDetailDto?> GetCurrentForProfileAsync(long applicantProfileId, CancellationToken cancellationToken = default);
     Task<ApplicationDetailDto?> GetByIdAsync(long applicationId, CancellationToken cancellationToken = default);
@@ -68,7 +73,12 @@ public class ApplicationService : IApplicationService
         _decisions = decisions;
     }
 
-    public async Task<PagedResult<ApplicationListItemDto>> GetAllAsync(PagedRequest paging, string? search, CancellationToken cancellationToken = default)
+    public async Task<PagedResult<ApplicationListItemDto>> GetAllAsync(
+        PagedRequest paging,
+        string? search,
+        DateOnly? fromDate = null,
+        DateOnly? toDate = null,
+        CancellationToken cancellationToken = default)
     {
         // AsSplitQuery() avoids the (smaller, but still real) cartesian effect of
         // combining the Applicant.Country ThenInclude with the Status/ElectionType
@@ -89,6 +99,18 @@ public class ApplicationService : IApplicationService
                 x.ApplicationNo.Contains(term) ||
                 x.Applicant.FirstName.Contains(term) ||
                 x.Applicant.LastName.Contains(term));
+        }
+
+        if (fromDate is DateOnly from)
+        {
+            var start = from.ToDateTime(TimeOnly.MinValue);
+            query = query.Where(x => (x.SubmittedAt ?? x.CreatedAt) >= start);
+        }
+
+        if (toDate is DateOnly to)
+        {
+            var endExclusive = to.AddDays(1).ToDateTime(TimeOnly.MinValue);
+            query = query.Where(x => (x.SubmittedAt ?? x.CreatedAt) < endExclusive);
         }
 
         var ordered = query.OrderByDescending(x => x.CreatedAt);

@@ -8,7 +8,8 @@ function escapeCsv(value: string | number | null | undefined) {
   if (/[",\n\r]/.test(raw)) return `"${raw.replace(/"/g, '""')}"`;
   return raw;
 }
-export { buildInvoiceHtml, buildInvoicePrintHtml, type InvoiceDocument } from "./invoiceDocument";
+export { buildInvoiceHtml, buildInvoiceHtmlForEmail, buildInvoicePrintHtml, type InvoiceDocument } from "./invoiceDocument";
+export { buildReceiptHtml, type ReceiptDocument } from "./receiptDocument";
 export { buildStatementHtml, type StatementDocument, type StatementLine } from "./statementDocument";
 
 export function downloadExcelCsv<T>(
@@ -96,7 +97,7 @@ export function printHtmlDocument(html: string) {
   return true;
 }
 
-export function printHtmlReport(title: string, tableHtml: string) {
+export function printHtmlReport(title: string, tableHtml: string, source = "Aero Club Finance Desk") {
   const safeTitle = title.replace(/</g, "&lt;");
   const html = `<!DOCTYPE html>
 <html>
@@ -114,7 +115,7 @@ export function printHtmlReport(title: string, tableHtml: string) {
 </head>
 <body>
   <h1>${safeTitle}</h1>
-  <p class="meta">Printed ${new Date().toLocaleString()} · Aero Club Finance Desk</p>
+  <p class="meta">Printed ${new Date().toLocaleString()} · ${source.replace(/</g, "&lt;")}</p>
   ${tableHtml}
 </body>
 </html>`;

@@ -90,6 +90,47 @@ function spark(seed: number, length = 14): number[] {
   });
 }
 
+export function applicantQueueKpis(
+  overview: Pick<AdminOverview, "applications"> | undefined,
+  appCount: number,
+): DashboardKpi[] {
+  const apps = overview?.applications;
+  return [
+    {
+      id: "pending",
+      label: "Pending applications",
+      value: apps?.pendingApprovals ?? 0,
+      icon: ClipboardList,
+      tone: "violet",
+      spark: spark(1),
+    },
+    {
+      id: "all",
+      label: "Applications in view",
+      value: appCount,
+      icon: UsersRound,
+      tone: "sky",
+      spark: spark(2),
+    },
+    {
+      id: "wait",
+      label: "Waitlisted",
+      value: apps?.waitlisted ?? 0,
+      icon: UserCheck,
+      tone: "emerald",
+      spark: spark(3),
+    },
+    {
+      id: "rejected",
+      label: "Rejected",
+      value: apps?.rejected ?? 0,
+      icon: Ban,
+      tone: "rose",
+      spark: spark(4.2),
+    },
+  ];
+}
+
 function countBy(items: string[]): DashboardBar[] {
   const map = new Map<string, number>();
   for (const item of items) {
@@ -219,12 +260,7 @@ export function buildModuleDashboard(
         ...defaults,
         moduleId,
         title: "Manage Applicants",
-        kpis: [
-          { id: "pending", label: "Pending applications", value: overview.applications.pendingApprovals, icon: ClipboardList, tone: "violet", spark: spark(1) },
-          { id: "all", label: "Applications in view", value: appCount, icon: UsersRound, tone: "sky", spark: spark(2) },
-          { id: "wait", label: "Waitlisted", value: overview.applications.waitlisted, icon: UserCheck, tone: "emerald", spark: spark(3) },
-          { id: "rejected", label: "Rejected", value: overview.applications.rejected, icon: Ban, tone: "rose", spark: spark(4.2) },
-        ],
+        kpis: applicantQueueKpis(overview, appCount),
         ratioTitle: "Application outcome",
         ratioTotalLabel: "Queue",
         ratio: [

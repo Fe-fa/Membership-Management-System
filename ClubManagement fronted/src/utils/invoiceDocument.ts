@@ -1,4 +1,14 @@
-import { clubLogoUrl } from "./clubLogo";
+import { clubLogoUrl, embeddedClubLogoUrl } from "./clubLogo";
+import {
+  escapeFinanceHtml as escapeHtml,
+  financeDateLong,
+  kesAmount as money,
+  officialAddress,
+  officialClubName,
+  officialEmail,
+  officialPhone,
+} from "./aceaFinanceBrand";
+import { extraParametersForDocument, mergePaymentSetup, methodsForDocument, type PaymentMethodBlock, type PaymentSetup } from "./invoiceSetup";
 
 export type InvoiceDocument = {
   invoiceId: number;
@@ -6,8 +16,8 @@ export type InvoiceDocument = {
   accountId: number;
   year: number;
   memberName: string;
-  membershipNo?: string | null;
-  membershipType?: string | null;
+  membershipNo?: string | null | undefined;
+  membershipType?: string | null | undefined;
   amount: number;
   amountPaid: number;
   balance: number;
@@ -15,29 +25,21 @@ export type InvoiceDocument = {
   issuedAt: string;
   status: string;
   emailSent: boolean;
-  sentToEmail?: string | null;
-  clubName?: string | null;
-  clubLogo?: string | null;
-  clubAddress?: string | null;
-  clubEmail?: string | null;
-  clubPhone?: string | null;
-  mpesaPaybill?: string | null;
-  bankName?: string | null;
-  bankAccount?: string | null;
+  sentToEmail?: string | null | undefined;
+  clubName?: string | null | undefined;
+  clubLogo?: string | null | undefined;
+  clubAddress?: string | null | undefined;
+  clubEmail?: string | null | undefined;
+  clubPhone?: string | null | undefined;
+  mpesaPaybill?: string | null | undefined;
+  bankName?: string | null | undefined;
+  bankAccount?: string | null | undefined;
+  setup?: PaymentSetup | undefined;
 };
 
-const FALLBACKS = {
-  clubName: "Aero Club of East Africa",
-  clubAddress: "P.O. Box 40813, 00100 Wilson Airport, Nairobi, Kenya",
-  clubEmail: "info@aeroclubea.com",
-  clubPhone: "+254 111 053 220",
-  mpesaPaybill: "123456",
-  bankName: "Kenya Commercial Bank (KCB)",
-  bankAccount: "111053220",
-} as const;
-
+/** Print-only extras. Visual styles live inline so Gmail, print, and dashboard share one layout. */
 const INVOICE_CSS = `
-    @page { margin: 16mm; }
+    @page { margin: 14mm; }
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -47,166 +49,142 @@ const INVOICE_CSS = `
     }
     .invoice-page { page-break-after: always; }
     .invoice-page:last-child { page-break-after: auto; }
-    .sheet { max-width: 760px; margin: 0 auto; padding: 0 8px 24px; }
-    .rule { height: 8px; background: #c9a46c; }
-    .header {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      padding: 20px 8px 18px;
-    }
-    .brand { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-    .brand .logo { display: block; height: 56px; width: auto; margin: 0 auto; }
-    .brand h1 { margin: 0; font-size: 22px; letter-spacing: -0.02em; color: #1f2554; }
-    .contact { margin: 6px 0 0; color: #5b6472; font-size: 13px; line-height: 1.45; }
-    .badge {
-      display: inline-block;
-      margin-bottom: 8px;
-      padding: 4px 12px;
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-    }
-    .badge.unpaid { background: #f4ead8; color: #1f2554; }
-    .badge.partial { background: #e8e6f4; color: #1f2554; }
-    .badge.paid { background: #dcfce7; color: #166534; }
-    .inv-no { margin: 8px 0 0; color: #6b7280; font-size: 15px; letter-spacing: 0.04em; }
-    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 32px; padding: 8px 8px 20px; }
-    .meta-col { padding-left: 0; }
-    .meta-col + .meta-col { border-left: 1px solid #e4d7bf; padding-left: 32px; }
-    .kicker { margin: 0 0 8px; color: #c9a46c; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; }
-    .who { margin: 0; font-size: 22px; font-weight: 700; }
-    .sub { margin: 6px 0 0; color: #4b5563; font-size: 14px; }
-    .dates { margin: 0; font-size: 14px; line-height: 1.7; }
-    .total {
-      margin: 4px 8px 22px;
-      padding: 18px 22px;
-      border: 1.5px solid #c9a46c;
-      border-radius: 14px;
-      font-size: 26px;
-      font-weight: 800;
-      letter-spacing: 0.01em;
-      color: #1f2554;
-    }
-    table.lines { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 8px; }
-    table.lines th, table.lines td { padding: 12px 16px; font-size: 14px; }
-    table.lines th { background: #1f2554; color: #fff; text-align: left; font-weight: 700; }
-    table.lines th.amt, table.lines td.amt { text-align: right; white-space: nowrap; }
-    table.lines td { border-bottom: 1px solid #e5e7eb; }
-    table.lines tr.stripe td { background: #f8f4ec; }
-    table.lines tr.balance td { background: #1f2554; color: #fff; font-weight: 700; border: 0; }
-    .note { padding: 18px 8px 0; color: #6b7280; font-size: 13px; font-style: italic; line-height: 1.5; }
 `;
 
-function escapeHtml(value: string | number | null | undefined) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function blankToFallback(value: string | null | undefined, fallback: string) {
-  return value && value.trim() ? value.trim() : fallback;
-}
-
-function money(value: number) {
-  return new Intl.NumberFormat("en-KE", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
-function invoiceDate(value?: string | null) {
-  if (!value) return "—";
-  const isoDay = value.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
-  if (isoDay) {
-    const [year, month, day] = isoDay.split("-").map(Number);
-    if (!year || !month || !day) return "—";
-    return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      timeZone: "UTC",
-    });
+function renderPaymentMethodsHtml(methods: PaymentMethodBlock[]) {
+  if (methods.length === 0) return "";
+  const rows: string[] = [];
+  for (let i = 0; i < methods.length; i += 2) {
+    const slice = methods.slice(i, i + 2);
+    const cells = slice
+      .map((method, index) => {
+        const lines = method.fields
+          .filter((item) => item.label.trim() || item.value.trim())
+          .map((item) =>
+            item.label.trim() && item.value.trim()
+              ? `${escapeHtml(item.label)}: ${escapeHtml(item.value)}`
+              : escapeHtml(item.value || item.label),
+          )
+          .join("<br />");
+        const pad = slice.length === 2 && index === 0 ? "padding-right:12px;" : slice.length === 2 ? "padding-left:12px;" : "";
+        return `<td width="${slice.length === 2 ? "50%" : "100%"}" valign="top" style="${pad}">
+            <p style="margin:0 0 8px;font-size:12px;letter-spacing:0.08em;color:#c9a46c;font-weight:700;">${escapeHtml(method.title.toUpperCase())}</p>
+            <p style="margin:0;font-size:12px;line-height:1.65;color:#1f2554;">${lines}</p>
+          </td>`;
+      })
+      .join("");
+    rows.push(`<tr>${cells}</tr>`);
   }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "—";
-  return parsed.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function invoiceStatusLabel(paid: number, balance: number) {
-  if (balance <= 0.01) return "PAID";
-  if (paid > 0.01) return "PARTIAL";
-  return "UNPAID";
+  return `<tr>
+    <td style="padding:16px 18px 0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        ${rows.join("")}
+      </table>
+    </td>
+  </tr>`;
 }
 
 function invoiceSheetInnerHtml(invoice: InvoiceDocument) {
-  const clubName = blankToFallback(invoice.clubName, FALLBACKS.clubName);
-  const address = blankToFallback(invoice.clubAddress, FALLBACKS.clubAddress);
-  const email = blankToFallback(invoice.clubEmail, FALLBACKS.clubEmail);
-  const phone = blankToFallback(invoice.clubPhone, FALLBACKS.clubPhone);
+  const setup = mergePaymentSetup(invoice.setup);
+  const clubName = officialClubName(invoice.clubName);
+  const address = officialAddress(invoice.clubAddress);
+  const email = officialEmail(invoice.clubEmail);
+  const phone = officialPhone(invoice.clubPhone);
   const membershipNo = invoice.membershipNo?.trim() || "—";
-  const membershipType = invoice.membershipType?.trim() ?? "";
-  const membershipLine = membershipType
-    ? `${escapeHtml(membershipNo)} • ${escapeHtml(membershipType)}`
-    : escapeHtml(membershipNo);
-  const status = invoiceStatusLabel(invoice.amountPaid, invoice.balance);
-  const statusClass = status.toLowerCase();
-  const paybill = blankToFallback(invoice.mpesaPaybill, FALLBACKS.mpesaPaybill);
-  const bankName = blankToFallback(invoice.bankName, FALLBACKS.bankName);
-  const bankAccount = blankToFallback(invoice.bankAccount, FALLBACKS.bankAccount);
+  const membershipType = invoice.membershipType?.trim() || "Membership";
+  const category = /membership/i.test(membershipType) ? membershipType : `${membershipType} Membership`;
+  const charges = invoice.amount;
+  const credits = invoice.amountPaid;
+  const lineTotal = Math.max(0, charges - credits);
+  const logo = escapeHtml(clubLogoUrl(invoice.clubLogo));
+  const pinLine = setup.invoice.showPin ? `<br />PIN: ${escapeHtml(setup.pin)}` : "";
+  const dueLine = setup.invoice.showDueDate
+    ? `<br />Due Date: ${escapeHtml(financeDateLong(invoice.dueDate))}`
+    : "";
+  const creditHeader = setup.invoice.showCredits
+    ? `<th align="right" style="padding:10px 12px;background:#1f2554;color:#ffffff;font-size:12px;font-weight:700;white-space:nowrap;">Credits [KES]</th>`
+    : "";
+  const creditCell = setup.invoice.showCredits
+    ? `<td align="right" style="padding:10px 12px;font-size:12px;border-bottom:1px solid #e5e7eb;color:#1f2554;white-space:nowrap;">${escapeHtml(money(credits))}</td>`
+    : "";
+  const totalColspan = setup.invoice.showCredits ? 4 : 3;
+  const extraNote = setup.extraNote
+    ? `<p style="margin:12px 0 0;font-size:12px;line-height:1.55;color:#1f2554;">${escapeHtml(setup.extraNote)}</p>`
+    : "";
+  const extraParams = extraParametersForDocument(setup, "invoice")
+    .map(
+      (item) =>
+        `<p style="margin:8px 0 0;font-size:12px;line-height:1.55;color:#1f2554;"><strong>${escapeHtml(item.label || "Detail")}:</strong> ${escapeHtml(item.value)}</p>`,
+    )
+    .join("");
+  const paySection = renderPaymentMethodsHtml(methodsForDocument(setup, "invoice"));
+  const pinFooter = setup.invoice.showPin ? `PIN NO: ${escapeHtml(setup.pin)} &nbsp;|&nbsp; ` : "";
 
-  return `<div class="rule"></div>
-  <div class="sheet">
-    <div class="header">
-      <div class="brand">
-        <img class="logo" src="${escapeHtml(clubLogoUrl(invoice.clubLogo))}" alt="${escapeHtml(clubName)}" />
-        <h1>${escapeHtml(clubName)}</h1>
-      </div>
-      <p class="contact">${escapeHtml(address)}<br />${escapeHtml(email)} | ${escapeHtml(phone)}</p>
-    </div>
-    <div class="meta">
-      <div class="meta-col">
-        <p class="kicker">BILLED TO</p>
-        <p class="who">${escapeHtml(invoice.memberName)}</p>
-        <p class="sub">Membership: ${membershipLine}</p>
-      </div>
-      <div class="meta-col">
-        <p class="kicker">INVOICE DETAILS</p>
-        <p class="dates">Date Issued: ${escapeHtml(invoiceDate(invoice.issuedAt))}<br />Due Date: ${escapeHtml(invoiceDate(invoice.dueDate))}</p>
-        <p class="inv-no">${escapeHtml(invoice.invoiceNo)}</p>
-      </div>
-    </div>
-    <table class="lines">
-      <thead>
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:760px;margin:0 auto;background:#ffffff;color:#1f2554;font-family:'Segoe UI',Tahoma,sans-serif;border-top:8px solid #c9a46c;">
+  <tr>
+    <td style="padding:18px 18px 12px;text-align:center;">
+      <img src="${logo}" alt="${escapeHtml(clubName)}" height="56" style="display:block;margin:0 auto 8px;height:56px;width:auto;border:0;" />
+      <h1 style="margin:0;font-size:22px;letter-spacing:-0.02em;color:#1f2554;">${escapeHtml(clubName)}</h1>
+      <p style="margin:6px 0 0;color:#5b6472;font-size:12px;line-height:1.5;">
+        ${escapeHtml(address)}<br />
+        ${escapeHtml(email)} | ${escapeHtml(phone)}${pinLine}
+      </p>
+      <p style="margin:10px 0 0;font-size:28px;font-weight:800;letter-spacing:0.12em;color:#1f2554;">INVOICE</p>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:8px 18px 18px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr>
-          <th>Description</th>
-          <th class="amt">Amount (Ksh)</th>
+          <td width="50%" valign="top" style="padding-right:16px;">
+            <p style="margin:0 0 8px;color:#c9a46c;font-size:11px;font-weight:700;letter-spacing:0.08em;">BILLED TO</p>
+            <p style="margin:0;font-size:20px;font-weight:700;color:#1f2554;">${escapeHtml(invoice.memberName)}</p>
+            <p style="margin:6px 0 0;color:#4b5563;font-size:13px;line-height:1.5;">Membership No. ${escapeHtml(membershipNo)}<br />${escapeHtml(category)}</p>
+          </td>
+          <td width="50%" valign="top" style="padding-left:16px;border-left:1px solid #e4d7bf;">
+            <p style="margin:0 0 8px;color:#c9a46c;font-size:11px;font-weight:700;letter-spacing:0.08em;">INVOICE DETAILS</p>
+            <p style="margin:0;font-size:13px;line-height:1.7;color:#1f2554;">Date: ${escapeHtml(financeDateLong(invoice.issuedAt))}${dueLine}</p>
+            <p style="margin:6px 0 0;color:#6b7280;font-size:14px;letter-spacing:0.03em;font-weight:700;">Invoice No: ${escapeHtml(invoice.invoiceNo)}</p>
+          </td>
         </tr>
-      </thead>
-      <tbody>
+      </table>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:0 18px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;overflow:hidden;">
         <tr>
-          <td>${escapeHtml(invoice.year)} annual subscription</td>
-          <td class="amt">${escapeHtml(money(invoice.amount))}</td>
+          <th align="left" style="padding:10px 12px;background:#1f2554;color:#ffffff;font-size:12px;font-weight:700;">Membership Subscription Category</th>
+          <th align="center" style="padding:10px 12px;background:#1f2554;color:#ffffff;font-size:12px;font-weight:700;white-space:nowrap;">Year</th>
+          <th align="right" style="padding:10px 12px;background:#1f2554;color:#ffffff;font-size:12px;font-weight:700;white-space:nowrap;">Charges [KES]</th>
+          ${creditHeader}
+          <th align="right" style="padding:10px 12px;background:#1f2554;color:#ffffff;font-size:12px;font-weight:700;white-space:nowrap;">Total [KES]</th>
         </tr>
-        <tr class="stripe">
-          <td>Paid to date</td>
-          <td class="amt">${escapeHtml(money(invoice.amountPaid))}</td>
+        <tr>
+          <td style="padding:10px 12px;font-size:12px;border-bottom:1px solid #e5e7eb;color:#1f2554;">${escapeHtml(category)}</td>
+          <td align="center" style="padding:10px 12px;font-size:12px;border-bottom:1px solid #e5e7eb;color:#1f2554;white-space:nowrap;">${escapeHtml(invoice.year)}</td>
+          <td align="right" style="padding:10px 12px;font-size:12px;border-bottom:1px solid #e5e7eb;color:#1f2554;white-space:nowrap;">${escapeHtml(money(charges))}</td>
+          ${creditCell}
+          <td align="right" style="padding:10px 12px;font-size:12px;border-bottom:1px solid #e5e7eb;color:#1f2554;white-space:nowrap;">${escapeHtml(money(lineTotal))}</td>
         </tr>
-        <tr class="balance">
-          <td>Balance due</td>
-          <td class="amt">${escapeHtml(money(invoice.balance))}</td>
+        <tr>
+          <td colspan="${totalColspan}" style="padding:10px 12px;background:#1f2554;color:#ffffff;font-size:12px;font-weight:700;">Total</td>
+          <td align="right" style="padding:10px 12px;background:#1f2554;color:#ffffff;font-size:12px;font-weight:700;white-space:nowrap;">${escapeHtml(money(lineTotal))}</td>
         </tr>
-      </tbody>
-    </table>
-  </div>`;
+      </table>
+      <p style="margin:16px 0 0;font-size:13px;color:#1f2554;">${escapeHtml(setup.payableNote)}</p>
+      ${extraNote}
+      ${extraParams}
+    </td>
+  </tr>
+  ${paySection}
+  <tr>
+    <td style="padding:22px 18px 28px;border-top:1px solid #e4d7bf;color:#5b6472;font-size:11px;line-height:1.55;text-align:center;">
+      ${escapeHtml(address)}. Tel: ${escapeHtml(phone)} | ${escapeHtml(clubName)}, Wilson Airport.<br />
+      ${pinFooter}${escapeHtml(setup.website)}
+    </td>
+  </tr>
+</table>`;
 }
 
 function wrapInvoiceDocument(title: string, body: string) {
@@ -214,6 +192,7 @@ function wrapInvoiceDocument(title: string, body: string) {
 <html>
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(title)}</title>
   <style>${INVOICE_CSS}</style>
 </head>
@@ -227,15 +206,19 @@ export function buildInvoiceHtml(invoice: InvoiceDocument) {
   return wrapInvoiceDocument(invoice.invoiceNo, invoiceSheetInnerHtml(invoice));
 }
 
+export async function buildInvoiceHtmlForEmail(invoice: InvoiceDocument) {
+  return buildInvoiceHtml({
+    ...invoice,
+    clubLogo: await embeddedClubLogoUrl(invoice.clubLogo),
+  });
+}
+
 export function buildInvoicePrintHtml(invoices: InvoiceDocument[]) {
   if (invoices.length === 0) return wrapInvoiceDocument("Invoices", "");
   if (invoices.length === 1) return buildInvoiceHtml(invoices[0]!);
   const sheets = invoices
     .map((invoice) => `<div class="invoice-page">${invoiceSheetInnerHtml(invoice)}</div>`)
     .join("\n");
-  const title =
-    invoices.length === 1
-      ? invoices[0]!.invoiceNo
-      : `${invoices.length} invoices`;
+  const title = `${invoices.length} invoices`;
   return wrapInvoiceDocument(title, sheets);
 }

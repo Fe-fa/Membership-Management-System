@@ -25,6 +25,7 @@
   Receipt,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
   UserPlus,
   UserRound,
   UserCog,
@@ -69,14 +70,14 @@ function dashboardItem(to: string, search?: Record<string, string>): AppNavItem 
 }
 
 function withDashboard(to: string, groups: AppNavGroup[], search?: Record<string, string>): AppNavGroup[] {
-  return [{ label: "Overview", items: [dashboardItem(to, search)] }, ...groups];
+  return [{ label: "Home", items: [dashboardItem(to, search)] }, ...groups];
 }
 
 const APPLICANT_NAV: AppNavGroup[] = [
   {
     label: "Applicant",
     items: [
-      { label: "Overview", to: "/", icon: LayoutGrid },
+      { label: "Home", to: "/", icon: LayoutGrid },
       { label: "Application status", to: "/applications", icon: FileClock },
       { label: "Documents", to: "/documents", icon: FileText },
       { label: "Payment", to: "/payment", icon: Receipt },
@@ -225,7 +226,7 @@ function electedMemberModuleNav(pathname: string): AppNavGroup[] {
   return [];
 }
 
-const MEMBER_DESK_NAV: AppNavGroup[] = withDashboard("/members", [
+const MEMBER_DESK_NAV: AppNavGroup[] = [
   {
     label: "Applications",
     collapsible: true,
@@ -239,7 +240,7 @@ const MEMBER_DESK_NAV: AppNavGroup[] = withDashboard("/members", [
       },
     ],
   },
-], { view: "dashboard" });
+];
 
 const MANAGE_RECORDS_NAV: AppNavGroup[] = withDashboard("/existing-members", [
   {
@@ -253,8 +254,15 @@ const MANAGE_RECORDS_NAV: AppNavGroup[] = withDashboard("/existing-members", [
         search: { tab: "register" },
       },
       { label: "Register member", to: "/register-member", icon: UserPlus },
+    ],
+  },
+  {
+    label: "Assign privileges",
+    collapsible: true,
+    items: [
+      { label: "Add New", to: "/existing-members/privileges/new", icon: Plus },
       {
-        label: "Assign privileges",
+        label: "View and Manage",
         to: "/existing-members",
         icon: BadgeCheck,
         search: { tab: "privileges" },
@@ -310,7 +318,8 @@ const FINANCE_NAV: AppNavGroup[] = withDashboard("/finance", [
     label: "Finance",
     items: [
       { label: "Finance desk", to: "/finance/desk", icon: Wallet, match: ["/finance/desk"] },
-      { label: "Invoices", to: "/finance/invoices", icon: FileText },
+      { label: "Invoices", to: "/finance/invoices", icon: FileText, match: ["/finance/invoices"] },
+      { label: "Setup", to: "/finance/invoices/setup", icon: SlidersHorizontal, match: ["/finance/invoices/setup"] },
       { label: "Accommodation", to: "/finance/non-membership/accommodation", icon: BedDouble },
       { label: "Corkage", to: "/finance/non-membership/corkage", icon: Wine },
       { label: "Custom charges", to: "/finance/non-membership/custom-charges", icon: Receipt },
@@ -670,6 +679,7 @@ export function isNavActive(
   return targets.some((to) => {
     if (to === "/") return pathname === "/";
     if (to === "/settings") return pathname === "/settings" || pathname === "/settings/";
+    if (to === "/finance/invoices") return pathname === "/finance/invoices";
     return pathname === to || pathname.startsWith(`${to}/`);
   });
 }

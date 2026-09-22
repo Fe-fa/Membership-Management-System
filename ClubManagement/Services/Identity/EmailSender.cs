@@ -1,5 +1,8 @@
 using System.Net;
 using System.Net.Mail;
+using System.Net.Mime;
+using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 
 namespace ClubManagement.Services.Identity;
@@ -30,6 +33,10 @@ public interface IEmailSender
 
 public class EmailSender : IEmailSender
 {
+    private static readonly Regex DataUriImage = new(
+        @"src=""(data:image\/([a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+))""",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private readonly SmtpOptions _smtp;
     private readonly ILogger<EmailSender> _logger;
 
@@ -70,10 +77,26 @@ public class EmailSender : IEmailSender
         {
             From = new MailAddress(_smtp.From, fromName),
             Subject = subject,
-            Body = body,
-            IsBodyHtml = html
+            BodyEncoding = Encoding.UTF8,
+            SubjectEncoding = Encoding.UTF8
         };
         message.To.Add(to);
+
+        if (html)
+        {
+            var extracted = ReplaceDataUriImages(body);
+            var view = AlternateView.CreateAlternateViewFromString(extracted.Html, Encoding.UTF8, MediaTypeNames.Text.Html);
+            foreach (var resource in extracted.Resources)
+                view.LinkedResources.Add(resource);
+            message.AlternateViews.Add(view);
+            message.IsBodyHtml = true;
+            message.Body = "This invoice is in HTML format. Please view it in an HTML email client.";
+        }
+        else
+        {
+            message.IsBodyHtml = false;
+            message.Body = body;
+        }
 
         using var client = new SmtpClient(_smtp.Host, _smtp.Port)
         {
@@ -86,5 +109,36 @@ public class EmailSender : IEmailSender
         }
 
         await client.SendMailAsync(message, cancellationToken);
+    }
+
+    private static (string Html, List<LinkedResource> Resources) ReplaceDataUriImages(string html)
+    {
+        var resources = new List<LinkedResource>();
+        var replaced = DataUriImage.Replace(html, match =>
+        {
+            var mimeSubtype = match.Groups[2].Value;
+            var base64 = Regex.Replace(match.Groups[3].Value, @"\s+", "");
+            byte[] bytes;
+            try
+            {
+                bytes = Convert.FromBase64String(base64);
+            }
+            catch (FormatException)
+            {
+                return match.Value;
+            }
+
+            var contentId = $"logo{resources.Count + 1}@aeroclubea.com";
+            var extension = mimeSubtype.Split('+')[0];
+            var resource = new LinkedResource(new MemoryStream(bytes), new ContentType($"image/{mimeSubtype}"))
+            {
+                ContentId = contentId,
+                TransferEncoding = TransferEncoding.Base64
+            };
+            resource.ContentType.Name = $"logo{resources.Count + 1}.{extension}";
+            resources.Add(resource);
+            return $@"src=""cid:{contentId}""";
+        });
+        return (replaced, resources);
     }
 }

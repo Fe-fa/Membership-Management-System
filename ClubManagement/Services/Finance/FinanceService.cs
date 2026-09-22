@@ -110,6 +110,89 @@ public record InvoiceRunStatsDto(
     int MembersReceived,
     int MembersNotReceived,
     decimal TotalArrears);
+public record InvoiceRosterRowDto(
+    long AccountId,
+    long SubscriptionId,
+    string MembershipNo,
+    string MemberName,
+    string? MembershipType,
+    string? MembershipTypeCode,
+    decimal AmountDue,
+    decimal AmountPaid,
+    decimal ArrearsAmount,
+    string? Email,
+    string? InvoiceNo,
+    bool InvoiceReceived);
+public class InvoiceSetupDto
+{
+    public bool ShowPin { get; set; } = true;
+    public bool ShowDueDate { get; set; } = true;
+    public bool ShowCredits { get; set; } = true;
+    public bool ShowBankDetails { get; set; } = true;
+    public bool ShowMpesaDetails { get; set; } = true;
+    public string PayableNote { get; set; } = "All payments should be made payable to Aero Club of East Africa.";
+    public string Pin { get; set; } = "P000591170O";
+    public string Website { get; set; } = "www.aeroclubea.com";
+    public string BankName { get; set; } = "I & M Bank Ltd";
+    public string BankBranch { get; set; } = "Wilson Airport Branch";
+    public string AccountName { get; set; } = "Aero Club of East Africa";
+    public string KesAccount { get; set; } = "01100399661210";
+    public string UsdAccount { get; set; } = "01100399661211";
+    public string BankCode { get; set; } = "57";
+    public string BranchCode { get; set; } = "011";
+    public string Swift { get; set; } = "IMBLKENA";
+    public string MpesaPaybill { get; set; } = "4103461";
+    public string MpesaAccountHint { get; set; } = "Your Name / Membership No.";
+    public string ExtraNote { get; set; } = "";
+}
+public class PaymentFieldDto
+{
+    public string Id { get; set; } = "";
+    public string Label { get; set; } = "";
+    public string Value { get; set; } = "";
+}
+public class PaymentMethodBlockDto
+{
+    public string Id { get; set; } = "";
+    public string Code { get; set; } = "";
+    public string Title { get; set; } = "";
+    public bool Enabled { get; set; } = true;
+    public bool ShowOnInvoice { get; set; } = true;
+    public bool ShowOnReceipt { get; set; }
+    public List<PaymentFieldDto> Fields { get; set; } = new();
+}
+public class ExtraParameterDto
+{
+    public string Id { get; set; } = "";
+    public string Label { get; set; } = "";
+    public string Value { get; set; } = "";
+    public bool ShowOnInvoice { get; set; } = true;
+    public bool ShowOnReceipt { get; set; }
+}
+public class InvoiceDisplayDto
+{
+    public bool ShowPin { get; set; } = true;
+    public bool ShowDueDate { get; set; } = true;
+    public bool ShowCredits { get; set; } = true;
+}
+public class ReceiptDisplayDto
+{
+    public bool ShowPin { get; set; } = true;
+    public bool ShowWebsite { get; set; } = true;
+    public bool ShowAmountInWords { get; set; } = true;
+    public bool ShowSignatures { get; set; } = true;
+}
+public class PaymentSetupDto
+{
+    public string Pin { get; set; } = "P000591170O";
+    public string Website { get; set; } = "www.aeroclubea.com";
+    public string PayableNote { get; set; } = "All payments should be made payable to Aero Club of East Africa.";
+    public string ExtraNote { get; set; } = "";
+    public InvoiceDisplayDto Invoice { get; set; } = new();
+    public ReceiptDisplayDto Receipt { get; set; } = new();
+    public List<PaymentMethodBlockDto> Methods { get; set; } = new();
+    public List<ExtraParameterDto> ExtraParameters { get; set; } = new();
+}
 public record PaymentListFilter(
     long? AccountId = null,
     string? Status = null,
@@ -329,7 +412,8 @@ public interface IFinanceService
         bool sendEmail,
         long? actorUserId,
         CancellationToken cancellationToken,
-        bool publishToMember = true);
+        bool publishToMember = true,
+        string? invoiceHtml = null);
     Task<InvoiceDocumentDto?> GetSubscriptionInvoiceAsync(
         long accountId,
         int? year,
@@ -339,14 +423,22 @@ public interface IFinanceService
         SubscriptionListFilter filter,
         PagedRequest paging,
         CancellationToken cancellationToken);
+    Task<PagedResult<InvoiceRosterRowDto>> ListInvoiceRosterAsync(
+        SubscriptionListFilter filter,
+        PagedRequest paging,
+        bool? received,
+        CancellationToken cancellationToken);
     Task<InvoiceRunStatsDto> GetInvoiceRunStatsAsync(int year, string? membershipType, CancellationToken cancellationToken);
+    Task<PaymentSetupDto> GetInvoiceSetupAsync(CancellationToken cancellationToken);
+    Task<PaymentSetupDto> SaveInvoiceSetupAsync(PaymentSetupDto setup, long? actorUserId, CancellationToken cancellationToken);
     Task<InvoiceIssueBatchResult> IssueAnnualInvoicesForYearAsync(
         int year,
         long? actorUserId,
         bool sendEmail,
         CancellationToken cancellationToken,
         IReadOnlyList<long>? accountIds = null,
-        bool publishToMember = true);
+        bool publishToMember = true,
+        IReadOnlyDictionary<long, string>? invoiceHtmlByAccountId = null);
     Task ReconcileAccountDuesAsync(long accountId, CancellationToken cancellationToken);
     Task<StatementDocumentDto> GetMemberStatementAsync(
         long accountId,

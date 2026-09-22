@@ -43,12 +43,11 @@ export function PaymentContextBar({
       )}
       aria-label="Date and location"
     >
-      <p className="shrink-0 text-sm font-semibold text-foreground">Date and Location</p>
       <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <FilterField icon={CalendarDays} label="Year" value={String(displayYear)} />
         <FilterField icon={Clock} label="Period" value={period} />
         <FilterField icon={MapPin} label="Country" value={country} />
-        <FilterField icon={Banknote} label="Currency" value={currency} />
+        <FilterField icon={Banknote} label="" value={currency} />
       </div>
     </div>
   );

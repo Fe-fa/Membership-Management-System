@@ -34,6 +34,9 @@ export const Route = createFileRoute("/members")({
         search: { tab: search.tab },
       });
     }
+    if (search.view === "dashboard") {
+      throw redirect({ to: "/members" });
+    }
   },
   component: MembersLayout,
 });

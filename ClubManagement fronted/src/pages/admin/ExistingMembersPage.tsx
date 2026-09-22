@@ -1,11 +1,11 @@
 ﻿import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { Loader2, Pencil, Plus, Trash2, UserPlus, UserRound } from "lucide-react";
+import { useState } from "react";
+import { Loader2, Pencil, Trash2, UserPlus, UserRound } from "lucide-react";
 import { toast } from "sonner";
 
 import { ListPagination } from "@/components/common/ListPagination";
-import { PageBackLink, PageFrame, PageHeader } from "@/components/layout/PageFrame";
+import { PageBackLink, PageFrame } from "@/components/layout/PageFrame";
 import { PageBodyLoading, PageDataGate } from "@/components/layout/PageLoading";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,7 +27,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   formatMembershipDate,
@@ -62,10 +61,10 @@ export function ExistingMembersPage() {
           });
         }}
       >
-        <TabsList className="h-auto w-full flex-wrap justify-start">
+        {/* <TabsList className="h-auto w-full flex-wrap justify-start">
           <TabsTrigger value="register">Existing members</TabsTrigger>
           <TabsTrigger value="privileges">Privileges</TabsTrigger>
-        </TabsList>
+        </TabsList> */}
         <TabsContent value="register" className="mt-5">
           <ExistingMembersPanel />
         </TabsContent>
@@ -525,8 +524,6 @@ function PrivilegesPanel() {
     queryFn: () => apiRequest<MembershipTypeRow[]>("/api/membership-types"),
   });
   const [draft, setDraft] = useState<Record<number, MembershipTypeRow>>({});
-  const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<MembershipTypeRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MembershipTypeRow | null>(null);
 
   const rows = data.map((type) => draft[type.membershipTypeId] ?? type);
@@ -579,26 +576,6 @@ function PrivilegesPanel() {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <Button
-          type="button"
-          onClick={() => {
-            setEditing(null);
-            setFormOpen(true);
-          }}
-        >
-          <Plus className="size-4" />
-          Add
-        </Button>
-      </div>
-      <MembershipTypeFormDialog
-        open={formOpen}
-        editing={editing}
-        onOpenChange={(next) => {
-          setFormOpen(next);
-          if (!next) setEditing(null);
-        }}
-      />
       <DeleteMembershipTypeDialog target={deleteTarget} onClose={() => setDeleteTarget(null)} />
       <div className="overflow-x-auto rounded-xl border border-border bg-card">
         <table className="w-full min-w-[1100px] text-sm">
@@ -654,15 +631,10 @@ function PrivilegesPanel() {
                       >
                         Save
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setEditing(type);
-                          setFormOpen(true);
-                        }}
-                      >
-                        <Pencil className="size-3.5" />
+                      <Button size="sm" variant="outline" asChild>
+                        <Link to="/existing-members/privileges/$typeId/edit" params={{ typeId: String(type.membershipTypeId) }}>
+                          <Pencil className="size-3.5" />
+                        </Link>
                       </Button>
                       <Button
                         size="sm"
@@ -681,140 +653,6 @@ function PrivilegesPanel() {
         </table>
       </div>
     </div>
-  );
-}
-
-function MembershipTypeFormDialog({
-  open,
-  editing,
-  onOpenChange,
-}: {
-  open: boolean;
-  editing: MembershipTypeRow | null;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const queryClient = useQueryClient();
-  const [form, setForm] = useState({ code: "", name: "", description: "" });
-  const isEdit = Boolean(editing);
-
-  useEffect(() => {
-    if (!open) return;
-    if (editing) {
-      setForm({
-        code: editing.code,
-        name: editing.name,
-        description: editing.description ?? "",
-      });
-      return;
-    }
-    setForm({ code: "", name: "", description: "" });
-  }, [open, editing]);
-
-  const save = useMutation({
-    mutationFn: () => {
-      const body = JSON.stringify({
-        code: form.code.trim(),
-        name: form.name.trim(),
-        description: form.description.trim() || null,
-      });
-      if (editing) {
-        return apiRequest<MembershipTypeRow>(`/api/membership-types/${editing.membershipTypeId}`, {
-          method: "PUT",
-          body,
-        });
-      }
-      return apiRequest<MembershipTypeRow>("/api/membership-types/create", {
-        method: "POST",
-        body,
-      });
-    },
-    onSuccess: (created) => {
-      toast.success(
-        isEdit ? `${created.name} updated.` : `${created.name} added. Assign privileges on this table.`,
-      );
-      setForm({ code: "", name: "", description: "" });
-      onOpenChange(false);
-      void queryClient.invalidateQueries({ queryKey: ["membership-types"] });
-    },
-    onError: (err) => toast.error(extractErrorMessage(err)),
-  });
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (next && editing) {
-          setForm({
-            code: editing.code,
-            name: editing.name,
-            description: editing.description ?? "",
-          });
-        }
-        if (!next) setForm({ code: "", name: "", description: "" });
-        onOpenChange(next);
-      }}
-    >
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit membership type" : "Add membership type"}</DialogTitle>
-          <DialogDescription>
-            {isEdit
-              ? "Update the class code, name, and description."
-              : "Create another membership class."}
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          className="grid gap-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            save.mutate();
-          }}
-        >
-         <label className="text-sm">
-            Membership type code
-            <Input
-              className="mt-1 uppercase"
-              value={form.code}
-              required
-              maxLength={40}
-              placeholder="e.g. ASSOCIATE"
-              onChange={(event) => setForm({ ...form, code: event.target.value.toUpperCase() })}
-            />
-          </label>
-          <label className="text-sm">
-            Membership name
-            <Input
-              className="mt-1"
-              value={form.name}
-              required
-              maxLength={120}
-              placeholder="e.g. Associate"
-              onChange={(event) => setForm({ ...form, name: event.target.value })}
-            />
-          </label>
-          <label className="text-sm">
-            Description
-            <Textarea
-              className="mt-1"
-              value={form.description}
-              maxLength={500}
-              rows={3}
-              placeholder="Optional"
-              onChange={(event) => setForm({ ...form, description: event.target.value })}
-            />
-          </label>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={save.isPending}>
-              {save.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-              {isEdit ? "Save changes" : "Save type"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }
 

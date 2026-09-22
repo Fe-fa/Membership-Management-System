@@ -10,8 +10,12 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { useInvoiceSetup } from "@/services/finance/invoiceSetup";
 import { apiRequest, extractErrorMessage } from "@/services/membership/api";
-import { printHtmlReport } from "@/utils/financeExport";
+import { tenantDocumentBrand, useCurrentTenant } from "@/services/tenant";
+import { printHtmlDocument } from "@/utils/financeExport";
+import { mergePaymentSetup } from "@/utils/invoiceSetup";
+import { buildReceiptHtml } from "@/utils/receiptDocument";
 import { formatKes } from "@/utils/format";
 
 export type NmReceipt = {
@@ -40,6 +44,9 @@ export function NonMembershipReceiptDrawer({
   id: number | null;
   onClose: () => void;
 }) {
+  const tenant = useCurrentTenant();
+  const brand = tenantDocumentBrand(tenant.data);
+  const paymentSetup = useInvoiceSetup();
   const receipt = useQuery({
     queryKey: ["nm-receipt", kind, id],
     queryFn: () => apiRequest<NmReceipt>(`/api/finance/non-membership/receipt/${kind}/${id}`),
@@ -76,18 +83,28 @@ export function NonMembershipReceiptDrawer({
               type="button"
               className="mt-4 w-full"
               onClick={() => {
-                const ok = printHtmlReport(
-                  `Receipt ${row.receiptNo || row.id}`,
-                  `<table><tbody>
-                    <tr><th>Receipt</th><td>${row.receiptNo || "—"}</td></tr>
-                    <tr><th>Payer</th><td>${row.payerName}</td></tr>
-                    <tr><th>Description</th><td>${row.description}</td></tr>
-                    <tr><th>Amount</th><td>${formatKes(row.amount)}</td></tr>
-                    <tr><th>Method</th><td>${row.paymentMethod || "—"}</td></tr>
-                    <tr><th>Reference</th><td>${row.referenceCode || "—"}</td></tr>
-                  </tbody></table>`,
-                );
-                if (!ok) toast.error("Could not open print dialog.");
+                const html = buildReceiptHtml({
+                  transactionId: row.id,
+                  receiptId: row.id,
+                  clubName: brand.clubName || "Aero Club of East Africa",
+                  clubLogo: brand.clubLogo,
+                  receiptNumber: row.receiptNo || `NM-${row.id}`,
+                  issuedDate: row.paidAt || row.createdAt,
+                  paymentDate: row.paidAt || row.createdAt,
+                  payerName: row.payerName,
+                  payerCategory: "Guest",
+                  membershipNo: row.membershipNo,
+                  feeType: row.description,
+                  paymentMethod: row.paymentMethod || "Payment",
+                  mpesaCode: row.referenceCode,
+                  amount: row.amount,
+                  amountInWords: "",
+                  currency: "KES",
+                  status: row.status,
+                  purpose: row.description,
+                  setup: mergePaymentSetup(paymentSetup.data),
+                });
+                if (!printHtmlDocument(html)) toast.error("Could not open print dialog.");
               }}
             >
               <Printer className="size-4" />

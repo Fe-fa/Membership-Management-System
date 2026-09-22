@@ -4,7 +4,6 @@ import { PendingApplicationsPage } from "@/pages/admin/PendingApplicationsPage";
 
 function MembersIndexPage() {
   const search = useSearch({ from: "/members" });
-  if (search.view === "dashboard") return <ModuleDashboardPage moduleId="applicant-queue" />;
   if (search.view === "manager" && search.section === "dashboard") {
     return <ModuleDashboardPage moduleId="manager-queue" />;
   }

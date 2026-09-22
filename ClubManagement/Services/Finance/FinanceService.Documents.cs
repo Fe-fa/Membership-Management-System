@@ -1,4 +1,5 @@
-using System.Globalization;
+﻿using System.Text.Json;
+using System.Text.Json.Serialization;
 using ClubManagement.DTOs.Common;
 using ClubManagement.Entities;
 using ClubManagement.Entities.Finance;
@@ -365,7 +366,8 @@ public partial class FinanceService
         bool sendEmail,
         long? actorUserId,
         CancellationToken cancellationToken,
-        bool publishToMember = true)
+        bool publishToMember = true,
+        string? invoiceHtml = null)
     {
         var y = year ?? DateTime.UtcNow.Year;
         var account = await _db.Accounts
@@ -412,7 +414,7 @@ public partial class FinanceService
 
         var dto = await MapInvoiceAsync(invoice, account, sub, cancellationToken);
         if (sendEmail)
-            await TryEmailInvoiceAsync(invoice, dto, account.Profile?.Email, cancellationToken);
+            await TryEmailInvoiceAsync(invoice, dto, account.Profile?.Email, invoiceHtml, cancellationToken);
         return invoice.SentAt is not null ? await MapInvoiceAsync(invoice, account, sub, cancellationToken) : dto;
     }
 
@@ -494,6 +496,68 @@ public partial class FinanceService
         return Paging.Create(items, paging, total);
     }
 
+    public async Task<PagedResult<InvoiceRosterRowDto>> ListInvoiceRosterAsync(
+        SubscriptionListFilter filter,
+        PagedRequest paging,
+        bool? received,
+        CancellationToken cancellationToken)
+    {
+        var y = filter.Year ?? DateTime.UtcNow.Year;
+        var deliveredAccountIds = DeliveredInvoiceAccountIds(y);
+        var query = InvoiceArrearsQuery(y, filter.MembershipType, filter.Search);
+        if (received == true)
+            query = query.Where(s => deliveredAccountIds.Contains(s.AccountId));
+        else if (received == false)
+            query = query.Where(s => !deliveredAccountIds.Contains(s.AccountId));
+
+        var total = await query.CountAsync(cancellationToken);
+        var rows = await query
+            .Include(s => s.Account)
+                .ThenInclude(a => a.Profile)
+            .Include(s => s.Account)
+                .ThenInclude(a => a.MembershipType)
+            .OrderBy(s => s.Account.MembershipType != null ? s.Account.MembershipType.Name : "")
+            .ThenBy(s => s.Account.MembershipNo)
+            .Skip(paging.Skip)
+            .Take(paging.PageSize)
+            .ToListAsync(cancellationToken);
+
+        var accountIds = rows.Select(s => s.AccountId).Distinct().ToList();
+        var invoices = accountIds.Count == 0
+            ? new Dictionary<long, string>()
+            : (await _db.MembershipInvoices.AsNoTracking()
+                .Where(i => i.Year == y && accountIds.Contains(i.AccountId))
+                .Select(i => new { i.AccountId, i.InvoiceNo })
+                .ToListAsync(cancellationToken))
+                .GroupBy(i => i.AccountId)
+                .ToDictionary(g => g.Key, g => g.First().InvoiceNo);
+        var delivered = await deliveredAccountIds.Distinct().ToListAsync(cancellationToken);
+        var deliveredSet = delivered.ToHashSet();
+
+        var items = rows.Select(s =>
+        {
+            var name = $"{s.Account.Profile?.FirstName} {s.Account.Profile?.LastName}".Trim();
+            if (string.IsNullOrWhiteSpace(name))
+                name = s.Account.MembershipNo ?? "Member";
+            invoices.TryGetValue(s.AccountId, out var invoiceNo);
+            return new InvoiceRosterRowDto(
+                s.AccountId,
+                s.SubscriptionId,
+                s.Account.MembershipNo ?? "",
+                name,
+                s.Account.MembershipType?.Name,
+                s.Account.MembershipType?.Code,
+                s.AmountDue,
+                s.AmountPaid,
+                s.ArrearsAmount,
+                s.Account.Profile?.Email,
+                invoiceNo,
+                deliveredSet.Contains(s.AccountId));
+        }).ToList();
+
+        return Paging.Create(items, paging, total);
+    }
+
     public async Task<InvoiceRunStatsDto> GetInvoiceRunStatsAsync(
         int year,
         string? membershipType,
@@ -523,7 +587,8 @@ public partial class FinanceService
         bool sendEmail,
         CancellationToken cancellationToken,
         IReadOnlyList<long>? accountIds = null,
-        bool publishToMember = true)
+        bool publishToMember = true,
+        IReadOnlyDictionary<long, string>? invoiceHtmlByAccountId = null)
     {
         if (!sendEmail && !publishToMember)
             throw new InvalidOperationException("Choose email, member dashboard, or both.");
@@ -546,13 +611,16 @@ public partial class FinanceService
         {
             try
             {
+                string? invoiceHtml = null;
+                invoiceHtmlByAccountId?.TryGetValue(accountId, out invoiceHtml);
                 var dto = await IssueSubscriptionInvoiceAsync(
                     accountId,
                     year,
                     sendEmail,
                     actorUserId,
                     cancellationToken,
-                    publishToMember);
+                    publishToMember,
+                    invoiceHtml);
                 issued++;
                 if (publishToMember) published++;
                 if (sendEmail)
@@ -813,28 +881,36 @@ public partial class FinanceService
             invoice.SentToEmail,
             string.IsNullOrWhiteSpace(club.ClubName) ? "Aero Club of East Africa" : club.ClubName,
             string.IsNullOrWhiteSpace(club.Address)
-                ? "P.O. Box 40813, 00100 Wilson Airport, Nairobi, Kenya"
+                ? "P.O. Box 40813 - 00100, Nairobi, Kenya. Wilson Airport, Langata Road"
                 : club.Address,
             string.IsNullOrWhiteSpace(club.Email) ? "info@aeroclubea.com" : club.Email,
             string.IsNullOrWhiteSpace(club.Phone) ? "+254 111 053 220" : club.Phone,
-            await ClubSettingValueAsync("MPESA_PAYBILL", "123456", cancellationToken),
-            await ClubSettingValueAsync("BANK_NAME", "Kenya Commercial Bank (KCB)", cancellationToken),
-            await ClubSettingValueAsync("BANK_ACCOUNT", "111053220", cancellationToken));
+            await ClubSettingValueAsync("MPESA_PAYBILL", "4103461", cancellationToken),
+            await ClubSettingValueAsync("BANK_NAME", "I & M Bank Ltd", cancellationToken),
+            await ClubSettingValueAsync("BANK_ACCOUNT", "01100399661210", cancellationToken));
     }
 
     private async Task TryEmailInvoiceAsync(
         MembershipInvoice invoice,
         InvoiceDocumentDto dto,
         string? email,
+        string? invoiceHtml,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(email)) return;
+        if (string.IsNullOrWhiteSpace(invoiceHtml))
+        {
+            _logger.LogWarning(
+                "Skipped email for {InvoiceNo}: invoice HTML must come from the frontend document.",
+                invoice.InvoiceNo);
+            return;
+        }
         try
         {
             var sent = await _email.SendHtmlAsync(
                 email.Trim(),
-                $"Aero Club invoice {dto.InvoiceNo} · {dto.Year} subscription",
-                BuildInvoiceHtml(dto),
+                $"Aero Club invoice {dto.InvoiceNo} - {dto.Year} subscription",
+                invoiceHtml,
                 cancellationToken);
             if (sent)
             {
@@ -867,196 +943,258 @@ public partial class FinanceService
         return new DateOnly(year, 2, 28);
     }
 
-    private static string InvoiceStatusLabel(decimal paid, decimal balance)
+    private const string InvoiceSetupKey = "INVOICE_SETUP";
+    private static readonly JsonSerializerOptions InvoiceSetupJson = new()
     {
-        if (balance <= 0.01m) return "PAID";
-        if (paid > 0.01m) return "PARTIAL";
-        return "UNPAID";
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
+    public async Task<PaymentSetupDto> GetInvoiceSetupAsync(CancellationToken cancellationToken)
+    {
+        var stored = await ClubSettingValueAsync(InvoiceSetupKey, "", cancellationToken);
+        return ParsePaymentSetup(stored);
     }
 
-    private static readonly Lazy<string> CachedClubLogoDataUri = new(LoadClubLogoDataUri);
-
-    private static string LoadClubLogoDataUri()
+    public async Task<PaymentSetupDto> SaveInvoiceSetupAsync(
+        PaymentSetupDto setup,
+        long? actorUserId,
+        CancellationToken cancellationToken)
     {
-        var candidates = new[]
+        var normalized = NormalizePaymentSetup(setup);
+        var json = JsonSerializer.Serialize(normalized, InvoiceSetupJson);
+        await UpsertClubSettingAsync(InvoiceSetupKey, json, "Payment setup for invoices and receipts.", actorUserId, cancellationToken);
+        var bankName = MethodField(normalized, "bank", "bank-name");
+        var kesAccount = MethodField(normalized, "bank", "bank-kes");
+        var paybill = MethodField(normalized, "mpesa", "mpesa-paybill");
+        if (!string.IsNullOrWhiteSpace(bankName))
+            await UpsertClubSettingAsync("BANK_NAME", bankName, "Invoice bank name.", actorUserId, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(kesAccount))
+            await UpsertClubSettingAsync("BANK_ACCOUNT", kesAccount, "Invoice KES account.", actorUserId, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(paybill))
+            await UpsertClubSettingAsync("MPESA_PAYBILL", paybill, "Invoice M-Pesa paybill.", actorUserId, cancellationToken);
+        return normalized;
+    }
+
+    private static PaymentSetupDto ParsePaymentSetup(string? json)
+    {
+        var defaults = CreateDefaultPaymentSetup();
+        if (string.IsNullOrWhiteSpace(json)) return defaults;
+        try
         {
-            Path.Combine(AppContext.BaseDirectory, "wwwroot", "branding", "ACEA.png"),
-            Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "branding", "ACEA.png"),
-        };
-        foreach (var path in candidates)
-        {
-            if (!File.Exists(path)) continue;
-            return "data:image/png;base64," + Convert.ToBase64String(File.ReadAllBytes(path));
+            if (LooksLikeLegacyInvoiceSetup(json))
+            {
+                var legacy = JsonSerializer.Deserialize<InvoiceSetupDto>(json, InvoiceSetupJson);
+                return legacy is null ? defaults : FromLegacyInvoiceSetup(legacy);
+            }
+            var parsed = JsonSerializer.Deserialize<PaymentSetupDto>(json, InvoiceSetupJson);
+            return parsed is null ? defaults : NormalizePaymentSetup(parsed);
         }
-        return "";
+        catch (JsonException)
+        {
+            return defaults;
+        }
     }
 
-    private static string ClubLogoDataUri() => CachedClubLogoDataUri.Value;
-
-    private static string ClubLogoImg(string clubName)
+    private static bool LooksLikeLegacyInvoiceSetup(string json)
     {
-        var uri = ClubLogoDataUri();
-        if (string.IsNullOrEmpty(uri)) return "";
-        return $"<img class=\"logo\" src=\"{uri}\" alt=\"{System.Net.WebUtility.HtmlEncode(clubName)}\" />";
+        using var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.ValueKind != JsonValueKind.Object) return true;
+        return !doc.RootElement.TryGetProperty("methods", out var methods) || methods.ValueKind != JsonValueKind.Array;
     }
 
-    private static string BuildInvoiceHtml(InvoiceDocumentDto dto)
+    private static PaymentSetupDto FromLegacyInvoiceSetup(InvoiceSetupDto old)
     {
-        var kes = CultureInfo.GetCultureInfo("en-KE");
-        string Money(decimal v) => v.ToString("N2", kes);
-        string H(string? value) => System.Net.WebUtility.HtmlEncode(value ?? "");
+        var setup = CreateDefaultPaymentSetup();
+        setup.Pin = string.IsNullOrWhiteSpace(old.Pin) ? setup.Pin : old.Pin.Trim();
+        setup.Website = string.IsNullOrWhiteSpace(old.Website) ? setup.Website : old.Website.Trim();
+        setup.PayableNote = string.IsNullOrWhiteSpace(old.PayableNote) ? setup.PayableNote : old.PayableNote.Trim();
+        setup.ExtraNote = old.ExtraNote?.Trim() ?? "";
+        setup.Invoice = new InvoiceDisplayDto
+        {
+            ShowPin = old.ShowPin,
+            ShowDueDate = old.ShowDueDate,
+            ShowCredits = old.ShowCredits
+        };
+        SetMethodVisible(setup, "bank", old.ShowBankDetails, onInvoice: true);
+        SetMethodVisible(setup, "mpesa", old.ShowMpesaDetails, onInvoice: true);
+        SetField(setup, "bank", "bank-name", old.BankName);
+        SetField(setup, "bank", "bank-branch", old.BankBranch);
+        SetField(setup, "bank", "bank-account-name", old.AccountName);
+        SetField(setup, "bank", "bank-kes", old.KesAccount);
+        SetField(setup, "bank", "bank-usd", old.UsdAccount);
+        SetField(setup, "bank", "bank-code", old.BankCode);
+        SetField(setup, "bank", "bank-branch-code", old.BranchCode);
+        SetField(setup, "bank", "bank-swift", old.Swift);
+        SetField(setup, "mpesa", "mpesa-paybill", old.MpesaPaybill);
+        SetField(setup, "mpesa", "mpesa-account", old.MpesaAccountHint);
+        return setup;
+    }
 
-        var clubName = string.IsNullOrWhiteSpace(dto.ClubName) ? "Aero Club of East Africa" : dto.ClubName;
-        var address = string.IsNullOrWhiteSpace(dto.ClubAddress)
-            ? "P.O. Box 40813, 00100 Wilson Airport, Nairobi, Kenya"
-            : dto.ClubAddress;
-        var email = string.IsNullOrWhiteSpace(dto.ClubEmail) ? "info@aeroclubea.com" : dto.ClubEmail;
-        var phone = string.IsNullOrWhiteSpace(dto.ClubPhone) ? "+254 111 053 220" : dto.ClubPhone;
-        var membershipNo = string.IsNullOrWhiteSpace(dto.MembershipNo) ? "—" : dto.MembershipNo;
-        var membershipType = dto.MembershipType ?? "";
-        var status = InvoiceStatusLabel(dto.AmountPaid, dto.Balance);
-        var statusClass = status.ToLowerInvariant();
-        var paybill = string.IsNullOrWhiteSpace(dto.MpesaPaybill) ? "123456" : dto.MpesaPaybill;
-        var bankName = string.IsNullOrWhiteSpace(dto.BankName) ? "Kenya Commercial Bank (KCB)" : dto.BankName;
-        var bankAccount = string.IsNullOrWhiteSpace(dto.BankAccount) ? "111053220" : dto.BankAccount;
-        var membershipLine = string.IsNullOrWhiteSpace(membershipType)
-            ? H(membershipNo)
-            : $"{H(membershipNo)} • {H(membershipType)}";
+    private static PaymentSetupDto NormalizePaymentSetup(PaymentSetupDto setup)
+    {
+        var defaults = CreateDefaultPaymentSetup();
+        setup.Pin = string.IsNullOrWhiteSpace(setup.Pin) ? defaults.Pin : setup.Pin.Trim();
+        setup.Website = string.IsNullOrWhiteSpace(setup.Website) ? defaults.Website : setup.Website.Trim();
+        setup.PayableNote = string.IsNullOrWhiteSpace(setup.PayableNote) ? defaults.PayableNote : setup.PayableNote.Trim();
+        setup.ExtraNote = setup.ExtraNote?.Trim() ?? "";
+        setup.Invoice ??= new InvoiceDisplayDto();
+        setup.Receipt ??= new ReceiptDisplayDto();
+        setup.Methods ??= new List<PaymentMethodBlockDto>();
+        setup.ExtraParameters ??= new List<ExtraParameterDto>();
+        foreach (var method in setup.Methods)
+        {
+            method.Id = string.IsNullOrWhiteSpace(method.Id) ? Guid.NewGuid().ToString("N") : method.Id.Trim();
+            method.Code = string.IsNullOrWhiteSpace(method.Code) ? "CUSTOM" : method.Code.Trim();
+            method.Title = string.IsNullOrWhiteSpace(method.Title) ? "Payment method" : method.Title.Trim();
+            method.Fields ??= new List<PaymentFieldDto>();
+            foreach (var field in method.Fields)
+            {
+                field.Id = string.IsNullOrWhiteSpace(field.Id) ? Guid.NewGuid().ToString("N") : field.Id.Trim();
+                field.Label = field.Label?.Trim() ?? "";
+                field.Value = field.Value?.Trim() ?? "";
+            }
+        }
+        foreach (var parameter in setup.ExtraParameters)
+        {
+            parameter.Id = string.IsNullOrWhiteSpace(parameter.Id) ? Guid.NewGuid().ToString("N") : parameter.Id.Trim();
+            parameter.Label = parameter.Label?.Trim() ?? "";
+            parameter.Value = parameter.Value?.Trim() ?? "";
+        }
+        return setup;
+    }
 
-        return $$"""
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>{{H(dto.InvoiceNo)}}</title>
-  <style>
-    @page { margin: 16mm; }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      color: #1f2554;
-      background: #fff;
-      font-family: "Segoe UI", Tahoma, sans-serif;
+    private static PaymentSetupDto CreateDefaultPaymentSetup() => new()
+    {
+        Pin = "P000591170O",
+        Website = "www.aeroclubea.com",
+        PayableNote = "All payments should be made payable to Aero Club of East Africa.",
+        ExtraNote = "",
+        Invoice = new InvoiceDisplayDto(),
+        Receipt = new ReceiptDisplayDto(),
+        Methods = new List<PaymentMethodBlockDto>
+        {
+            new()
+            {
+                Id = "bank",
+                Code = "BANK_TRANSFER",
+                Title = "Bank transfer",
+                Enabled = true,
+                ShowOnInvoice = true,
+                Fields = new List<PaymentFieldDto>
+                {
+                    F("bank-note", "Remittance note", "Bank remittance charges must be paid by the sender — use “OUR” code"),
+                    F("bank-name", "Bank name", "I & M Bank Ltd"),
+                    F("bank-branch", "Branch", "Wilson Airport Branch"),
+                    F("bank-account-name", "Account name", "Aero Club of East Africa"),
+                    F("bank-kes", "KES account", "01100399661210"),
+                    F("bank-usd", "USD account", "01100399661211"),
+                    F("bank-code", "Bank code", "57"),
+                    F("bank-branch-code", "Branch code", "011"),
+                    F("bank-swift", "SWIFT", "IMBLKENA"),
+                }
+            },
+            new()
+            {
+                Id = "mpesa",
+                Code = "MPESA",
+                Title = "M-Pesa",
+                Enabled = true,
+                ShowOnInvoice = true,
+                Fields = new List<PaymentFieldDto>
+                {
+                    F("mpesa-paybill", "Paybill no.", "4103461"),
+                    F("mpesa-account", "Account name", "Your Name / Membership No."),
+                }
+            },
+            new()
+            {
+                Id = "cash",
+                Code = "CASH",
+                Title = "Cash",
+                Enabled = true,
+                Fields = new List<PaymentFieldDto> { F("cash-note", "Instructions", "Pay at the finance desk, Wilson Airport.") }
+            },
+            new()
+            {
+                Id = "cheque",
+                Code = "CHEQUE",
+                Title = "Cheque",
+                Enabled = true,
+                Fields = new List<PaymentFieldDto> { F("cheque-payable", "Payable to", "Aero Club of East Africa") }
+            },
+            new()
+            {
+                Id = "card",
+                Code = "CARD",
+                Title = "Card",
+                Enabled = true,
+                Fields = new List<PaymentFieldDto> { F("card-note", "Instructions", "Visa / Mastercard at the finance desk.") }
+            }
+        },
+        ExtraParameters = new List<ExtraParameterDto>()
+    };
+
+    private static PaymentFieldDto F(string id, string label, string value) => new()
+    {
+        Id = id,
+        Label = label,
+        Value = value
+    };
+
+    private static string MethodField(PaymentSetupDto setup, string methodId, string fieldId) =>
+        setup.Methods
+            .FirstOrDefault(method => method.Id == methodId || string.Equals(method.Code, methodId, StringComparison.OrdinalIgnoreCase))
+            ?.Fields.FirstOrDefault(field => field.Id == fieldId)
+            ?.Value?.Trim() ?? "";
+
+    private static void SetMethodVisible(PaymentSetupDto setup, string methodId, bool visible, bool onInvoice)
+    {
+        var method = setup.Methods.FirstOrDefault(item => item.Id == methodId);
+        if (method is null) return;
+        if (onInvoice) method.ShowOnInvoice = visible;
+        else method.ShowOnReceipt = visible;
     }
-    .sheet { max-width: 760px; margin: 0 auto; padding: 0 8px 24px; }
-    .rule { height: 8px; background: #c9a46c; }
-    .header {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      padding: 20px 8px 18px;
+
+    private static void SetField(PaymentSetupDto setup, string methodId, string fieldId, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return;
+        var field = setup.Methods.FirstOrDefault(item => item.Id == methodId)?.Fields.FirstOrDefault(item => item.Id == fieldId);
+        if (field is not null) field.Value = value.Trim();
     }
-    .brand { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-    .brand .logo { display: block; height: 56px; width: auto; margin: 0 auto; }
-    .brand h1 { margin: 0; font-size: 22px; letter-spacing: -0.02em; color: #1f2554; }
-    .contact { margin: 6px 0 0; color: #5b6472; font-size: 13px; line-height: 1.45; }
-    .masthead { text-align: center; margin-top: 10px; }
-    .badge {
-      display: inline-block;
-      margin-bottom: 8px;
-      padding: 4px 12px;
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-    }
-    .badge.unpaid { background: #f4ead8; color: #1f2554; }
-    .badge.partial { background: #e8e6f4; color: #1f2554; }
-    .badge.paid { background: #dcfce7; color: #166534; }
-    .wordmark { margin: 12px 0 0; font-size: 34px; font-weight: 800; letter-spacing: 0.04em; line-height: 1; color: #1f2554; }
-    .inv-no { margin: 8px 0 0; color: #6b7280; font-size: 15px; letter-spacing: 0.04em; }
-    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 32px; padding: 8px 8px 20px; }
-    .meta-col { padding-left: 0; }
-    .meta-col + .meta-col { border-left: 1px solid #e4d7bf; padding-left: 32px; }
-    .kicker { margin: 0 0 8px; color: #c9a46c; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; }
-    .who { margin: 0; font-size: 22px; font-weight: 700; }
-    .sub { margin: 6px 0 0; color: #4b5563; font-size: 14px; }
-    .dates { margin: 0; font-size: 14px; line-height: 1.7; }
-    .total {
-      margin: 4px 8px 22px;
-      padding: 18px 22px;
-      border: 1.5px solid #c9a46c;
-      border-radius: 14px;
-      font-size: 26px;
-      font-weight: 800;
-      letter-spacing: 0.01em;
-      color: #1f2554;
-    }
-    table.lines { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 8px; }
-    table.lines th, table.lines td { padding: 12px 16px; font-size: 14px; }
-    table.lines th { background: #1f2554; color: #fff; text-align: left; font-weight: 700; }
-    table.lines th.amt, table.lines td.amt { text-align: right; white-space: nowrap; }
-    table.lines td { border-bottom: 1px solid #e5e7eb; }
-    table.lines tr.stripe td { background: #f8f4ec; }
-    table.lines tr.balance td { background: #1f2554; color: #fff; font-weight: 700; border: 0; }
-    .pay { padding: 22px 8px 0; }
-    .pay h3 { margin: 0 0 8px; font-size: 14px; letter-spacing: 0.04em; }
-    .pay p { margin: 0; font-size: 14px; line-height: 1.6; }
-    .note { padding: 18px 8px 0; color: #6b7280; font-size: 13px; font-style: italic; line-height: 1.5; }
-  </style>
-</head>
-<body>
-  <div class="rule"></div>
-  <div class="sheet">
-    <div class="header">
-      <div class="brand">
-        {{ClubLogoImg(clubName)}}
-        <h1>{{H(clubName)}}</h1>
-      </div>
-      <p class="contact">{{H(address)}}<br />{{H(email)}} | {{H(phone)}}</p>
-      <div class="masthead">
-        <span class="badge {{statusClass}}">{{status}}</span>
-        <p class="wordmark">INVOICE</p>
-        <p class="inv-no">{{H(dto.InvoiceNo)}}</p>
-      </div>
-    </div>
-    <div class="meta">
-      <div class="meta-col">
-        <p class="kicker">BILLED TO</p>
-        <p class="who">{{H(dto.MemberName)}}</p>
-        <p class="sub">Membership: {{membershipLine}}</p>
-      </div>
-      <div class="meta-col">
-        <p class="kicker">INVOICE DETAILS</p>
-        <p class="dates">Date Issued: {{dto.IssuedAt:dd MMM yyyy}}<br />Due Date: {{dto.DueDate:dd MMM yyyy}}</p>
-      </div>
-    </div>
-    <div class="total">TOTAL DUE: Ksh {{Money(dto.Balance)}}</div>
-    <table class="lines">
-      <thead>
-        <tr>
-          <th>Description</th>
-          <th class="amt">Amount (Ksh)</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>{{dto.Year}} annual subscription</td>
-          <td class="amt">{{Money(dto.Amount)}}</td>
-        </tr>
-        <tr class="stripe">
-          <td>Paid to date</td>
-          <td class="amt">{{Money(dto.AmountPaid)}}</td>
-        </tr>
-        <tr class="balance">
-          <td>Balance due</td>
-          <td class="amt">{{Money(dto.Balance)}}</td>
-        </tr>
-      </tbody>
-    </table>
-    <div class="pay">
-      <h3>HOW TO PAY</h3>
-      <p>
-        M-Pesa Paybill {{H(paybill)}}<br />
-        Bank: {{H(bankName)}} · Account {{H(bankAccount)}}
-      </p>
-    </div>
-    <p class="note">One invoice is issued per member per year. Partial payments reduce the balance due.</p>
-  </div>
-</body>
-</html>
-""";
+
+    private async Task UpsertClubSettingAsync(
+        string key,
+        string value,
+        string description,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var existing = await _db.ClubSettings
+            .Where(s => s.SettingKey == key)
+            .OrderByDescending(s => s.ClubSettingId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (existing is null)
+        {
+            _db.ClubSettings.Add(new ClubSetting
+            {
+                SettingKey = key,
+                SettingValue = value,
+                Description = description,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                CreatedByUserId = actorUserId
+            });
+        }
+        else
+        {
+            existing.SettingValue = value;
+            existing.Description = description;
+            existing.IsActive = true;
+            existing.UpdatedByUserId = actorUserId;
+        }
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<string> ClubSettingValueAsync(string key, string fallback, CancellationToken cancellationToken)

@@ -56,6 +56,7 @@ import { Route as ElectionProxiesRouteImport } from './routes/election.proxies'
 import { Route as ElectionTallyRouteImport } from './routes/election.tally'
 import { Route as ExistingMembersIndexRouteImport } from './routes/existing-members.index'
 import { Route as ExistingMembersAccountIdRouteImport } from './routes/existing-members.$accountId'
+import { Route as ExistingMembersPrivilegesRouteImport } from './routes/existing-members.privileges'
 import { Route as FinanceIndexRouteImport } from './routes/finance.index'
 import { Route as FinanceDeskRouteImport } from './routes/finance.desk'
 import { Route as FinanceInvoicesRouteImport } from './routes/finance.invoices'
@@ -79,6 +80,11 @@ import { Route as SupportNewRouteImport } from './routes/support.new'
 import { Route as SupportTicketsRouteImport } from './routes/support.tickets'
 import { Route as UserManagementIndexRouteImport } from './routes/user-management.index'
 import { Route as UserManagementUserAccountIdRouteImport } from './routes/user-management.$userAccountId'
+import { Route as ExistingMembersPrivilegesIndexRouteImport } from './routes/existing-members.privileges.index'
+import { Route as ExistingMembersPrivilegesTypeIdRouteImport } from './routes/existing-members.privileges.$typeId'
+import { Route as ExistingMembersPrivilegesNewRouteImport } from './routes/existing-members.privileges.new'
+import { Route as FinanceInvoicesIndexRouteImport } from './routes/finance.invoices.index'
+import { Route as FinanceInvoicesSetupRouteImport } from './routes/finance.invoices.setup'
 import { Route as FinanceNonMembershipAccommodationRouteImport } from './routes/finance.non-membership.accommodation'
 import { Route as FinanceNonMembershipCorkageRouteImport } from './routes/finance.non-membership.corkage'
 import { Route as FinanceNonMembershipCustomChargesRouteImport } from './routes/finance.non-membership.custom-charges'
@@ -87,6 +93,7 @@ import { Route as ManageCommitteeMeetingsHistoryRouteImport } from './routes/man
 import { Route as ManageCommitteeMeetingsInterviewRouteImport } from './routes/manage-committee.meetings.interview'
 import { Route as ManageCommitteeMeetingsPendingRouteImport } from './routes/manage-committee.meetings.pending'
 import { Route as ManageCommitteeMeetingsWaitingRouteImport } from './routes/manage-committee.meetings.waiting'
+import { Route as ExistingMembersPrivilegesTypeIdEditRouteImport } from './routes/existing-members.privileges.$typeId.edit'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -327,6 +334,12 @@ const ExistingMembersAccountIdRoute =
     path: '/$accountId',
     getParentRoute: () => ExistingMembersRoute,
   } as any)
+const ExistingMembersPrivilegesRoute =
+  ExistingMembersPrivilegesRouteImport.update({
+    id: '/privileges',
+    path: '/privileges',
+    getParentRoute: () => ExistingMembersRoute,
+  } as any)
 const FinanceIndexRoute = FinanceIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -444,6 +457,34 @@ const UserManagementUserAccountIdRoute =
     path: '/$userAccountId',
     getParentRoute: () => UserManagementRoute,
   } as any)
+const ExistingMembersPrivilegesIndexRoute =
+  ExistingMembersPrivilegesIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => ExistingMembersPrivilegesRoute,
+  } as any)
+const ExistingMembersPrivilegesTypeIdRoute =
+  ExistingMembersPrivilegesTypeIdRouteImport.update({
+    id: '/$typeId',
+    path: '/$typeId',
+    getParentRoute: () => ExistingMembersPrivilegesRoute,
+  } as any)
+const ExistingMembersPrivilegesNewRoute =
+  ExistingMembersPrivilegesNewRouteImport.update({
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => ExistingMembersPrivilegesRoute,
+  } as any)
+const FinanceInvoicesIndexRoute = FinanceInvoicesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => FinanceInvoicesRoute,
+} as any)
+const FinanceInvoicesSetupRoute = FinanceInvoicesSetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
+  getParentRoute: () => FinanceInvoicesRoute,
+} as any)
 const FinanceNonMembershipAccommodationRoute =
   FinanceNonMembershipAccommodationRouteImport.update({
     id: '/non-membership/accommodation',
@@ -492,6 +533,12 @@ const ManageCommitteeMeetingsWaitingRoute =
     path: '/waiting',
     getParentRoute: () => ManageCommitteeMeetingsRoute,
   } as any)
+const ExistingMembersPrivilegesTypeIdEditRoute =
+  ExistingMembersPrivilegesTypeIdEditRouteImport.update({
+    id: '/edit',
+    path: '/edit',
+    getParentRoute: () => ExistingMembersPrivilegesTypeIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -537,8 +584,9 @@ export interface FileRoutesByFullPath {
   '/election/proxies': typeof ElectionProxiesRoute
   '/election/tally': typeof ElectionTallyRoute
   '/existing-members/$accountId': typeof ExistingMembersAccountIdRoute
+  '/existing-members/privileges': typeof ExistingMembersPrivilegesRouteWithChildren
   '/finance/desk': typeof FinanceDeskRoute
-  '/finance/invoices': typeof FinanceInvoicesRoute
+  '/finance/invoices': typeof FinanceInvoicesRouteWithChildren
   '/manage-committee/current-term': typeof ManageCommitteeCurrentTermRoute
   '/manage-committee/meetings': typeof ManageCommitteeMeetingsRouteWithChildren
   '/manage-committee/members': typeof ManageCommitteeMembersRoute
@@ -564,6 +612,9 @@ export interface FileRoutesByFullPath {
   '/settings/': typeof SettingsIndexRoute
   '/support/': typeof SupportIndexRoute
   '/user-management/': typeof UserManagementIndexRoute
+  '/existing-members/privileges/$typeId': typeof ExistingMembersPrivilegesTypeIdRouteWithChildren
+  '/existing-members/privileges/new': typeof ExistingMembersPrivilegesNewRoute
+  '/finance/invoices/setup': typeof FinanceInvoicesSetupRoute
   '/finance/non-membership/accommodation': typeof FinanceNonMembershipAccommodationRoute
   '/finance/non-membership/corkage': typeof FinanceNonMembershipCorkageRoute
   '/finance/non-membership/custom-charges': typeof FinanceNonMembershipCustomChargesRoute
@@ -571,7 +622,10 @@ export interface FileRoutesByFullPath {
   '/manage-committee/meetings/interview': typeof ManageCommitteeMeetingsInterviewRoute
   '/manage-committee/meetings/pending': typeof ManageCommitteeMeetingsPendingRoute
   '/manage-committee/meetings/waiting': typeof ManageCommitteeMeetingsWaitingRoute
+  '/existing-members/privileges/': typeof ExistingMembersPrivilegesIndexRoute
+  '/finance/invoices/': typeof FinanceInvoicesIndexRoute
   '/manage-committee/meetings/': typeof ManageCommitteeMeetingsIndexRoute
+  '/existing-members/privileges/$typeId/edit': typeof ExistingMembersPrivilegesTypeIdEditRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -608,7 +662,6 @@ export interface FileRoutesByTo {
   '/election/tally': typeof ElectionTallyRoute
   '/existing-members/$accountId': typeof ExistingMembersAccountIdRoute
   '/finance/desk': typeof FinanceDeskRoute
-  '/finance/invoices': typeof FinanceInvoicesRoute
   '/manage-committee/current-term': typeof ManageCommitteeCurrentTermRoute
   '/manage-committee/members': typeof ManageCommitteeMembersRoute
   '/manage-committee/new-term': typeof ManageCommitteeNewTermRoute
@@ -633,6 +686,9 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsIndexRoute
   '/support': typeof SupportIndexRoute
   '/user-management': typeof UserManagementIndexRoute
+  '/existing-members/privileges/$typeId': typeof ExistingMembersPrivilegesTypeIdRouteWithChildren
+  '/existing-members/privileges/new': typeof ExistingMembersPrivilegesNewRoute
+  '/finance/invoices/setup': typeof FinanceInvoicesSetupRoute
   '/finance/non-membership/accommodation': typeof FinanceNonMembershipAccommodationRoute
   '/finance/non-membership/corkage': typeof FinanceNonMembershipCorkageRoute
   '/finance/non-membership/custom-charges': typeof FinanceNonMembershipCustomChargesRoute
@@ -640,7 +696,10 @@ export interface FileRoutesByTo {
   '/manage-committee/meetings/interview': typeof ManageCommitteeMeetingsInterviewRoute
   '/manage-committee/meetings/pending': typeof ManageCommitteeMeetingsPendingRoute
   '/manage-committee/meetings/waiting': typeof ManageCommitteeMeetingsWaitingRoute
+  '/existing-members/privileges': typeof ExistingMembersPrivilegesIndexRoute
+  '/finance/invoices': typeof FinanceInvoicesIndexRoute
   '/manage-committee/meetings': typeof ManageCommitteeMeetingsIndexRoute
+  '/existing-members/privileges/$typeId/edit': typeof ExistingMembersPrivilegesTypeIdEditRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -687,8 +746,9 @@ export interface FileRoutesById {
   '/election/proxies': typeof ElectionProxiesRoute
   '/election/tally': typeof ElectionTallyRoute
   '/existing-members/$accountId': typeof ExistingMembersAccountIdRoute
+  '/existing-members/privileges': typeof ExistingMembersPrivilegesRouteWithChildren
   '/finance/desk': typeof FinanceDeskRoute
-  '/finance/invoices': typeof FinanceInvoicesRoute
+  '/finance/invoices': typeof FinanceInvoicesRouteWithChildren
   '/manage-committee/current-term': typeof ManageCommitteeCurrentTermRoute
   '/manage-committee/meetings': typeof ManageCommitteeMeetingsRouteWithChildren
   '/manage-committee/members': typeof ManageCommitteeMembersRoute
@@ -714,6 +774,9 @@ export interface FileRoutesById {
   '/settings/': typeof SettingsIndexRoute
   '/support/': typeof SupportIndexRoute
   '/user-management/': typeof UserManagementIndexRoute
+  '/existing-members/privileges/$typeId': typeof ExistingMembersPrivilegesTypeIdRouteWithChildren
+  '/existing-members/privileges/new': typeof ExistingMembersPrivilegesNewRoute
+  '/finance/invoices/setup': typeof FinanceInvoicesSetupRoute
   '/finance/non-membership/accommodation': typeof FinanceNonMembershipAccommodationRoute
   '/finance/non-membership/corkage': typeof FinanceNonMembershipCorkageRoute
   '/finance/non-membership/custom-charges': typeof FinanceNonMembershipCustomChargesRoute
@@ -721,7 +784,10 @@ export interface FileRoutesById {
   '/manage-committee/meetings/interview': typeof ManageCommitteeMeetingsInterviewRoute
   '/manage-committee/meetings/pending': typeof ManageCommitteeMeetingsPendingRoute
   '/manage-committee/meetings/waiting': typeof ManageCommitteeMeetingsWaitingRoute
+  '/existing-members/privileges/': typeof ExistingMembersPrivilegesIndexRoute
+  '/finance/invoices/': typeof FinanceInvoicesIndexRoute
   '/manage-committee/meetings/': typeof ManageCommitteeMeetingsIndexRoute
+  '/existing-members/privileges/$typeId/edit': typeof ExistingMembersPrivilegesTypeIdEditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -769,6 +835,7 @@ export interface FileRouteTypes {
     | '/election/proxies'
     | '/election/tally'
     | '/existing-members/$accountId'
+    | '/existing-members/privileges'
     | '/finance/desk'
     | '/finance/invoices'
     | '/manage-committee/current-term'
@@ -796,6 +863,9 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/support/'
     | '/user-management/'
+    | '/existing-members/privileges/$typeId'
+    | '/existing-members/privileges/new'
+    | '/finance/invoices/setup'
     | '/finance/non-membership/accommodation'
     | '/finance/non-membership/corkage'
     | '/finance/non-membership/custom-charges'
@@ -803,7 +873,10 @@ export interface FileRouteTypes {
     | '/manage-committee/meetings/interview'
     | '/manage-committee/meetings/pending'
     | '/manage-committee/meetings/waiting'
+    | '/existing-members/privileges/'
+    | '/finance/invoices/'
     | '/manage-committee/meetings/'
+    | '/existing-members/privileges/$typeId/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -840,7 +913,6 @@ export interface FileRouteTypes {
     | '/election/tally'
     | '/existing-members/$accountId'
     | '/finance/desk'
-    | '/finance/invoices'
     | '/manage-committee/current-term'
     | '/manage-committee/members'
     | '/manage-committee/new-term'
@@ -865,6 +937,9 @@ export interface FileRouteTypes {
     | '/settings'
     | '/support'
     | '/user-management'
+    | '/existing-members/privileges/$typeId'
+    | '/existing-members/privileges/new'
+    | '/finance/invoices/setup'
     | '/finance/non-membership/accommodation'
     | '/finance/non-membership/corkage'
     | '/finance/non-membership/custom-charges'
@@ -872,7 +947,10 @@ export interface FileRouteTypes {
     | '/manage-committee/meetings/interview'
     | '/manage-committee/meetings/pending'
     | '/manage-committee/meetings/waiting'
+    | '/existing-members/privileges'
+    | '/finance/invoices'
     | '/manage-committee/meetings'
+    | '/existing-members/privileges/$typeId/edit'
   id:
     | '__root__'
     | '/'
@@ -918,6 +996,7 @@ export interface FileRouteTypes {
     | '/election/proxies'
     | '/election/tally'
     | '/existing-members/$accountId'
+    | '/existing-members/privileges'
     | '/finance/desk'
     | '/finance/invoices'
     | '/manage-committee/current-term'
@@ -945,6 +1024,9 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/support/'
     | '/user-management/'
+    | '/existing-members/privileges/$typeId'
+    | '/existing-members/privileges/new'
+    | '/finance/invoices/setup'
     | '/finance/non-membership/accommodation'
     | '/finance/non-membership/corkage'
     | '/finance/non-membership/custom-charges'
@@ -952,7 +1034,10 @@ export interface FileRouteTypes {
     | '/manage-committee/meetings/interview'
     | '/manage-committee/meetings/pending'
     | '/manage-committee/meetings/waiting'
+    | '/existing-members/privileges/'
+    | '/finance/invoices/'
     | '/manage-committee/meetings/'
+    | '/existing-members/privileges/$typeId/edit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1318,6 +1403,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ExistingMembersAccountIdRouteImport
       parentRoute: typeof ExistingMembersRoute
     }
+    '/existing-members/privileges': {
+      id: '/existing-members/privileges'
+      path: '/privileges'
+      fullPath: '/existing-members/privileges'
+      preLoaderRoute: typeof ExistingMembersPrivilegesRouteImport
+      parentRoute: typeof ExistingMembersRoute
+    }
     '/finance/': {
       id: '/finance/'
       path: '/'
@@ -1479,6 +1571,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof UserManagementUserAccountIdRouteImport
       parentRoute: typeof UserManagementRoute
     }
+    '/existing-members/privileges/': {
+      id: '/existing-members/privileges/'
+      path: '/'
+      fullPath: '/existing-members/privileges/'
+      preLoaderRoute: typeof ExistingMembersPrivilegesIndexRouteImport
+      parentRoute: typeof ExistingMembersPrivilegesRoute
+    }
+    '/existing-members/privileges/$typeId': {
+      id: '/existing-members/privileges/$typeId'
+      path: '/$typeId'
+      fullPath: '/existing-members/privileges/$typeId'
+      preLoaderRoute: typeof ExistingMembersPrivilegesTypeIdRouteImport
+      parentRoute: typeof ExistingMembersPrivilegesRoute
+    }
+    '/existing-members/privileges/new': {
+      id: '/existing-members/privileges/new'
+      path: '/new'
+      fullPath: '/existing-members/privileges/new'
+      preLoaderRoute: typeof ExistingMembersPrivilegesNewRouteImport
+      parentRoute: typeof ExistingMembersPrivilegesRoute
+    }
+    '/finance/invoices/': {
+      id: '/finance/invoices/'
+      path: '/'
+      fullPath: '/finance/invoices/'
+      preLoaderRoute: typeof FinanceInvoicesIndexRouteImport
+      parentRoute: typeof FinanceInvoicesRoute
+    }
+    '/finance/invoices/setup': {
+      id: '/finance/invoices/setup'
+      path: '/setup'
+      fullPath: '/finance/invoices/setup'
+      preLoaderRoute: typeof FinanceInvoicesSetupRouteImport
+      parentRoute: typeof FinanceInvoicesRoute
+    }
     '/finance/non-membership/accommodation': {
       id: '/finance/non-membership/accommodation'
       path: '/non-membership/accommodation'
@@ -1534,6 +1661,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/manage-committee/meetings/waiting'
       preLoaderRoute: typeof ManageCommitteeMeetingsWaitingRouteImport
       parentRoute: typeof ManageCommitteeMeetingsRoute
+    }
+    '/existing-members/privileges/$typeId/edit': {
+      id: '/existing-members/privileges/$typeId/edit'
+      path: '/edit'
+      fullPath: '/existing-members/privileges/$typeId/edit'
+      preLoaderRoute: typeof ExistingMembersPrivilegesTypeIdEditRouteImport
+      parentRoute: typeof ExistingMembersPrivilegesTypeIdRoute
     }
   }
 }
@@ -1600,13 +1734,49 @@ const ElectionRouteWithChildren = ElectionRoute._addFileChildren(
   ElectionRouteChildren,
 )
 
+interface ExistingMembersPrivilegesTypeIdRouteChildren {
+  ExistingMembersPrivilegesTypeIdEditRoute: typeof ExistingMembersPrivilegesTypeIdEditRoute
+}
+
+const ExistingMembersPrivilegesTypeIdRouteChildren: ExistingMembersPrivilegesTypeIdRouteChildren =
+  {
+    ExistingMembersPrivilegesTypeIdEditRoute:
+      ExistingMembersPrivilegesTypeIdEditRoute,
+  }
+
+const ExistingMembersPrivilegesTypeIdRouteWithChildren =
+  ExistingMembersPrivilegesTypeIdRoute._addFileChildren(
+    ExistingMembersPrivilegesTypeIdRouteChildren,
+  )
+
+interface ExistingMembersPrivilegesRouteChildren {
+  ExistingMembersPrivilegesTypeIdRoute: typeof ExistingMembersPrivilegesTypeIdRouteWithChildren
+  ExistingMembersPrivilegesNewRoute: typeof ExistingMembersPrivilegesNewRoute
+  ExistingMembersPrivilegesIndexRoute: typeof ExistingMembersPrivilegesIndexRoute
+}
+
+const ExistingMembersPrivilegesRouteChildren: ExistingMembersPrivilegesRouteChildren =
+  {
+    ExistingMembersPrivilegesTypeIdRoute:
+      ExistingMembersPrivilegesTypeIdRouteWithChildren,
+    ExistingMembersPrivilegesNewRoute: ExistingMembersPrivilegesNewRoute,
+    ExistingMembersPrivilegesIndexRoute: ExistingMembersPrivilegesIndexRoute,
+  }
+
+const ExistingMembersPrivilegesRouteWithChildren =
+  ExistingMembersPrivilegesRoute._addFileChildren(
+    ExistingMembersPrivilegesRouteChildren,
+  )
+
 interface ExistingMembersRouteChildren {
   ExistingMembersAccountIdRoute: typeof ExistingMembersAccountIdRoute
+  ExistingMembersPrivilegesRoute: typeof ExistingMembersPrivilegesRouteWithChildren
   ExistingMembersIndexRoute: typeof ExistingMembersIndexRoute
 }
 
 const ExistingMembersRouteChildren: ExistingMembersRouteChildren = {
   ExistingMembersAccountIdRoute: ExistingMembersAccountIdRoute,
+  ExistingMembersPrivilegesRoute: ExistingMembersPrivilegesRouteWithChildren,
   ExistingMembersIndexRoute: ExistingMembersIndexRoute,
 }
 
@@ -1614,9 +1784,23 @@ const ExistingMembersRouteWithChildren = ExistingMembersRoute._addFileChildren(
   ExistingMembersRouteChildren,
 )
 
+interface FinanceInvoicesRouteChildren {
+  FinanceInvoicesSetupRoute: typeof FinanceInvoicesSetupRoute
+  FinanceInvoicesIndexRoute: typeof FinanceInvoicesIndexRoute
+}
+
+const FinanceInvoicesRouteChildren: FinanceInvoicesRouteChildren = {
+  FinanceInvoicesSetupRoute: FinanceInvoicesSetupRoute,
+  FinanceInvoicesIndexRoute: FinanceInvoicesIndexRoute,
+}
+
+const FinanceInvoicesRouteWithChildren = FinanceInvoicesRoute._addFileChildren(
+  FinanceInvoicesRouteChildren,
+)
+
 interface FinanceRouteChildren {
   FinanceDeskRoute: typeof FinanceDeskRoute
-  FinanceInvoicesRoute: typeof FinanceInvoicesRoute
+  FinanceInvoicesRoute: typeof FinanceInvoicesRouteWithChildren
   FinanceIndexRoute: typeof FinanceIndexRoute
   FinanceNonMembershipAccommodationRoute: typeof FinanceNonMembershipAccommodationRoute
   FinanceNonMembershipCorkageRoute: typeof FinanceNonMembershipCorkageRoute
@@ -1625,7 +1809,7 @@ interface FinanceRouteChildren {
 
 const FinanceRouteChildren: FinanceRouteChildren = {
   FinanceDeskRoute: FinanceDeskRoute,
-  FinanceInvoicesRoute: FinanceInvoicesRoute,
+  FinanceInvoicesRoute: FinanceInvoicesRouteWithChildren,
   FinanceIndexRoute: FinanceIndexRoute,
   FinanceNonMembershipAccommodationRoute:
     FinanceNonMembershipAccommodationRoute,

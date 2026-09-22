@@ -19,7 +19,9 @@ import { apiRequest, extractErrorMessage } from "@/services/membership/api";
 import { emptyDraft, type ApplicationDraft } from "@/services/membership/schema";
 import type { ApplicationDetailAdmin } from "@/services/admin/membershipDesk";
 import { kenyaTodayISO } from "@/utils/kenyaDate";
-import { formatKes } from "@/utils/format";
+import { printHtmlDocument } from "@/utils/financeExport";
+import { mergePaymentSetup, type PaymentSetup } from "@/utils/invoiceSetup";
+import { buildReceiptHtml } from "@/utils/receiptDocument";
 import { cn } from "@/utils/cn";
 import { hasAnyRole, readUser } from "@/lib/auth";
 
@@ -280,14 +282,6 @@ function chequeLedgerItems(cheques: { annual: ApplicationCheque | null; joining:
   ];
 }
 
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
 function printPaymentReceipt(args: {
   receiptNumber: string;
   applicantName: string;
@@ -298,55 +292,31 @@ function printPaymentReceipt(args: {
   date: string;
   method?: string | null;
   reference?: string | null;
+  setup?: PaymentSetup;
 }) {
-  const win = window.open("", "_blank", "noopener,noreferrer,width=720,height=900");
-  if (!win) {
+  const html = buildReceiptHtml({
+    transactionId: 0,
+    receiptId: 0,
+    clubName: "Aero Club of East Africa",
+    receiptNumber: args.receiptNumber,
+    issuedDate: args.date,
+    paymentDate: args.date,
+    payerName: args.applicantName,
+    payerCategory: "Applicant",
+    applicationNo: args.applicationNo,
+    feeType: args.item,
+    paymentMethod: args.method?.trim() || "Payment",
+    mpesaCode: args.reference?.trim() && args.reference.trim() !== "—" ? args.reference.trim() : null,
+    amount: args.amount,
+    amountInWords: "",
+    currency: "KES",
+    status: args.status,
+    purpose: args.item,
+    setup: mergePaymentSetup(args.setup),
+  });
+  if (!printHtmlDocument(html)) {
     toast.error("Allow pop-ups to print the receipt.");
-    return;
   }
-  const reference = escapeHtml(args.reference?.trim() || "—");
-  const method = escapeHtml(args.method?.trim() || "—");
-  const receiptNumber = escapeHtml(args.receiptNumber);
-  const applicantName = escapeHtml(args.applicantName);
-  const item = escapeHtml(args.item);
-  const status = escapeHtml(args.status);
-  const date = escapeHtml(args.date);
-  const applicationNo = args.applicationNo ? escapeHtml(args.applicationNo) : "";
-  win.document.write(`<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>${receiptNumber} — Aero Club of East Africa</title>
-    <style>
-      body { font-family: Georgia, "Times New Roman", serif; color: #111; margin: 40px; }
-      h1 { font-size: 20px; margin: 0; }
-      .muted { color: #555; font-size: 13px; }
-      table { width: 100%; border-collapse: collapse; margin-top: 24px; }
-      th, td { text-align: left; padding: 8px 0; border-bottom: 1px solid #ddd; font-size: 14px; }
-      .amount { font-size: 18px; font-weight: 700; }
-      .foot { margin-top: 36px; font-size: 12px; color: #555; }
-    </style>
-  </head>
-  <body>
-    <h1>Aero Club of East Africa</h1>
-    <p class="muted">Official payment receipt</p>
-    <table>
-      <tr><th>Receipt</th><td>${receiptNumber}</td></tr>
-      <tr><th>Received from</th><td>${applicantName}</td></tr>
-      ${applicationNo ? `<tr><th>Application</th><td>${applicationNo}</td></tr>` : ""}
-      <tr><th>Item</th><td>${item}</td></tr>
-      <tr><th>Date</th><td>${date}</td></tr>
-      <tr><th>Method</th><td>${method}</td></tr>
-      <tr><th>Reference</th><td>${reference}</td></tr>
-      <tr><th>Status</th><td>${status}</td></tr>
-      <tr><th>Amount</th><td class="amount">${escapeHtml(formatKes(args.amount))}</td></tr>
-    </table>
-    <p class="foot">Applicant payment receipt. Keep this copy with the application record.</p>
-  </body>
-</html>`);
-  win.document.close();
-  win.focus();
-  win.print();
 }
 
 function EndorsementField({ label, value }: { label: string; value?: string | null }) {

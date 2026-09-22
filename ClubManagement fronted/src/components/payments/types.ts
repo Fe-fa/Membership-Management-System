@@ -245,7 +245,7 @@ export function sortPaymentMethods(rows: LookupOption[]) {
 }
 
 export function standingLabel(code?: string | null) {
-  return (code ?? "InGoodStanding").replace(/([A-Z])/g, " $1").trim();
+  return (code ?? "InGoodStanding").replace(/([a-z])([A-Z])/g, "$1 $2").trim();
 }
 
 /** Map application fee schedule dues into the shared payment form model. */

@@ -35,12 +35,12 @@ function membersCrumbs(search: Record<string, unknown>): AppCrumb[] {
     ];
   }
   if (view === "dashboard") {
-    return [{ label: "Manage Applicants", to: "/members", search: { view: "dashboard" } }, { label: "Dashboard" }];
+    return [{ label: "Applicant Management", to: "/members" }, { label: "Pending applications" }];
   }
   if (view === "authorize") {
-    return [{ label: "Members", to: "/members" }, { label: "Authorize applicants" }];
+    return [{ label: "Applicant Management", to: "/members" }, { label: "Authorize applicants" }];
   }
-  return [{ label: "Members", to: "/members" }, { label: "Pending applications" }];
+  return [{ label: "Applicant Management", to: "/members" }, { label: "Pending applications" }];
 }
 
 export function crumbsForLocation(
@@ -138,6 +138,12 @@ export function crumbsForLocation(
     rest.push({ label: "Members", to: "/members" }, { label: "Application" });
   } else if (pathname === "/members" || pathname.startsWith("/members")) {
     rest.push(...membersCrumbs(search));
+  } else if (pathname.startsWith("/existing-members/privileges")) {
+    rest.push(
+      { label: "Manage records", to: "/existing-members", search: { tab: "register" } },
+      { label: "Assign privileges", to: "/existing-members", search: { tab: "privileges" } },
+      { label: pathname.includes("/new") ? "Add Membership type" : "Edit membership type" },
+    );
   } else if (pathname.startsWith("/existing-members/") && pathname !== "/existing-members") {
     rest.push(
       { label: "Manage records", to: "/existing-members", search: { tab: "register" } },
@@ -153,7 +159,7 @@ export function crumbsForLocation(
     } else {
       rest.push(
         { label: "Manage records", to: "/existing-members", search: { tab: "register" } },
-        { label: tab === "privileges" ? "Assign privileges" : "Member register" },
+        { label: tab === "privileges" ? "View and Manage" : "Member register" },
       );
     }
   } else if (pathname.startsWith("/register-member")) {
@@ -193,6 +199,8 @@ export function crumbsForLocation(
     rest.push({ label: "Finance", to: "/finance/desk" }, { label: "Corkage" });
   } else if (pathname.startsWith("/finance/non-membership/custom-charges")) {
     rest.push({ label: "Finance", to: "/finance/desk" }, { label: "Custom charges" });
+  } else if (pathname.startsWith("/finance/invoices/setup")) {
+    rest.push({ label: "Finance", to: "/finance/desk" }, { label: "Invoices", to: "/finance/invoices" }, { label: "Payment setup" });
   } else if (pathname.startsWith("/finance/invoices")) {
     rest.push({ label: "Finance", to: "/finance/desk" }, { label: "Invoices" });
   } else if (pathname === "/finance" || pathname === "/finance/") {

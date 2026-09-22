@@ -85,11 +85,13 @@ export const StepPersonal = memo(function StepPersonal({
   errors,
   onChange,
   hidePhotoField = false,
+  hidePaymentUploads = hidePhotoField,
 }: {
   value: Value;
   errors: ErrorMap;
   onChange: (patch: Partial<Value>) => void;
   hidePhotoField?: boolean;
+  hidePaymentUploads?: boolean;
 }) {
   const set = useCallback(
     (key: keyof Value) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -350,7 +352,7 @@ export const StepPersonal = memo(function StepPersonal({
             error={errors["idPassport"]}
             hint="PDF or image of your national ID or passport."
           />
-          {hidePhotoField ? null : (
+          {hidePaymentUploads ? null : (
             <>
               <FileField
                 label="Annual subscription"

@@ -273,8 +273,9 @@ export function ApplicantDetailPage() {
     reopen.isPending;
 
   return (
-    <PageFrame width="lg">
-      <PageBackLink to={backTo} search={backSearch} label={backLabel} />
+    <PageFrame width="lg" {...(editing || fromManager ? { className: "max-w-[1120px]" } : {})}>
+      {editing ? null : <PageBackLink to={backTo} search={backSearch} label={backLabel} />}
+      {editing || fromManager ? null : (
       <PageHeader
         title={record.applicantName || `${currentDraft.personal.firstName} ${currentDraft.personal.lastName}`.trim() || "Applicant"}
         description={`${record.applicationNo} Â· ${stage} Â· Updated ${formatMembershipDate(record.updatedAt)}`}
@@ -412,6 +413,7 @@ export function ApplicantDetailPage() {
           </div>
         }
       />
+      )}
       {fromManager ? (
         <StaffMembershipForm
           draft={currentDraft}
@@ -420,6 +422,31 @@ export function ApplicantDetailPage() {
           saving={false}
           onSave={() => undefined}
           applicationId={applicationId}
+          listTo="/members"
+          listSearch={backSearch}
+          listLabel={backLabel}
+          profileStatus={stage}
+          profileMeta={`${record.applicationNo} · ${stage} · Updated ${formatMembershipDate(record.updatedAt)}`}
+          badgeValue={record.applicationNo}
+          headerActions={
+            <>
+              <Button
+                variant="outline"
+                className="rounded-full bg-white"
+                disabled={closed || requestUpdate.isPending}
+                onClick={() => setRequestOpen(true)}
+              >
+                {requestUpdate.isPending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                Request update
+              </Button>
+              {!closed ? (
+                <Button variant="destructive" disabled={busy} onClick={() => setRejectOpen(true)}>
+                  {reject.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+                  Reject
+                </Button>
+              ) : null}
+            </>
+          }
         />
       ) : editing ? (
         <StaffMembershipForm
@@ -427,8 +454,30 @@ export function ApplicantDetailPage() {
           onChange={setDraft}
           saving={save.isPending}
           saveLabel="Update details"
-          onSave={() => save.mutateAsync(currentDraft)}
+          onSave={async () => {
+            await save.mutateAsync(currentDraft);
+          }}
           applicationId={applicationId}
+          listTo="/members"
+          listLabel="Back to List"
+          profileStatus="Update application"
+          profileMeta={`${record.applicationNo} · ${stage} · Updated ${formatMembershipDate(record.updatedAt)}`}
+          badgeValue={record.applicationNo}
+          headerActions={
+            <Button
+              variant="outline"
+              className="rounded-full bg-white"
+              onClick={() =>
+                void navigate({
+                  to: "/members/$applicationId",
+                  params: { applicationId },
+                  search: {},
+                })
+              }
+            >
+              View details
+            </Button>
+          }
         />
       ) : (
         <div className="space-y-4">
@@ -480,7 +529,7 @@ export function ApplicantDetailPage() {
       </Dialog>
       <RejectApplicationDialog
         open={rejectOpen}
-        applicantLabel={record.applicantName || undefined}
+        applicantLabel={record.applicantName || ""}
         pending={reject.isPending}
         onOpenChange={setRejectOpen}
         onConfirm={(reason) => reject.mutate(reason)}

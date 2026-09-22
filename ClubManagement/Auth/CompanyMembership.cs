@@ -1,11 +1,4 @@
 namespace ClubManagement.Auth;
-
-/// <summary>
-/// Company (tenant) membership rules:
-/// Admin is system-wide and must not belong to a company.
-/// Applicant, Member (including Chairman, General Manager, Treasurer, Committee Member),
-/// and Receptionist must belong to a company.
-/// </summary>
 public static class CompanyMembership
 {
     /// <summary>Stored TenantId for system Admin (no company).</summary>

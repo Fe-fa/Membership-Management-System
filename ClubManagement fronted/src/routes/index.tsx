@@ -16,6 +16,10 @@ export const Route = createFileRoute("/")({
     // Browser-only session. Guests stay on `/` and see the login form.
     if (typeof window === "undefined") return;
     if (!isAuthenticated()) return;
+    const next = new URLSearchParams(window.location.search).get("next");
+    if (next && next.startsWith("/") && !next.startsWith("//")) {
+      throw redirect({ to: next });
+    }
     const user = readUser();
     if (isStaff(user) && readPortalMode(user) === "admin") {
       throw redirect({ to: homePathForUser(user) });

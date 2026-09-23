@@ -130,6 +130,12 @@ export function crumbsForLocation(
     rest.push({ label: "AGM/EGM Election", to: "/election/notice" }, { label: "Nominations" });
   } else if (pathname.startsWith("/election/minutes")) {
     rest.push({ label: "AGM/EGM Election", to: "/election/notice" }, { label: "Meeting minutes" });
+  } else if (pathname.startsWith("/election/vote")) {
+    rest.push({ label: "AGM/EGM Election", to: "/election" }, { label: "Cast vote" });
+  } else if (pathname.startsWith("/election/appoint-proxy")) {
+    rest.push({ label: "AGM/EGM Election", to: "/election" }, { label: "Proxy appointment" });
+  } else if (pathname.startsWith("/election/audit")) {
+    rest.push({ label: "AGM/EGM Election", to: "/election" }, { label: "Audit log" });
   } else if (pathname.startsWith("/election")) {
     rest.push({ label: "AGM/EGM Election" }, { label: "Dashboard" });
   } else if (pathname.startsWith("/governance")) {
@@ -199,6 +205,10 @@ export function crumbsForLocation(
     rest.push({ label: "Finance", to: "/finance/desk" }, { label: "Corkage" });
   } else if (pathname.startsWith("/finance/non-membership/custom-charges")) {
     rest.push({ label: "Finance", to: "/finance/desk" }, { label: "Custom charges" });
+  } else if (pathname.startsWith("/finance/statements")) {
+    rest.push({ label: "Finance", to: "/finance/desk" }, { label: "Statements" });
+  } else if (pathname.startsWith("/finance/approvals")) {
+    rest.push({ label: "Finance", to: "/finance/desk" }, { label: "Document approvals" });
   } else if (pathname.startsWith("/finance/invoices/setup")) {
     rest.push({ label: "Finance", to: "/finance/desk" }, { label: "Invoices", to: "/finance/invoices" }, { label: "Payment setup" });
   } else if (pathname.startsWith("/finance/invoices")) {

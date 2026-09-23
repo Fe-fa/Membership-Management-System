@@ -1,0 +1,14 @@
+[2026-09-23 11:40:32.354] [00005550] === Logging started ===
+[2026-09-23 11:40:32.365] [00005550] Executing: "C:\Program Files\dotnet\dotnet.exe" build "D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\ClubManagement\ClubManagement.csproj" --no-restore -v q, PID: 21840, PPID: 24088
+[2026-09-23 11:40:32.368] [00005550] IsElevated: False
+[2026-09-23 11:40:32.368] [00005550] Is64BitProcess: True
+[2026-09-23 11:40:32.368] [00005550] RebootPending: False
+[2026-09-23 11:40:32.368] [00005550] ProcessorArchitecture: amd64
+[2026-09-23 11:40:32.368] [00005550] HostArchitecture: x64
+[2026-09-23 11:40:32.368] [00005550] SdkDirectory: 10.0.302
+[2026-09-23 11:40:32.368] [00005550] VerifySignatures: False
+[2026-09-23 11:40:32.368] [00005550] SDK feature band: 10.0.300
+[2026-09-23 11:40:50.582] [00005550] Shutting down
+[2026-09-23 11:40:50.582] [00005550] Shutdown completed.
+[2026-09-23 11:40:50.582] [00005550] Restart required: False
+[2026-09-23 11:40:50.583] [00005550] === Logging ended ===

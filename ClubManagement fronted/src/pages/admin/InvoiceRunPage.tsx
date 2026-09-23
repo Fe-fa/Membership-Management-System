@@ -14,6 +14,7 @@ import {
   MailCheck,
   Printer,
   Search,
+  ShieldCheck,
   SlidersHorizontal,
   Users,
   Wallet,
@@ -50,7 +51,7 @@ import { formatKes } from "@/utils/format";
 import { cn } from "@/utils/cn";
 import {
   buildInvoiceHtml,
-  buildInvoiceHtmlForEmail,
+  buildInvoiceHtmlWithEmbeddedLogo,
   downloadExcelCsv,
   printHtmlReport,
   rowsToTableHtml,
@@ -58,11 +59,29 @@ import {
 } from "@/utils/financeExport";
 import type { InvoiceSetup } from "@/utils/invoiceSetup";
 
+type FeeType = "JOINING" | "ANNUAL" | "ACCOMMODATION" | "CORKAGE" | "CUSTOM";
+type DocumentKind = "INVOICE" | "RECEIPT";
+
+const FEE_TYPES: { id: FeeType; label: string }[] = [
+  { id: "JOINING", label: "Joining" },
+  { id: "ANNUAL", label: "Annual" },
+  { id: "ACCOMMODATION", label: "Accommodation" },
+  { id: "CORKAGE", label: "Corkage" },
+  { id: "CUSTOM", label: "Custom charges" },
+];
+
 type QueueRow = {
-  accountId: number;
+  rowKey: string;
+  feeType: string;
+  audience: string;
+  accountId?: number | null;
+  applicationId?: number | null;
+  chargeId?: number | null;
   subscriptionId: number;
-  membershipNo: string;
-  memberName: string;
+  displayNo: string;
+  partyName: string;
+  membershipNo?: string;
+  memberName?: string;
   membershipType?: string | null;
   membershipTypeCode?: string | null;
   amountDue: number;
@@ -70,22 +89,24 @@ type QueueRow = {
   arrearsAmount: number;
   email?: string | null;
   invoiceNo?: string | null;
-  invoiceEmailSent: boolean;
+  invoiceEmailSent?: boolean;
 };
 
-type BulkInvoiceResult = {
-  issued: number;
-  year: number;
-  emailed?: number;
-  published?: number;
-  skippedNoEmail?: number;
+type BulkSubmitResult = {
+  submitted: number;
+  skipped?: number;
+  pendingApproval?: number;
 };
 
 type InvoiceRunStats = {
-  membersInArrears: number;
-  membersReceived: number;
-  membersNotReceived: number;
-  totalArrears: number;
+  partiesWithFee: number;
+  prepared: number;
+  notPrepared: number;
+  totalAmount: number;
+  membersInArrears?: number;
+  membersReceived?: number;
+  membersNotReceived?: number;
+  totalArrears?: number;
 };
 
 type RosterRow = QueueRow & { invoiceReceived: boolean };
@@ -101,58 +122,60 @@ type CategorySummary = {
 const QUEUE_FETCH_SIZE = 5000;
 
 const ROSTER_EXPORT_COLS = [
-  { header: "Member", value: (row: RosterRow) => row.memberName },
-  { header: "Member no.", value: (row: RosterRow) => row.membershipNo },
+  { header: "Party", value: (row: RosterRow) => partyName(row) },
+  { header: "No.", value: (row: RosterRow) => partyNo(row) },
+  { header: "Audience", value: (row: RosterRow) => audienceLabel(row.audience) },
   { header: "Category", value: (row: RosterRow) => categoryLabel(row) },
   { header: "Email", value: (row: RosterRow) => row.email ?? "" },
   { header: "Amount due", value: (row: RosterRow) => row.amountDue },
   { header: "Arrears", value: (row: RosterRow) => row.arrearsAmount },
-  { header: "Invoice no.", value: (row: RosterRow) => row.invoiceNo ?? "" },
-  { header: "Invoice status", value: (row: RosterRow) => (row.invoiceReceived ? "Prepared" : "Not prepared") },
+  { header: "Document no.", value: (row: RosterRow) => row.invoiceNo ?? "" },
 ];
+
+function partyName(row: QueueRow) {
+  return row.partyName?.trim() || row.memberName?.trim() || "—";
+}
+
+function partyNo(row: QueueRow) {
+  return row.displayNo?.trim() || row.membershipNo?.trim() || "—";
+}
+
+function rowKeyOf(row: QueueRow) {
+  return (
+    row.rowKey ||
+    `${row.audience || "MEMBER"}:${row.accountId ?? 0}:${row.applicationId ?? 0}:${row.chargeId ?? 0}`
+  );
+}
+
+function audienceLabel(audience?: string | null) {
+  const value = (audience ?? "MEMBER").toUpperCase();
+  if (value === "APPLICANT") return "Applicant";
+  if (value === "GUEST") return "Guest";
+  return "Member";
+}
+
+function feeTypeLabel(feeType: FeeType) {
+  return FEE_TYPES.find((item) => item.id === feeType)?.label ?? feeType;
+}
 
 async function fetchAllQueueRows(params: {
   year: number;
   search?: string;
   membershipType?: string;
+  feeType: FeeType;
+  kind: DocumentKind;
 }) {
   const items: QueueRow[] = [];
   let page = 1;
   let total = Number.POSITIVE_INFINITY;
   while (items.length < total) {
     const batch = await apiRequest<PagedResult<QueueRow>>(
-      `/api/finance/invoices/queue?${pagedQuery({
+      `/api/finance/billing/queue?${pagedQuery({
         year: params.year,
         search: params.search,
         membershipType: params.membershipType,
-        page,
-        pageSize: QUEUE_FETCH_SIZE,
-      })}`,
-    );
-    total = batch.totalCount;
-    items.push(...batch.items);
-    if (batch.items.length === 0) break;
-    page += 1;
-  }
-  return items;
-}
-
-async function fetchRosterRows(params: {
-  year: number;
-  search?: string;
-  membershipType?: string;
-  received?: boolean;
-}) {
-  const items: RosterRow[] = [];
-  let page = 1;
-  let total = Number.POSITIVE_INFINITY;
-  while (items.length < total) {
-    const batch = await apiRequest<PagedResult<RosterRow>>(
-      `/api/finance/invoices/roster?${pagedQuery({
-        year: params.year,
-        search: params.search,
-        membershipType: params.membershipType,
-        received: params.received,
+        feeType: params.feeType,
+        kind: params.kind,
         page,
         pageSize: QUEUE_FETCH_SIZE,
       })}`,
@@ -166,7 +189,7 @@ async function fetchRosterRows(params: {
 }
 
 function categoryLabel(row: QueueRow) {
-  return row.membershipType?.trim() || row.membershipTypeCode?.trim() || "Unspecified";
+  return row.membershipType?.trim() || row.membershipTypeCode?.trim() || audienceLabel(row.audience);
 }
 
 function invoiceDueDateIso(year: number) {
@@ -179,13 +202,14 @@ function queueRowToInvoice(
   brand?: { clubName: string; clubLogo: string | null },
   setup?: InvoiceSetup | undefined,
 ): InvoiceDocument {
+  const fee = (row.feeType || "ANNUAL").toUpperCase();
   return {
     invoiceId: 0,
-    invoiceNo: row.invoiceNo?.trim() || `INV-${year}-${String(row.accountId).padStart(6, "0")}`,
-    accountId: row.accountId,
+    invoiceNo: row.invoiceNo?.trim() || `INV-${year}-${partyNo(row)}`,
+    accountId: row.accountId ?? 0,
     year,
-    memberName: row.memberName,
-    membershipNo: row.membershipNo,
+    memberName: partyName(row),
+    membershipNo: partyNo(row),
     membershipType: row.membershipType,
     amount: row.amountDue,
     amountPaid: row.amountPaid,
@@ -198,6 +222,15 @@ function queueRowToInvoice(
     clubName: brand?.clubName,
     clubLogo: brand?.clubLogo,
     setup,
+    lines: [
+      {
+        description: `${feeTypeLabel(fee as FeeType)} fee`,
+        period: String(year),
+        charges: row.amountDue,
+        credits: row.amountPaid,
+        total: row.arrearsAmount,
+      },
+    ],
   };
 }
 
@@ -212,9 +245,10 @@ export function InvoiceRunPage() {
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
   const [membershipType, setMembershipType] = useState("");
+  const [feeType, setFeeType] = useState<FeeType>("ANNUAL");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [selected, setSelected] = useState<Record<number, QueueRow>>({});
+  const [selected, setSelected] = useState<Record<string, QueueRow>>({});
   const [sending, setSending] = useState(false);
   const [selectingAll, setSelectingAll] = useState(false);
   const [deliveryOpen, setDeliveryOpen] = useState(false);
@@ -225,36 +259,44 @@ export function InvoiceRunPage() {
   const yearNum = Number(year) || currentYear;
   const selectedRows = Object.values(selected);
   const selectedCount = selectedRows.length;
-  const publishToMember = true;
+  const feeLabel = feeTypeLabel(feeType);
 
   const queue = useQuery({
-    queryKey: ["invoice-queue", yearNum, appliedSearch, membershipType, page, pageSize],
+    queryKey: ["billing-queue", "INVOICE", feeType, yearNum, appliedSearch, membershipType, page, pageSize],
     queryFn: () =>
       apiRequest<PagedResult<QueueRow>>(
-        `/api/finance/invoices/queue?${pagedQuery({
+        `/api/finance/billing/queue?${pagedQuery({
           year: yearNum,
           search: appliedSearch || undefined,
           membershipType: membershipType || undefined,
+          feeType,
+          kind: "INVOICE",
           page,
           pageSize,
         })}`,
       ),
   });
   const stats = useQuery({
-    queryKey: ["invoice-stats", yearNum, membershipType],
+    queryKey: ["billing-stats", "INVOICE", feeType, yearNum, membershipType],
     queryFn: () =>
       apiRequest<InvoiceRunStats>(
-        `/api/finance/invoices/stats?${pagedQuery({
+        `/api/finance/billing/stats?${pagedQuery({
           year: yearNum,
           membershipType: membershipType || undefined,
+          feeType,
+          kind: "INVOICE",
         })}`,
       ),
   });
   const pageData = queue.data ?? emptyPage<QueueRow>(page, pageSize);
   const rows = pageData.items;
   const runStats = stats.data;
+  const partiesWithFee = runStats?.partiesWithFee ?? runStats?.membersInArrears ?? 0;
+  const preparedCount = runStats?.prepared ?? runStats?.membersReceived ?? 0;
+  const notPreparedCount = runStats?.notPrepared ?? runStats?.membersNotReceived ?? 0;
+  const totalAmount = runStats?.totalAmount ?? runStats?.totalArrears ?? 0;
 
-  const pageIds = rows.map((r) => r.accountId);
+  const pageIds = rows.map((r) => rowKeyOf(r));
   const allOnPageSelected = pageIds.length > 0 && pageIds.every((id) => selected[id]);
 
   const categorySummary = useMemo(() => {
@@ -281,7 +323,7 @@ export function InvoiceRunPage() {
         arrears: 0,
       };
       current.count += 1;
-      current.membershipNos.push(row.membershipNo || "—");
+      current.membershipNos.push(partyNo(row) || "—");
       current.amountDue += row.amountDue;
       current.arrears += row.arrearsAmount;
       map.set(category, current);
@@ -294,16 +336,12 @@ export function InvoiceRunPage() {
   }, [membershipTypes.data, selectedRows]);
 
   const expectedArrears = selectedRows.reduce((sum, row) => sum + row.arrearsAmount, 0);
-  const expectedDue = selectedRows.reduce((sum, row) => sum + row.amountDue, 0);
   const missingEmail = selectedRows.filter((row) => !row.email?.trim()).length;
   const previewRow = selectedRows[Math.min(previewIndex, Math.max(selectedCount - 1, 0))];
-  const previewHtml = useMemo(
-    () =>
-      previewRow
-        ? buildInvoiceHtml(queueRowToInvoice(previewRow, yearNum, brand, invoiceSetup.data))
-        : "",
-    [previewRow, yearNum, brand, invoiceSetup.data],
-  );
+  const previewHtml = useMemo(() => {
+    if (!previewRow) return "";
+    return buildInvoiceHtml(queueRowToInvoice(previewRow, yearNum, brand, invoiceSetup.data));
+  }, [previewRow, yearNum, brand, invoiceSetup.data]);
 
   function applyFilters() {
     setAppliedSearch(search.trim());
@@ -313,8 +351,9 @@ export function InvoiceRunPage() {
   function toggleRow(row: QueueRow, checked: boolean) {
     setSelected((prev) => {
       const next = { ...prev };
-      if (checked) next[row.accountId] = row;
-      else delete next[row.accountId];
+      const key = rowKeyOf(row);
+      if (checked) next[key] = row;
+      else delete next[key];
       return next;
     });
   }
@@ -323,8 +362,9 @@ export function InvoiceRunPage() {
     setSelected((prev) => {
       const next = { ...prev };
       for (const row of rows) {
-        if (checked) next[row.accountId] = row;
-        else delete next[row.accountId];
+        const key = rowKeyOf(row);
+        if (checked) next[key] = row;
+        else delete next[key];
       }
       return next;
     });
@@ -332,7 +372,7 @@ export function InvoiceRunPage() {
 
   function openGenerateDialog() {
     if (selectedCount === 0) {
-      toast.error("Select one or more members first.");
+      toast.error("Select one or more invoices first.");
       return;
     }
     setSendEmail(false);
@@ -345,13 +385,15 @@ export function InvoiceRunPage() {
       setSelectingAll(true);
       const all = await fetchAllQueueRows({
         year: yearNum,
+        feeType,
+        kind: "INVOICE",
         ...(appliedSearch ? { search: appliedSearch } : {}),
         ...(membershipType ? { membershipType } : {}),
       });
-      const next: Record<number, QueueRow> = {};
-      for (const row of all) next[row.accountId] = row;
+      const next: Record<string, QueueRow> = {};
+      for (const row of all) next[rowKeyOf(row)] = row;
       setSelected(next);
-      toast.success(`${all.length} member(s) waiting for an invoice selected.`);
+      toast.success(`${all.length} waiting invoice(s) selected.`);
     } catch (err) {
       toast.error(extractErrorMessage(err));
     } finally {
@@ -362,31 +404,27 @@ export function InvoiceRunPage() {
   async function exportRoster(kind: "waiting" | "prepared" | "all", mode: "print" | "download") {
     try {
       setExporting(mode);
-      const received = kind === "waiting" ? false : kind === "prepared" ? true : undefined;
-      const rows = await fetchRosterRows({
+      const rows = await fetchAllQueueRows({
         year: yearNum,
+        feeType,
+        kind: "INVOICE",
         ...(appliedSearch ? { search: appliedSearch } : {}),
         ...(membershipType ? { membershipType } : {}),
-        ...(received !== undefined ? { received } : {}),
       });
-      if (rows.length === 0) {
-        toast.error("No members in that list for the current filters.");
+      const exportRows = rows.map((row) => ({ ...row, invoiceReceived: false }));
+      if (exportRows.length === 0) {
+        toast.error("No parties in that list for the current filters.");
         return;
       }
-      const label =
-        kind === "waiting"
-          ? "invoices not prepared"
-          : kind === "prepared"
-            ? "invoices prepared"
-            : "members with membership revenue";
+      const label = `${kind === "waiting" ? "not submitted" : kind} ${feeLabel.toLowerCase()} invoices`;
       if (mode === "download") {
-        downloadExcelCsv(`invoices-${kind}-${yearNum}.csv`, ROSTER_EXPORT_COLS, rows);
-        toast.success(`Downloaded ${rows.length} ${label}.`);
+        downloadExcelCsv(`invoices-${feeType}-${kind}-${yearNum}.csv`, ROSTER_EXPORT_COLS, exportRows);
+        toast.success(`Downloaded ${exportRows.length} ${label}.`);
       } else {
         const ok = printHtmlReport(
           `${label} · ${yearNum}`,
-          rowsToTableHtml(ROSTER_EXPORT_COLS, rows),
-          "Aero Club Invoices",
+          rowsToTableHtml(ROSTER_EXPORT_COLS, exportRows),
+          "Aero Club billing",
         );
         if (!ok) toast.error("Could not open the print dialog. Try again.");
       }
@@ -399,54 +437,53 @@ export function InvoiceRunPage() {
 
   async function sendSelected() {
     if (selectedCount === 0) {
-      toast.error("Select one or more members first.");
+      toast.error("Select one or more invoices first.");
       return;
     }
     try {
       setSending(true);
-      const accountIds = selectedRows.map((row) => row.accountId);
-      const invoiceHtmlByAccountId: Record<string, string> = {};
-      if (sendEmail) {
-        await Promise.all(
-          selectedRows.map(async (row) => {
-            invoiceHtmlByAccountId[String(row.accountId)] = await buildInvoiceHtmlForEmail(
-              queueRowToInvoice(row, yearNum, brand, invoiceSetup.data),
-            );
-          }),
-        );
-      }
-      const result = await apiRequest<BulkInvoiceResult>("/api/finance/invoices/bulk", {
+      const items = await Promise.all(
+        selectedRows.map(async (row) => {
+          const invoice = queueRowToInvoice(row, yearNum, brand, invoiceSetup.data);
+          const html = sendEmail
+            ? await buildInvoiceHtmlWithEmbeddedLogo(invoice)
+            : buildInvoiceHtml(invoice);
+          return {
+            rowKey: rowKeyOf(row),
+            accountId: row.accountId ?? undefined,
+            applicationId: row.applicationId ?? undefined,
+            chargeId: row.chargeId ?? undefined,
+            documentHtml: html,
+          };
+        }),
+      );
+      const result = await apiRequest<BulkSubmitResult>("/api/finance/billing/submit", {
         method: "POST",
         body: JSON.stringify({
+          kind: "INVOICE",
+          feeType,
           year: yearNum,
-          sendEmail,
-          publishToMember,
-          accountIds,
-          invoiceHtmlByAccountId: sendEmail ? invoiceHtmlByAccountId : undefined,
+          emailAfterApproval: sendEmail,
+          items,
         }),
       });
-      const issued = result.issued ?? 0;
-      const emailed = result.emailed ?? 0;
-      const published = result.published ?? 0;
-      const skipped = result.skippedNoEmail ?? 0;
-
-      if (issued === 0) {
-        toast.error("No invoices were generated.");
-      } else if (sendEmail) {
-        toast.success(
-          skipped > 0
-            ? `${issued} invoice(s) generated. ${emailed} emailed and ${published} published to dashboards. ${skipped} had no email.`
-            : `${issued} invoice(s) emailed and published to member dashboards.`,
-        );
+      const submitted = result.submitted ?? 0;
+      if (submitted === 0) {
+        toast.error("No invoices were submitted for approval.");
       } else {
-        toast.success(`${published} invoice(s) published to member dashboards.`);
+        toast.success(
+          `${submitted} invoice(s) sent to the General Manager for approval` +
+            (result.pendingApproval ? ` · ${result.pendingApproval} waiting in the approval queue.` : "."),
+        );
       }
 
       setSelected({});
       setDeliveryOpen(false);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["invoice-queue"] }),
-        queryClient.invalidateQueries({ queryKey: ["invoice-stats"] }),
+        queryClient.invalidateQueries({ queryKey: ["billing-queue"] }),
+        queryClient.invalidateQueries({ queryKey: ["billing-stats"] }),
+        queryClient.invalidateQueries({ queryKey: ["billing-approvals"] }),
+        queryClient.invalidateQueries({ queryKey: ["billing-pending-count"] }),
         queryClient.invalidateQueries({ queryKey: ["member-invoice-current"] }),
       ]);
     } catch (err) {
@@ -458,50 +495,51 @@ export function InvoiceRunPage() {
 
   return (
     <PageFrame width="lg">
-      <PageHeader
-        title=""
-        description="Generate invoices for members with arrears."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" asChild>
-              <Link to="/finance/invoices/setup">
-                <SlidersHorizontal className="size-4" />
-                Payment setup
-              </Link>
-            </Button>
-            <Button type="button" variant="outline" asChild>
-              <Link to="/finance/desk">
-                <Wallet className="size-4" />
-                Finance desk
-              </Link>
-            </Button>
-          </div>
-        }
-      />
+      <div className="flex flex-wrap gap-2">
+        {FEE_TYPES.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => {
+              setFeeType(item.id);
+              setPage(1);
+              setSelected({});
+            }}
+            className={cn(
+              "rounded-full border px-4 py-1.5 text-sm font-medium transition-colors",
+              feeType === item.id
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-slate-200 bg-white text-slate-700 hover:border-primary/40",
+            )}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Members with revenue"
-          value={runStats?.membersInArrears ?? "—"}
-          hint={`Outstanding balances for ${yearNum}`}
+          label={`${feeLabel} with balance`}
+          value={stats.isLoading ? "—" : partiesWithFee}
+          hint={`Outstanding ${feeLabel.toLowerCase()} for ${yearNum}`}
           icon={Users}
           loading={stats.isLoading}
         />
         <StatCard
-          label="Invoices prepared"
-          value={runStats?.membersReceived ?? "—"}
+          label="Submit for approval"
+          value={stats.isLoading ? "—" : preparedCount}
           icon={MailCheck}
           loading={stats.isLoading}
         />
         <StatCard
-          label="Invoices not prepared"
-          value={runStats?.membersNotReceived ?? "—"}
+          label="Waiting to generate"
+          value={stats.isLoading ? "—" : notPreparedCount}
           icon={Inbox}
           loading={stats.isLoading}
         />
         <StatCard
-          label="Total Memeber Revenue"
-          value={runStats ? formatKes(runStats.totalArrears) : "—"}
+          label="Total Membership Revenue"
+          value={stats.isLoading ? "—" : formatKes(totalAmount)}
           icon={Banknote}
           loading={stats.isLoading}
         />
@@ -564,9 +602,11 @@ export function InvoiceRunPage() {
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="text-base font-semibold">Members with Membership Revenue</h2>
+              <h2 className="text-base font-semibold">
+                Members with Revenue
+              </h2>
               <p className="text-sm text-muted-foreground">
-                {pageData.totalCount} waiting to receive an invoice · {yearNum}
+                {pageData.totalCount} waiting for an invoice · {yearNum}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -626,10 +666,10 @@ export function InvoiceRunPage() {
           </div>
 
           {queue.isLoading ? (
-            <PageBodyLoading label="Loading members in arrears…" minHeightClassName="min-h-[14rem]" />
+            <PageBodyLoading label={`Loading ${feeLabel.toLowerCase()} queue…`} minHeightClassName="min-h-[14rem]" />
           ) : rows.length === 0 ? (
             <p className="rounded-md border border-dashed border-slate-200 px-3 py-8 text-center text-sm text-muted-foreground">
-              Everyone in this filter has already received an invoice, or there are no arrears for {yearNum}.
+              No members or applicants are waiting for a {feeLabel.toLowerCase()} invoice in {yearNum}.
             </p>
           ) : (
             <>
@@ -644,19 +684,21 @@ export function InvoiceRunPage() {
                           aria-label="Select all on this page"
                         />
                       </th>
-                      <th className="py-2 pr-3 font-medium">Member</th>
-                      <th className="py-2 pr-3 font-medium">Member no.</th>
+                      <th className="py-2 pr-3 font-medium">Name</th>
+                      <th className="py-2 pr-3 font-medium">No.</th>
+                      <th className="py-2 pr-3 font-medium">Type</th>
                       <th className="py-2 pr-3 text-right font-medium">Amount due</th>
                       <th className="py-2 text-right font-medium">Arrears</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((row) => {
-                      const checked = Boolean(selected[row.accountId]);
+                      const key = rowKeyOf(row);
+                      const checked = Boolean(selected[key]);
                       const hasEmail = Boolean(row.email?.trim());
                       return (
                         <tr
-                          key={row.accountId}
+                          key={key}
                           className={cn(
                             "border-b border-slate-100 last:border-0",
                             checked ? "bg-primary/5" : "hover:bg-muted/40",
@@ -666,16 +708,18 @@ export function InvoiceRunPage() {
                             <Checkbox
                               checked={checked}
                               onCheckedChange={(value) => toggleRow(row, value === true)}
-                              aria-label={`Select ${row.memberName}`}
+                              aria-label={`Select ${partyName(row)}`}
                             />
                           </td>
                           <td className="py-2.5 pr-3 align-top">
-                            <p className="font-medium text-slate-900">{row.memberName}</p>
+                            <p className="font-medium text-slate-900">{partyName(row)}</p>
+                            <p className="text-xs text-muted-foreground">{audienceLabel(row.audience)}</p>
                             {!hasEmail ? (
                               <p className="text-xs text-amber-700">No email on file</p>
                             ) : null}
                           </td>
-                          <td className="py-2.5 pr-3 align-top font-medium">{row.membershipNo || "—"}</td>
+                          <td className="py-2.5 pr-3 align-top font-medium">{partyNo(row)}</td>
+                          <td className="py-2.5 pr-3 align-top">{categoryLabel(row)}</td>
                           <td className="py-2.5 pr-3 align-top text-right tabular-nums">
                             {formatKes(row.amountDue)}
                           </td>
@@ -715,14 +759,13 @@ export function InvoiceRunPage() {
             <div className="space-y-3 p-4 text-sm">
               {missingEmail > 0 ? (
                 <p className="rounded-md bg-amber-50 px-3 py-2 text-amber-900">
-                  {missingEmail} selected member(s) have no email. They will still publish to the dashboard.
-                  Enable email only for members who have an address.
+                  {missingEmail} selected invoice(s) have no email. They can still go to the GM for approval.
                 </p>
               ) : null}
               <div className="flex flex-wrap gap-2 pt-1">
                 <Button type="button" disabled={sending || selectedCount === 0} onClick={openGenerateDialog}>
-                  {sending ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
-                  Invoices{selectedCount > 0 ? ` (${selectedCount})` : ""}
+                  {sending ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
+                  Send{selectedCount > 0 ? ` (${selectedCount})` : ""}
                 </Button>
               </div>
             </div>
@@ -770,7 +813,7 @@ export function InvoiceRunPage() {
       <Dialog open={deliveryOpen} onOpenChange={(open) => !sending && setDeliveryOpen(open)}>
         <DialogContent className="flex h-[min(92vh,56rem)] w-[min(96vw,80rem)] max-w-[80rem] flex-col gap-4 overflow-hidden">
           <DialogHeader className="shrink-0">
-            <DialogTitle>Send invoices</DialogTitle>
+            <DialogTitle>Submit {feeLabel.toLowerCase()} invoices for GM approval</DialogTitle>
           </DialogHeader>
 
           <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
@@ -813,15 +856,15 @@ export function InvoiceRunPage() {
               {previewRow ? (
                 <>
                   <p className="shrink-0 text-sm text-foreground">
-                    <span className="font-medium">{previewRow.memberName}</span>
+                    <span className="font-medium">{partyName(previewRow)}</span>
                     <span className="text-muted-foreground">
                       {" "}
-                      · {previewRow.membershipNo || "—"} · {formatKes(previewRow.arrearsAmount)}
+                      · {partyNo(previewRow)} · {formatKes(previewRow.arrearsAmount)}
                     </span>
                   </p>
                   <div className="invoice-preview-frame min-h-[22rem] flex-1 rounded-xl border border-border bg-white">
                     <iframe
-                      title={`Invoice preview for ${previewRow.memberName}`}
+                      title={`Preview for ${partyName(previewRow)}`}
                       srcDoc={previewHtml}
                       onLoad={(event) => {
                         const frame = event.currentTarget;
@@ -859,7 +902,7 @@ export function InvoiceRunPage() {
                     Also send by email
                   </span>
                   <span className="text-sm text-muted-foreground">
-                    Off by default. Enable this to email the invoice as well as publishing it.
+                    Off by default. If enabled, the recipient is emailed only after the General Manager approves.
                   </span>
                 </span>
               </label>
@@ -878,7 +921,7 @@ export function InvoiceRunPage() {
             </Button>
             <Button type="button" disabled={sending} onClick={() => void sendSelected()}>
               {sending ? <Loader2 className="size-4 animate-spin" /> : null}
-              {sendEmail ? "Send to email and dashboard" : "Publish to dashboard"}
+              {sendEmail ? "Submit and email after approval" : "Submit for GM approval"}
             </Button>
           </DialogFooter>
         </DialogContent>

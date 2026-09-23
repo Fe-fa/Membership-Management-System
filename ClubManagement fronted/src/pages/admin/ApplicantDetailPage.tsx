@@ -278,7 +278,7 @@ export function ApplicantDetailPage() {
       {editing || fromManager ? null : (
       <PageHeader
         title={record.applicantName || `${currentDraft.personal.firstName} ${currentDraft.personal.lastName}`.trim() || "Applicant"}
-        description={`${record.applicationNo} Â· ${stage} Â· Updated ${formatMembershipDate(record.updatedAt)}`}
+        description={`${record.applicationNo}. ${stage}. Updated ${formatMembershipDate(record.updatedAt)}.`}
         actions={
           <div className="flex flex-wrap justify-end gap-2">
             {fromManager ? (
@@ -426,7 +426,7 @@ export function ApplicantDetailPage() {
           listSearch={backSearch}
           listLabel={backLabel}
           profileStatus={stage}
-          profileMeta={`${record.applicationNo} · ${stage} · Updated ${formatMembershipDate(record.updatedAt)}`}
+          profileMeta={`${record.applicationNo}. ${stage}. Updated ${formatMembershipDate(record.updatedAt)}.`}
           badgeValue={record.applicationNo}
           headerActions={
             <>
@@ -461,7 +461,7 @@ export function ApplicantDetailPage() {
           listTo="/members"
           listLabel="Back to List"
           profileStatus="Update application"
-          profileMeta={`${record.applicationNo} · ${stage} · Updated ${formatMembershipDate(record.updatedAt)}`}
+          profileMeta={`${record.applicationNo}. ${stage}. Updated ${formatMembershipDate(record.updatedAt)}.`}
           badgeValue={record.applicationNo}
           headerActions={
             <Button

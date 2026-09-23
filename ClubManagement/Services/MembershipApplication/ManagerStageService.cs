@@ -127,6 +127,14 @@ IF COL_LENGTH(N'dbo.Committee_meeting', N'meeting_name') IS NULL
     ALTER TABLE dbo.Committee_meeting ADD meeting_name NVARCHAR(200) NULL;
 IF COL_LENGTH(N'dbo.Committee_meeting', N'meeting_time') IS NULL
     ALTER TABLE dbo.Committee_meeting ADD meeting_time NVARCHAR(20) NULL;
+IF COL_LENGTH(N'dbo.Committee_meeting', N'venue_mode') IS NULL
+    ALTER TABLE dbo.Committee_meeting ADD venue_mode NVARCHAR(20) NULL;
+IF COL_LENGTH(N'dbo.Committee_meeting', N'duration_minutes') IS NULL
+    ALTER TABLE dbo.Committee_meeting ADD duration_minutes INT NULL;
+IF COL_LENGTH(N'dbo.Committee_meeting', N'location') IS NULL
+    ALTER TABLE dbo.Committee_meeting ADD location NVARCHAR(300) NULL;
+IF COL_LENGTH(N'dbo.Committee_meeting', N'notes') IS NULL
+    ALTER TABLE dbo.Committee_meeting ADD notes NVARCHAR(2000) NULL;
 ", cancellationToken);
 
         await _db.Database.ExecuteSqlRawAsync(@"

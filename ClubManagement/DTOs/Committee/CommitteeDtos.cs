@@ -36,6 +36,11 @@ public class CreateCommitteeMeetingRequest
     public string? MeetingName { get; set; }
     public long? ChairProfileId { get; set; }
     public string? MeetingLink { get; set; }
+    /// <summary>IN_PERSON or ONLINE.</summary>
+    public string? VenueMode { get; set; }
+    public int? DurationMinutes { get; set; }
+    public string? Location { get; set; }
+    public string? Notes { get; set; }
     public List<long> ApplicationIds { get; set; } = [];
 }
 
@@ -90,6 +95,10 @@ public class CommitteeMeetingDto
     public string MeetingDate { get; set; } = string.Empty;
     public string? MeetingTime { get; set; }
     public string? MeetingName { get; set; }
+    public string? VenueMode { get; set; }
+    public int? DurationMinutes { get; set; }
+    public string? Location { get; set; }
+    public string? Notes { get; set; }
     public long? ChairProfileId { get; set; }
     public string? ChairName { get; set; }
     public string Status { get; set; } = string.Empty;

@@ -157,16 +157,19 @@ export function pickActiveEndorsement(
 function Check({
   ok,
   label,
-  requestLabel,
-  onRequest,
-  requesting,
+  actionLabel,
+  onAction,
+  busy,
+  showWhenMet,
 }: {
   ok: boolean;
   label: string;
-  requestLabel?: string;
-  onRequest?: () => void;
-  requesting?: boolean;
+  actionLabel?: string;
+  onAction?: () => void;
+  busy?: boolean;
+  showWhenMet?: boolean;
 }) {
+  const showAction = Boolean(onAction) && (showWhenMet || !ok);
   return (
     <li className={cn("flex items-center gap-2 text-sm", ok ? "text-emerald-800" : "text-amber-900")}>
       <span
@@ -178,17 +181,17 @@ function Check({
         {ok ? "✓" : "○"}
       </span>
       <span className="min-w-0 flex-1">{label}</span>
-      {!ok && onRequest ? (
+      {showAction ? (
         <Button
           type="button"
           size="sm"
           variant="outline"
           className="h-7 shrink-0 px-2 text-xs"
-          disabled={requesting}
-          onClick={onRequest}
+          disabled={busy}
+          onClick={onAction}
         >
-          {requesting ? <Loader2 className="size-3 animate-spin" /> : null}
-          {requestLabel ?? "Request"}
+          {busy ? <Loader2 className="size-3 animate-spin" /> : null}
+          {actionLabel ?? "Request"}
         </Button>
       ) : null}
     </li>
@@ -435,6 +438,35 @@ export function ManagerStagePanel({
     onError: (err) => toast.error(extractErrorMessage(err)),
   });
 
+  const depositFee = useMutation({
+    mutationFn: (feeCode: "JOINING" | "ANNUAL") =>
+      apiRequest(`/api/applications/${applicationId}/fee-invoices`, {
+        method: "POST",
+        body: JSON.stringify({ feeCode }),
+      }),
+    onSuccess: (_data, feeCode) => {
+      toast.success(
+        feeCode === "JOINING"
+          ? "Entrance fee invoice issued. The applicant can pay it now."
+          : "Annual subscription invoice issued. The applicant can pay it now.",
+      );
+      void queryClient.invalidateQueries({ queryKey: ["application-dues", applicationId] });
+      void queryClient.invalidateQueries({ queryKey: ["billing-queue"] });
+    },
+    onError: (err) => toast.error(extractErrorMessage(err)),
+  });
+
+  const depositCheque = useMutation({
+    mutationFn: () =>
+      apiRequest(`/api/applications/${applicationId}/cheque-deposit`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      toast.success("Finance has been asked to deposit this applicant's cheque.");
+    },
+    onError: (err) => toast.error(extractErrorMessage(err)),
+  });
+
   const r = readiness.data;
   let draft = emptyDraft();
   if (detail?.formDataJson) {
@@ -482,14 +514,15 @@ export function ManagerStagePanel({
   const checklist = r
     ? [
         { ok: r.endorsementsComplete, label: "Proposer + Seconder", type: "endorsements" as const },
-        { ok: entranceFeeOk, label: "Entrance Fee", type: "payment" as const },
-        { ok: annualFeeOk, label: "Annual Fee", type: "payment" as const },
+        { ok: entranceFeeOk, label: "Entrance Fee", deposit: "JOINING" as const },
+        { ok: annualFeeOk, label: "Annual Fee", deposit: "ANNUAL" as const },
         { ok: r.cvUploaded, label: "CV", type: "documents" as const },
         { ok: r.idPassportUploaded, label: "ID/Passport", type: "documents" as const },
         {
           ok: feeChequesOk,
           label: "Fee cheques (uploaded)",
-          type: "documents" as const,
+          deposit: "CHEQUE" as const,
+          showWhenMet: true,
         },
         ...(r.pilotLicenseRequired
           ? [{ ok: licenseOk, label: "Pilot licence", type: "documents" as const }]
@@ -622,19 +655,30 @@ export function ManagerStagePanel({
               Verification checklist ({metCount} of {checklist.length} met)
             </p>
             <ul className="mt-3 space-y-2">
-              {checklist.map((item) => (
-                <Check
-                  key={item.label}
-                  ok={item.ok}
-                  label={item.label}
-                  requesting={requestItem.isPending}
-                  onRequest={
-                    item.type
-                      ? () => requestItem.mutate(item.type)
-                      : undefined
-                  }
-                />
-              ))}
+              {checklist.map((item) => {
+                const deposit = "deposit" in item ? item.deposit : undefined;
+                const showWhenMet = "showWhenMet" in item ? item.showWhenMet : false;
+                const requestType = "type" in item ? item.type : undefined;
+                return (
+                  <Check
+                    key={item.label}
+                    ok={item.ok}
+                    label={item.label}
+                    actionLabel={deposit ? "Deposit" : "Request"}
+                    showWhenMet={Boolean(deposit && showWhenMet)}
+                    busy={deposit ? depositFee.isPending || depositCheque.isPending : requestItem.isPending}
+                    onAction={
+                      deposit === "JOINING" || deposit === "ANNUAL"
+                        ? () => depositFee.mutate(deposit)
+                        : deposit === "CHEQUE"
+                          ? () => depositCheque.mutate()
+                          : requestType
+                            ? () => requestItem.mutate(requestType)
+                            : undefined
+                    }
+                  />
+                );
+              })}
             </ul>
             <p
               className={cn(

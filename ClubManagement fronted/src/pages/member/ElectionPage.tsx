@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 
 import { PageBackLink, PageFrame, PageHeader } from "@/components/layout/PageFrame";
@@ -163,11 +164,47 @@ type VoteReceipt = {
   castAt: string;
 };
 
-type PortalTab = "vote" | "proxy" | "audit";
+type ElectionCycle = "vote" | "proxy" | "audit";
+
+const MEMBER_ELECTION_CYCLES = [
+  {
+    id: "vote" as const,
+    to: "/election/vote",
+    label: "Cast electronic vote",
+    description: "One vote per resolution. A recorded vote cannot be recast.",
+    icon: Gavel,
+  },
+  {
+    id: "proxy" as const,
+    to: "/election/appoint-proxy",
+    label: "Appoint a proxy",
+    description: "Authorise another eligible member to vote on your behalf.",
+    icon: UserPlus,
+  },
+  {
+    id: "audit" as const,
+    to: "/election/audit",
+    label: "Published audit log",
+    description: "Declared results after the Returning Officer publishes them.",
+    icon: ScrollText,
+  },
+];
 
 /** Standalone Election page — AGM notices / member ballot. Committee application ballot is never shown here. */
 export function ElectionPage() {
   return <MemberElectionCards />;
+}
+
+export function MemberElectionVotePage() {
+  return <MemberElectionCyclePage cycle="vote" />;
+}
+
+export function MemberElectionProxyPage() {
+  return <MemberElectionCyclePage cycle="proxy" />;
+}
+
+export function MemberElectionAuditPage() {
+  return <MemberElectionCyclePage cycle="audit" />;
 }
 
 function formatWhen(value?: string | null) {
@@ -295,7 +332,7 @@ function useCountdown(target?: string | null) {
   }, [now, target]);
 }
 
-function MemberElectionCards() {
+function useMemberElection() {
   const user = readUser();
   const staff = isStaff(user);
   const queryClient = useQueryClient();
@@ -304,7 +341,6 @@ function MemberElectionCards() {
     queryFn: () => apiRequest<Mine>("/api/elections/mine"),
   });
   const data = mine.data;
-  const [tab, setTab] = useState<PortalTab>("vote");
   const [proxy, setProxy] = useState<ProxyForm>({
     proxyProfileId: null,
     proxyName: "",
@@ -339,7 +375,6 @@ function MemberElectionCards() {
   const nominees = data?.nominations ?? [];
   const items = data?.ballotItems ?? [];
   const votedCount = items.filter((item) => item.myVoteValue).length;
-  const meetingLabel = meetingTypeLabel(notice?.meetingType);
 
   const vote = useMutation({
     mutationFn: (payload: { agendaItemId: number; voteValue: string }) =>
@@ -390,48 +425,79 @@ function MemberElectionCards() {
     onError: (e) => toast.error(extractErrorMessage(e)),
   });
 
+  return {
+    staff,
+    mine,
+    data,
+    proxy,
+    setProxy,
+    receipt,
+    meetingId,
+    windowOpen,
+    eligible,
+    countdown,
+    notice,
+    nominees,
+    items,
+    votedCount,
+    vote,
+    saveProxy,
+  };
+}
+
+function CountdownBanner({
+  notice,
+  deadline,
+  countdown,
+}: {
+  notice: Notice;
+  deadline?: string | null | undefined;
+  countdown: ReturnType<typeof useCountdown>;
+}) {
+  return (
+    <div className="overflow-hidden rounded-2xl bg-primary text-primary-foreground shadow-[var(--shadow-card)]">
+      <div className="flex flex-col gap-6 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="flex min-w-0 items-start gap-3">
+          <Clock3 className="mt-0.5 size-5 shrink-0 opacity-90" />
+          <div>
+            <p className="font-semibold">Voting closes 48 hours before the {notice.meetingType}</p>
+            <p className="mt-1 text-sm text-primary-foreground/80">
+              Ballots and proxy appointments must reach the Returning Officer by {formatWhen(deadline)}.
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-3 sm:gap-4">
+          {(
+            [
+              ["DAYS", countdown?.days ?? 0],
+              ["HRS", countdown?.hours ?? 0],
+              ["MIN", countdown?.minutes ?? 0],
+              ["SEC", countdown?.seconds ?? 0],
+            ] as const
+          ).map(([label, value]) => (
+            <div key={label} className="text-center">
+              <div className="flex size-14 items-center justify-center rounded-full bg-white/10 font-display text-xl font-semibold tabular-nums sm:size-16 sm:text-2xl">
+                {countdown?.closed ? "00" : pad(value)}
+              </div>
+              <p className="mt-1 text-[10px] font-semibold tracking-[0.18em] text-primary-foreground/70">
+                {label}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MemberElectionCards() {
+  const { staff, mine, data, countdown, notice, items, votedCount } = useMemberElection();
 
   return (
     <PageFrame width="lg">
       {staff ? <PageBackLink to="/admin" label="Back to admin dashboard" /> : null}
-      {/* <PageHeader
-        title="Elections &amp; voting"
-      /> */}
-
       {notice ? (
-        <div className="overflow-hidden rounded-2xl bg-primary text-primary-foreground shadow-[var(--shadow-card)]">
-          <div className="flex flex-col gap-6 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-            <div className="flex min-w-0 items-start gap-3">
-              <Clock3 className="mt-0.5 size-5 shrink-0 opacity-90" />
-              <div>
-                <p className="font-semibold">Voting closes 48 hours before the {notice.meetingType}</p>
-                <p className="mt-1 text-sm text-primary-foreground/80">
-                  Ballots and proxy appointments must reach the Returning Officer by{" "}
-                  {formatWhen(data?.proxyDeadlineAt)}.
-                </p>
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-3 sm:gap-4">
-              {(
-                [
-                  ["DAYS", countdown?.days ?? 0],
-                  ["HRS", countdown?.hours ?? 0],
-                  ["MIN", countdown?.minutes ?? 0],
-                  ["SEC", countdown?.seconds ?? 0],
-                ] as const
-              ).map(([label, value]) => (
-                <div key={label} className="text-center">
-                  <div className="flex size-14 items-center justify-center rounded-full bg-white/10 font-display text-xl font-semibold tabular-nums sm:size-16 sm:text-2xl">
-                    {countdown?.closed ? "00" : pad(value)}
-                  </div>
-                  <p className="mt-1 text-[10px] font-semibold tracking-[0.18em] text-primary-foreground/70">
-                    {label}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <CountdownBanner notice={notice} deadline={data?.proxyDeadlineAt} countdown={countdown} />
       ) : null}
 
       <div className="grid gap-5">
@@ -442,7 +508,7 @@ function MemberElectionCards() {
             <div>
               <h2 className="font-display text-xl font-semibold">Electronic ballot &amp; proxy</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-              One vote per resolution; cannot be recast.
+                One vote per resolution; it cannot be recast.
               </p>
             </div>
             {items.length > 0 ? (
@@ -460,69 +526,106 @@ function MemberElectionCards() {
             ) : null}
           </div>
 
-          <div className="mt-5 flex gap-1 overflow-x-auto border-b border-border">
-            {(
-              [
-                ["vote", "Cast electronic vote", Gavel],
-                ["proxy", "Submit proxy appointment", UserPlus],
-                ["audit", "Published audit log", ScrollText],
-              ] as const
-            ).map(([id, label, Icon]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setTab(id)}
-                className={cn(
-                  "inline-flex shrink-0 items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-medium",
-                  tab === id
-                    ? "border-emerald-600 text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            {MEMBER_ELECTION_CYCLES.map(({ to, label, description, icon: Icon }) => (
+              <Link
+                key={to}
+                to={to}
+                className="rounded-xl border border-border bg-background px-4 py-4 shadow-sm transition-colors hover:border-emerald-600 hover:bg-emerald-50/40"
               >
-                <Icon className="size-4" />
-                {label}
-              </button>
+                <span className="inline-flex size-9 items-center justify-center rounded-full border border-border">
+                  <Icon className="size-4" />
+                </span>
+                <p className="mt-3 font-medium">{label}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+              </Link>
             ))}
-          </div>
-
-          <div className="mt-5">
-            {mine.isLoading ? (
-              <p className="text-sm text-muted-foreground">Loading ballot…</p>
-            ) : tab === "vote" ? (
-              <VoteTab
-                eligible={eligible}
-                windowOpen={windowOpen}
-                noVoteReason={data?.noVoteReason}
-                subscriptionsPaidUp={data?.subscriptionsPaidUp}
-                items={items}
-                nominees={nominees}
-                receipt={receipt}
-                pending={vote.isPending}
-                proxyReviewStatus={data?.proxy?.reviewStatus}
-                onVote={(agendaItemId, voteValue) => vote.mutate({ agendaItemId, voteValue })}
-              />
-            ) : tab === "proxy" ? (
-              <ProxyTab
-                eligible={eligible}
-                meetingId={meetingId}
-                data={data}
-                proxy={proxy}
-                setProxy={setProxy}
-                pending={saveProxy.isPending}
-                onSave={() => saveProxy.mutate()}
-              />
-            ) : (
-              <AuditTab data={data} />
-            )}
           </div>
         </section>
 
-        <MeetingNoticeCard notice={notice} loading={mine.isLoading} />
+        <MeetingNoticeCard notice={notice ?? null} loading={mine.isLoading} />
       </div>
 
       <p className="text-center text-xs text-muted-foreground">
         Aero Club of East Africa · Wilson Airport, Nairobi · Governance queries: governance@aeroclubea.org
       </p>
+    </PageFrame>
+  );
+}
+
+function MemberElectionCyclePage({ cycle }: { cycle: ElectionCycle }) {
+  const election = useMemberElection();
+  const {
+    mine,
+    data,
+    proxy,
+    setProxy,
+    receipt,
+    meetingId,
+    windowOpen,
+    eligible,
+    countdown,
+    notice,
+    nominees,
+    items,
+    votedCount,
+    vote,
+    saveProxy,
+  } = election;
+  const current = MEMBER_ELECTION_CYCLES.find((item) => item.id === cycle)!;
+
+  return (
+    <PageFrame width="lg">
+      <PageBackLink to="/election" label="Back to election" />
+      <PageHeader title={current.label} description={current.description} />
+      {notice && cycle !== "audit" ? (
+        <CountdownBanner notice={notice} deadline={data?.proxyDeadlineAt} countdown={countdown} />
+      ) : null}
+
+      <section className="rounded-2xl border border-border bg-card p-5 shadow-[var(--shadow-card)] sm:p-6">
+        {cycle === "vote" && items.length > 0 ? (
+          <div className="mb-5 min-w-[140px] sm:ml-auto sm:w-40">
+            <p className="text-right text-xs font-medium text-muted-foreground">
+              {votedCount} of {items.length} items voted
+            </p>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-emerald-600"
+                style={{ width: `${items.length ? (votedCount / items.length) * 100 : 0}%` }}
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {mine.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading ballot…</p>
+        ) : cycle === "vote" ? (
+          <VoteTab
+            eligible={eligible}
+            windowOpen={windowOpen}
+            noVoteReason={data?.noVoteReason ?? null}
+            subscriptionsPaidUp={data?.subscriptionsPaidUp ?? false}
+            items={items}
+            nominees={nominees}
+            receipt={receipt}
+            pending={vote.isPending}
+            proxyReviewStatus={data?.proxy?.reviewStatus ?? null}
+            onVote={(agendaItemId, voteValue) => vote.mutate({ agendaItemId, voteValue })}
+          />
+        ) : cycle === "proxy" ? (
+          <ProxyTab
+            eligible={eligible}
+            meetingId={meetingId}
+            {...(data ? { data } : {})}
+            proxy={proxy}
+            setProxy={setProxy}
+            pending={saveProxy.isPending}
+            onSave={() => saveProxy.mutate()}
+          />
+        ) : (
+          <AuditTab {...(data ? { data } : {})} />
+        )}
+      </section>
     </PageFrame>
   );
 }
@@ -929,7 +1032,7 @@ function ProxyTab({
   onSave,
 }: {
   eligible: boolean;
-  meetingId?: number;
+  meetingId?: number | undefined;
   data?: Mine;
   proxy: ProxyForm;
   setProxy: React.Dispatch<React.SetStateAction<ProxyForm>>;

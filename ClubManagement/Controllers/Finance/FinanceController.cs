@@ -271,6 +271,17 @@ public class FinanceController : ControllerBase
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER")]
+    [HttpGet("statement-parties")]
+    public async Task<ActionResult<PagedResult<StatementPartyRowDto>>> StatementParties(
+        [FromQuery] PagedRequest paging,
+        [FromQuery] string? search,
+        [FromQuery] string? audience,
+        [FromQuery] string? membershipType,
+        [FromQuery] int? year,
+        CancellationToken cancellationToken) =>
+        Ok(await _finance.ListStatementPartiesAsync(search, audience, membershipType, year, paging, cancellationToken));
+
     [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
     [HttpGet("statements/{accountId:long}")]
     public async Task<ActionResult<StatementDocumentDto>> Statement(
@@ -282,6 +293,52 @@ public class FinanceController : ControllerBase
         try
         {
             return Ok(await _finance.GetMemberStatementAsync(accountId, from, to, cancellationToken));
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER")]
+    [HttpGet("statements/applicant/{applicationId:long}")]
+    public async Task<ActionResult<StatementDocumentDto>> ApplicantStatement(
+        long applicationId,
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _finance.GetApplicantStatementAsync(applicationId, from, to, cancellationToken));
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER")]
+    [HttpPost("statements/email")]
+    [RequestSizeLimit(52_428_800)]
+    public async Task<ActionResult<StatementEmailResultDto>> EmailStatements(
+        [FromBody] StatementEmailRequest? request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _finance.EmailStatementsAsync(request ?? new StatementEmailRequest(), cancellationToken));
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize(Roles = "ADMIN")]
+    [HttpDelete("statement-parties")]
+    public async Task<ActionResult<object>> DeletePartyStatements(
+        [FromQuery] long? accountId,
+        [FromQuery] long? applicationId,
+        CancellationToken cancellationToken)
+    {
+        if (!User.IsInRole("ADMIN"))
+            return StatusCode(403, new { message = "Only Admin can delete issued statements." });
+        try
+        {
+            var deleted = await _finance.DeletePartyStatementsAsync(accountId, applicationId, cancellationToken);
+            return Ok(new { deleted });
         }
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
@@ -324,6 +381,16 @@ public class FinanceController : ControllerBase
             new SubscriptionListFilter(year, search, arrearsOnly == true, membershipType),
             paging,
             cancellationToken));
+
+    [HttpGet("joining-dues")]
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    public async Task<ActionResult<PagedResult<BillingQueueRowDto>>> JoiningDues(
+        [FromQuery] PagedRequest paging,
+        [FromQuery] string? search,
+        [FromQuery] string? membershipType,
+        [FromQuery] string? audience,
+        CancellationToken cancellationToken) =>
+        Ok(await _finance.ListJoiningDuesAsync(search, membershipType, paging, cancellationToken, audience));
 
     [HttpGet("settlement/members")]
     [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
@@ -380,6 +447,115 @@ public class FinanceController : ControllerBase
     [HttpPost("subscription-lifecycle")]
     public async Task<ActionResult<SubscriptionLifecycleResultDto>> SubscriptionLifecycle(CancellationToken cancellationToken) =>
         Ok(await _finance.EnforceSubscriptionLifecycleAsync(cancellationToken));
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpGet("billing/queue")]
+    public async Task<ActionResult<PagedResult<BillingQueueRowDto>>> BillingQueue(
+        [FromQuery] PagedRequest paging,
+        [FromQuery] string? feeType,
+        [FromQuery] int? year,
+        [FromQuery] string? search,
+        [FromQuery] string? membershipType,
+        [FromQuery] string? kind,
+        CancellationToken cancellationToken) =>
+        Ok(await _finance.ListBillingQueueAsync(
+            feeType ?? "ANNUAL",
+            year ?? DateTime.UtcNow.Year,
+            search,
+            membershipType,
+            paging,
+            cancellationToken,
+            kind ?? "INVOICE"));
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpGet("billing/stats")]
+    public async Task<ActionResult<BillingQueueStatsDto>> BillingStats(
+        [FromQuery] string? feeType,
+        [FromQuery] int? year,
+        [FromQuery] string? membershipType,
+        [FromQuery] string? kind,
+        CancellationToken cancellationToken) =>
+        Ok(await _finance.GetBillingQueueStatsAsync(
+            feeType ?? "ANNUAL",
+            year ?? DateTime.UtcNow.Year,
+            membershipType,
+            cancellationToken,
+            kind ?? "INVOICE"));
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpPost("billing/submit")]
+    [RequestSizeLimit(52_428_800)]
+    public async Task<ActionResult<BillingSubmitResultDto>> SubmitBilling(
+        [FromBody] BillingSubmitRequest? request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _finance.SubmitBillingDocumentsAsync(
+                request ?? new BillingSubmitRequest("INVOICE", "ANNUAL"),
+                User.UserId(),
+                cancellationToken));
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER")]
+    [HttpGet("billing/approvals")]
+    public async Task<ActionResult<PagedResult<BillingApprovalRowDto>>> BillingApprovals(
+        [FromQuery] PagedRequest paging,
+        [FromQuery] string? kind,
+        [FromQuery] string? status,
+        [FromQuery] string? feeType,
+        [FromQuery] string? search,
+        CancellationToken cancellationToken) =>
+        Ok(await _finance.ListBillingApprovalsAsync(kind, status, feeType, search, paging, cancellationToken));
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER")]
+    [HttpGet("billing/pending-count")]
+    public async Task<ActionResult<BillingPendingCountsDto>> BillingPendingCount(CancellationToken cancellationToken) =>
+        Ok(await _finance.GetBillingPendingCountsAsync(cancellationToken));
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER")]
+    [HttpGet("billing/{billingDocumentId:long}")]
+    public async Task<ActionResult<BillingApprovalRowDto>> GetBillingDocument(
+        long billingDocumentId,
+        CancellationToken cancellationToken)
+    {
+        var doc = await _finance.GetBillingDocumentAsync(billingDocumentId, cancellationToken);
+        return doc is null ? NotFound(new { message = "Document was not found." }) : Ok(doc);
+    }
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER")]
+    [HttpPost("billing/{billingDocumentId:long}/approve")]
+    public async Task<ActionResult<BillingApprovalRowDto>> ApproveBilling(
+        long billingDocumentId,
+        [FromBody] BillingDecisionRequest? request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _finance.ApproveBillingDocumentAsync(
+                billingDocumentId,
+                request ?? new BillingDecisionRequest(),
+                User.UserId(),
+                cancellationToken));
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER")]
+    [HttpPost("billing/{billingDocumentId:long}/reject")]
+    public async Task<ActionResult<BillingApprovalRowDto>> RejectBilling(
+        long billingDocumentId,
+        [FromBody] BillingDecisionRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _finance.RejectBillingDocumentAsync(billingDocumentId, request, User.UserId(), cancellationToken));
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
 
     private static Dictionary<long, string>? ParseInvoiceHtmlMap(Dictionary<string, string>? source)
     {

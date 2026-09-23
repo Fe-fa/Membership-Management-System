@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -89,8 +90,12 @@ export function MeetingPendingPage() {
     meetingTypeId: "",
     meetingDate: kenyaTodayISO(),
     meetingTime: "10:00",
+    durationMinutes: "60",
+    venueMode: "ONLINE" as "ONLINE" | "IN_PERSON",
     meetingName: "",
     meetingLink: "",
+    location: "",
+    notes: "",
     applicationIds: [] as number[],
   });
 
@@ -113,8 +118,12 @@ export function MeetingPendingPage() {
           meetingTypeId: Number(meetingForm.meetingTypeId),
           meetingDate: meetingForm.meetingDate,
           meetingTime: meetingForm.meetingTime,
+          durationMinutes: Number(meetingForm.durationMinutes),
+          venueMode: meetingForm.venueMode,
           meetingName: meetingForm.meetingName.trim() || null,
-          meetingLink: meetingForm.meetingLink.trim() || null,
+          meetingLink: meetingForm.venueMode === "ONLINE" ? meetingForm.meetingLink.trim() || null : null,
+          location: meetingForm.venueMode === "IN_PERSON" ? meetingForm.location.trim() || null : null,
+          notes: meetingForm.notes.trim() || null,
           applicationIds,
         }),
       });
@@ -125,7 +134,14 @@ export function MeetingPendingPage() {
           ? "Sitting scheduled. Applicant moved to Waiting for meeting."
           : "Meeting scheduled.",
       );
-      setMeetingForm((f) => ({ ...f, meetingName: "", meetingLink: "", applicationIds: [] }));
+      setMeetingForm((f) => ({
+        ...f,
+        meetingName: "",
+        meetingLink: "",
+        location: "",
+        notes: "",
+        applicationIds: [],
+      }));
       setScheduleOpen(false);
       invalidate();
       void queryClient.invalidateQueries({ queryKey: ["committee", "interview-queue"] });
@@ -213,8 +229,8 @@ export function MeetingPendingPage() {
               <DialogHeader>
                 <DialogTitle>Schedule sitting</DialogTitle>
                 <DialogDescription>
-                  Choose the sitting type, date, and time. Applicants you attach afterwards move to
-                  Waiting for meeting.
+                  Set the date, time, duration, and whether the sitting is in person or online.
+                  Applicants you attach afterwards move to Waiting for meeting.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4">
@@ -238,11 +254,11 @@ export function MeetingPendingPage() {
                     </Select>
                   </label>
                   <label className="grid gap-1 text-sm">
-                    <Label>Name</Label>
+                    <Label>Interview name</Label>
                     <Input
                       value={meetingForm.meetingName}
                       onChange={(e) => setMeetingForm((f) => ({ ...f, meetingName: e.target.value }))}
-                      placeholder="Optional title"
+                      placeholder="e.g. Brighton Kipkirui"
                     />
                   </label>
                   <label className="grid gap-1 text-sm">
@@ -261,13 +277,61 @@ export function MeetingPendingPage() {
                       onChange={(e) => setMeetingForm((f) => ({ ...f, meetingTime: e.target.value }))}
                     />
                   </label>
+                  <label className="grid gap-1 text-sm">
+                    <Label>Duration (minutes)</Label>
+                    <Input
+                      type="number"
+                      min={15}
+                      max={480}
+                      step={15}
+                      value={meetingForm.durationMinutes}
+                      onChange={(e) => setMeetingForm((f) => ({ ...f, durationMinutes: e.target.value }))}
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm">
+                    <Label>Interview format</Label>
+                    <Select
+                      value={meetingForm.venueMode}
+                      onValueChange={(v) =>
+                        setMeetingForm((f) => ({ ...f, venueMode: v === "IN_PERSON" ? "IN_PERSON" : "ONLINE" }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="IN_PERSON">In person interview</SelectItem>
+                        <SelectItem value="ONLINE">Online interview</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </label>
                 </div>
+                {meetingForm.venueMode === "IN_PERSON" ? (
+                  <label className="grid gap-1 text-sm">
+                    <Label>Location</Label>
+                    <Input
+                      value={meetingForm.location}
+                      onChange={(e) => setMeetingForm((f) => ({ ...f, location: e.target.value }))}
+                      placeholder="Club boardroom, Wilson Airport"
+                    />
+                  </label>
+                ) : (
+                  <label className="grid gap-1 text-sm">
+                    <Label>Meeting link</Label>
+                    <Input
+                      value={meetingForm.meetingLink}
+                      onChange={(e) => setMeetingForm((f) => ({ ...f, meetingLink: e.target.value }))}
+                      placeholder="https://meet.google.com/… — shared with applicant and committee"
+                    />
+                  </label>
+                )}
                 <label className="grid gap-1 text-sm">
-                  <Label>Online meeting link (optional)</Label>
-                  <Input
-                    value={meetingForm.meetingLink}
-                    onChange={(e) => setMeetingForm((f) => ({ ...f, meetingLink: e.target.value }))}
-                    placeholder="https://meet.google.com/… — shared with applicant and committee"
+                  <Label>Note (optional)</Label>
+                  <Textarea
+                    value={meetingForm.notes}
+                    onChange={(e) => setMeetingForm((f) => ({ ...f, notes: e.target.value }))}
+                    placeholder="Anything the applicant or committee should know"
+                    rows={3}
                   />
                 </label>
               </div>
@@ -277,7 +341,16 @@ export function MeetingPendingPage() {
                 </Button>
                 <Button
                   type="button"
-                  disabled={busy || !meetingForm.meetingTypeId || !meetingForm.meetingDate}
+                  disabled={
+                    busy ||
+                    !meetingForm.meetingTypeId ||
+                    !meetingForm.meetingDate ||
+                    !meetingForm.meetingTime ||
+                    Number(meetingForm.durationMinutes) < 15 ||
+                    (meetingForm.venueMode === "IN_PERSON"
+                      ? !meetingForm.location.trim()
+                      : meetingForm.meetingLink.trim().length < 3)
+                  }
                   onClick={() => createMeeting.mutate(meetingForm.applicationIds)}
                 >
                   {createMeeting.isPending ? (
@@ -584,6 +657,14 @@ function MeetingSittingsPanel({
                               <p className="font-medium">{m.meetingName || m.meetingTypeName}</p>
                               <p className="text-xs text-muted-foreground">
                                 {m.meetingTypeName}
+                                {m.durationMinutes ? ` · ${m.durationMinutes} min` : ""}
+                                {m.venueMode === "IN_PERSON"
+                                  ? m.location
+                                    ? ` · ${m.location}`
+                                    : " · In person"
+                                  : m.minutesUrl
+                                    ? " · Online"
+                                    : ""}
                                 {(m.linkedInterviewCount ?? 0) > 0
                                   ? ` · ${m.linkedInterviewCount} interview(s)`
                                   : ""}

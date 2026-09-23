@@ -35,6 +35,10 @@ export type CommitteeMeeting = {
   meetingDate: string;
   meetingTime?: string | null;
   meetingName?: string | null;
+  venueMode?: string | null;
+  durationMinutes?: number | null;
+  location?: string | null;
+  notes?: string | null;
   chairProfileId?: number | null;
   chairName?: string | null;
   status: string;

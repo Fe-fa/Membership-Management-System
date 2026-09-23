@@ -1,8 +1,4 @@
 namespace ClubManagement.Services.Identity;
-
-/// <summary>
-/// Maps Laravel-style MAIL_* environment variables onto the existing Smtp configuration section.
-/// </summary>
 public static class MailEnvironmentBinder
 {
     public static void Apply(ConfigurationManager configuration)

@@ -6,6 +6,13 @@ import { ClubLogo } from "@/components/brand/ClubLogo";
 import { Button } from "@/components/ui/button";
 import { TENANT_CODE } from "@/config/env";
 import { persistSession, homePathForUser, type AuthResponse } from "@/lib/auth";
+
+function nextAfterLogin() {
+  if (typeof window === "undefined") return null;
+  const next = new URLSearchParams(window.location.search).get("next");
+  if (!next || !next.startsWith("/") || next.startsWith("//")) return null;
+  return next;
+}
 import { API_BASE, extractErrorMessage } from "@/services/membership/api";
 import { tenantDisplayName, useCurrentTenant } from "@/services/tenant";
 
@@ -34,7 +41,7 @@ export function LoginPage() {
       const data = (await res.json()) as AuthResponse;
       persistSession(data);
       toast.success(`Welcome, ${data.user.fullName}`);
-      const dest = homePathForUser(data.user);
+      const dest = nextAfterLogin() || homePathForUser(data.user);
       await navigate({ to: dest, replace: true });
     } catch (err) {
       toast.error(extractErrorMessage(err));

@@ -1176,10 +1176,13 @@ END", cancellationToken);
             || string.Equals(statusCode, "POSTED", StringComparison.OrdinalIgnoreCase))
             return false;
         var year = DateTime.UtcNow.Year;
-        var sub = await _db.Subscriptions.AsNoTracking()
-            .FirstOrDefaultAsync(s => s.AccountId == accountId && s.SubscriptionYear == year, cancellationToken);
-        if (sub is null) return true;
-        return sub.AmountDue - sub.AmountPaid <= 0;
+        return !await _db.Subscriptions.AsNoTracking()
+            .AnyAsync(s =>
+                s.AccountId == accountId
+                && s.SubscriptionYear <= year
+                && !s.WaivedFlag
+                && s.AmountPaid < s.AmountDue,
+                cancellationToken);
     }
 
     private static string ReceiptNo(long voteId, long agendaItemId) =>

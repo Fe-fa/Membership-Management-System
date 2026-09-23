@@ -320,17 +320,16 @@ export const SidebarShell = memo(function SidebarShell({
 
   return (
     <div className={cn("min-h-screen", showSidebar ? "bg-background" : "bg-slate-50")}>
-      <div className={cn("mx-auto flex w-full", showSidebar ? "max-w-[1440px]" : "max-w-none")}>
-        {showSidebar ? (
-          <aside className="sticky top-0 hidden h-screen w-64 shrink-0 overflow-y-auto border-r border-sidebar-border bg-sidebar px-4 py-6 text-sidebar-foreground lg:block">
-            <BrandMark homeTo={homeTo} />
-            <div className="mt-8">
-              <NavList pathname={pathname} search={search} user={currentUser} />
-            </div>
-          </aside>
-        ) : null}
+      {showSidebar ? (
+        <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 overflow-y-auto border-r border-sidebar-border bg-sidebar px-4 py-6 text-sidebar-foreground lg:block">
+          <BrandMark homeTo={homeTo} />
+          <div className="mt-8">
+            <NavList pathname={pathname} search={search} user={currentUser} />
+          </div>
+        </aside>
+      ) : null}
 
-        <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+      <div className={cn("flex min-h-screen min-w-0 flex-col", showSidebar && "lg:pl-64")}>
           <header
             className={cn(
               "sticky top-0 z-20 grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-3 sm:px-6 lg:px-8",
@@ -428,7 +427,6 @@ export const SidebarShell = memo(function SidebarShell({
               )}
             </div>
           </main>
-        </div>
       </div>
 
       <LogoutConfirmDialog

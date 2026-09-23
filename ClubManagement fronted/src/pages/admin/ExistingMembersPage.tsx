@@ -57,7 +57,7 @@ export function ExistingMembersPage() {
         value={tab}
         onValueChange={(value) => {
           void navigate({
-            search: { tab: value as "register" | "privileges" },
+            search: value === "register" ? { tab: "register" } : { tab: "privileges" },
           });
         }}
       >
@@ -236,7 +236,7 @@ function ExistingMembersPanel() {
                           <Link
                             to="/existing-members/$accountId"
                             params={{ accountId: String(row.accountId) }}
-                            search={{ mode: "view" }}
+                            search={{ mode: "view", tab: "dashboard" }}
                           >
                             View details
                           </Link>
@@ -245,7 +245,7 @@ function ExistingMembersPanel() {
                           <Link
                             to="/existing-members/$accountId"
                             params={{ accountId: String(row.accountId) }}
-                            search={{ mode: "edit" }}
+                            search={{ mode: "edit", tab: "register" }}
                           >
                             <Pencil className="size-4" />
                           </Link>
@@ -632,7 +632,11 @@ function PrivilegesPanel() {
                         Save
                       </Button>
                       <Button size="sm" variant="outline" asChild>
-                        <Link to="/existing-members/privileges/$typeId/edit" params={{ typeId: String(type.membershipTypeId) }}>
+                        <Link
+                          to="/existing-members/privileges/$typeId/edit"
+                          params={{ typeId: String(type.membershipTypeId) }}
+                          search={{ tab: "privileges", mode: "edit" }}
+                        >
                           <Pencil className="size-3.5" />
                         </Link>
                       </Button>

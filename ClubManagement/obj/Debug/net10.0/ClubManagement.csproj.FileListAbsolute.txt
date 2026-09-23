@@ -408,3 +408,4 @@ C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-build\ClubManagement.deps.json
 C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-build\ClubManagement.runtimeconfig.json
 C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-build\ClubManagement.dll
 C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-build\ClubManagement.pdb
+D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\ClubManagement\obj\Debug\net10.0\staticwebassets.upToDateCheck.txt

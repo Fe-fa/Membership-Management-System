@@ -114,9 +114,25 @@ type DeskSummary = {
   todaysCollections: number;
   unreceiptedPayments: number;
   membersInArrears: number;
+  joiningInArrears?: number;
 };
 
-type DeskTab = "pending" | "settled" | "arrears";
+type DeskTab = "pending" | "settled" | "arrears" | "joining";
+
+type JoiningRow = {
+  rowKey: string;
+  audience: string;
+  accountId?: number | null;
+  applicationId?: number | null;
+  displayNo: string;
+  partyName: string;
+  membershipType?: string | null;
+  membershipTypeCode?: string | null;
+  amountDue: number;
+  amountPaid: number;
+  arrearsAmount: number;
+  email?: string | null;
+};
 
 type RenewalRunResult = {
   year: number;
@@ -221,8 +237,19 @@ const PAYMENT_EXPORT_COLS = [
   { header: "Status", value: (r: PaymentRow) => r.status || r.statusCode || "" },
 ];
 
+const JOINING_EXPORT_COLS = [
+  { header: "Name", value: (r: JoiningRow) => r.partyName },
+  { header: "No.", value: (r: JoiningRow) => r.displayNo },
+  { header: "Kind", value: (r: JoiningRow) => (r.audience === "APPLICANT" ? "Applicant" : "Member") },
+  { header: "Membership type", value: (r: JoiningRow) => r.membershipType || r.membershipTypeCode || "" },
+  { header: "Due (Ksh)", value: (r: JoiningRow) => r.amountDue },
+  { header: "Paid (Ksh)", value: (r: JoiningRow) => r.amountPaid },
+  { header: "Arrears (Ksh)", value: (r: JoiningRow) => r.arrearsAmount },
+];
+
 const ARREARS_EXPORT_COLS = [
-  { header: "Member", value: (r: SubRow) => `${r.membershipNo} · ${r.memberName}` },
+  { header: "Membership no.", value: (r: SubRow) => r.membershipNo },
+  { header: "Member", value: (r: SubRow) => r.memberName },
   { header: "Membership type", value: (r: SubRow) => r.membershipType || r.membershipTypeCode || "" },
   { header: "Year", value: (r: SubRow) => r.year },
   { header: "Due (Ksh)", value: (r: SubRow) => r.amountDue },
@@ -286,6 +313,7 @@ export function FinancePage() {
   const [methodFilter, setMethodFilter] = useState("");
   const [feeTypeFilter, setFeeTypeFilter] = useState("");
   const [membershipTypeFilter, setMembershipTypeFilter] = useState("");
+  const [joiningAudienceFilter, setJoiningAudienceFilter] = useState("");
   const [paymentPage, setPaymentPage] = useState(1);
   const [paymentPageSize, setPaymentPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [subPage, setSubPage] = useState(1);
@@ -376,9 +404,25 @@ export function FinancePage() {
     enabled: desk === "arrears",
   });
 
+  const joining = useQuery({
+    queryKey: ["joining-dues", appliedSearch, membershipTypeFilter, joiningAudienceFilter, subPage, subPageSize],
+    queryFn: () =>
+      apiRequest<PagedResult<JoiningRow>>(
+        `/api/finance/joining-dues?${pagedQuery({
+          page: subPage,
+          pageSize: subPageSize,
+          search: appliedSearch || undefined,
+          membershipType: membershipTypeFilter || undefined,
+          audience: joiningAudienceFilter || undefined,
+        })}`,
+      ),
+    enabled: desk === "joining",
+  });
+
   const pendingPageData = pending.data ?? emptyPage<PaymentRow>(paymentPage, paymentPageSize);
   const settledPageData = settled.data ?? emptyPage<PaymentRow>(paymentPage, paymentPageSize);
   const subPageData = subs.data ?? emptyPage<SubRow>(subPage, subPageSize);
+  const joiningPageData = joining.data ?? emptyPage<JoiningRow>(subPage, subPageSize);
 
   const pendingRows = useMemo(
     () => pendingPageData.items.filter((row) => needsClearance(row) && isPendingStatus(row.status ?? row.statusCode)),
@@ -391,6 +435,7 @@ export function FinancePage() {
       pending.refetch(),
       settled.refetch(),
       subs.refetch(),
+      joining.refetch(),
       queryClient.invalidateQueries({ queryKey: ["application-payments"] }),
       queryClient.invalidateQueries({ queryKey: ["applications"] }),
       queryClient.invalidateQueries({ queryKey: ["manager-readiness"] }),
@@ -563,6 +608,28 @@ export function FinancePage() {
     if (!ok) toast.error("Could not open the print dialog. Try again.");
   }
 
+  function printJoiningRows(rows: JoiningRow[], title: string) {
+    if (rows.length === 0) {
+      toast.error("Nothing to print.");
+      return;
+    }
+    const ok = printHtmlReport(title, rowsToTableHtml(JOINING_EXPORT_COLS, rows));
+    if (!ok) toast.error("Could not open the print dialog. Try again.");
+  }
+
+  async function fetchAllJoiningForExport() {
+    const result = await apiRequest<PagedResult<JoiningRow>>(
+        `/api/finance/joining-dues?${pagedQuery({
+          page: 1,
+          pageSize: 5000,
+          search: appliedSearch || undefined,
+          membershipType: membershipTypeFilter || undefined,
+          audience: joiningAudienceFilter || undefined,
+        })}`,
+    );
+    return result.items;
+  }
+
   function printArrearsRows(rows: SubRow[], title: string) {
     if (rows.length === 0) {
       toast.error("Nothing to print.");
@@ -577,7 +644,11 @@ export function FinancePage() {
       setExportBusy(true);
       if (desk === "arrears") {
         const all = await fetchAllArrearsForExport();
-        printArrearsRows(all, `Arrears & subscriptions · ${yearNum}`);
+        printArrearsRows(all, `Annual subscriptions · ${yearNum}`);
+        return;
+      }
+      if (desk === "joining") {
+        printJoiningRows(await fetchAllJoiningForExport(), "Joining fees");
         return;
       }
       const all = await fetchAllPaymentsForExport(desk === "pending" ? "PENDING" : "SETTLED");
@@ -600,6 +671,16 @@ export function FinancePage() {
         }
         downloadExcelCsv(`finance-arrears-${yearNum}.csv`, ARREARS_EXPORT_COLS, rows);
         toast.success(`Downloaded ${rows.length} arrears row(s).`);
+        return;
+      }
+      if (desk === "joining") {
+        const rows = await fetchAllJoiningForExport();
+        if (rows.length === 0) {
+          toast.error("No joining-fee rows to export.");
+          return;
+        }
+        downloadExcelCsv("finance-joining-fees.csv", JOINING_EXPORT_COLS, rows);
+        toast.success(`Downloaded ${rows.length} joining-fee row(s).`);
         return;
       }
       const rows = await fetchAllPaymentsForExport(desk === "pending" ? "PENDING" : "SETTLED");
@@ -625,8 +706,13 @@ export function FinancePage() {
     { id: "settled", label: "Settled bills" },
     {
       id: "arrears",
-      label: "Arrears & subscriptions",
+      label: "Annual subscriptions",
       hint: String(summary.data?.membersInArrears ?? "…"),
+    },
+    {
+      id: "joining",
+      label: "Joining",
+      hint: String(summary.data?.joiningInArrears ?? joiningPageData.totalCount ?? "…"),
     },
   ];
 
@@ -697,19 +783,21 @@ export function FinancePage() {
           ))}
         </div>
         <div className="flex flex-wrap items-end gap-3 px-4 py-3">
-          <label className="grid gap-1 text-sm">
-            <span className="text-muted-foreground">Year</span>
-            <Input
-              type="number"
-              className="w-28 bg-white"
-              value={year}
-              onChange={(e) => {
-                setYear(e.target.value);
-                setPaymentPage(1);
-                setSubPage(1);
-              }}
-            />
-          </label>
+          {desk === "joining" ? null : (
+            <label className="grid gap-1 text-sm">
+              <span className="text-muted-foreground">Year</span>
+              <Input
+                type="number"
+                className="w-28 bg-white"
+                value={year}
+                onChange={(e) => {
+                  setYear(e.target.value);
+                  setPaymentPage(1);
+                  setSubPage(1);
+                }}
+              />
+            </label>
+          )}
           <label className="grid min-w-[12rem] flex-1 gap-1 text-sm">
             <span className="text-muted-foreground">Search</span>
             <div className="relative">
@@ -721,11 +809,28 @@ export function FinancePage() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") applyFilters();
                 }}
-                placeholder="Name, membership no, APP-, receipt…"
+                placeholder={desk === "joining" ? "Name, membership no, APP-…" : "Name, membership no, APP-, receipt…"}
               />
             </div>
           </label>
-          {desk !== "arrears" ? (
+          {desk === "joining" ? (
+            <label className="grid gap-1 text-sm">
+              <span className="text-muted-foreground">Kind</span>
+              <select
+                className="h-9 min-w-[10rem] rounded-md border border-input bg-white px-3 text-sm"
+                value={joiningAudienceFilter}
+                onChange={(e) => {
+                  setJoiningAudienceFilter(e.target.value);
+                  setSubPage(1);
+                }}
+              >
+                <option value="">Members & applicants</option>
+                <option value="MEMBER">Members only</option>
+                <option value="APPLICANT">Applicants only</option>
+              </select>
+            </label>
+          ) : null}
+          {desk === "pending" || desk === "settled" ? (
             <>
               <label className="grid gap-1 text-sm">
                 <span className="text-muted-foreground">Method</span>
@@ -1011,6 +1116,80 @@ export function FinancePage() {
         </section>
       ) : null}
 
+      {desk === "joining" ? (
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" onClick={() => setSettlementOpen(true)}>
+                <Plus className="size-4" />
+                Quick Payment Settlement
+              </Button>
+            </div>
+          </div>
+          {joining.isLoading ? (
+            <PageBodyLoading label="Loading joining fees…" minHeightClassName="min-h-[14rem]" />
+          ) : joiningPageData.items.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No members or applicants currently have an outstanding joining fee.
+            </p>
+          ) : (
+            <>
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <table className="w-full min-w-[860px] text-sm">
+                  <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="p-2">Name</th>
+                      <th className="p-2">No.</th>
+                      <th className="p-2">Kind</th>
+                      <th className="p-2">Membership type</th>
+                      <th className="p-2">Due</th>
+                      <th className="p-2">Paid</th>
+                      <th className="p-2">Arrears</th>
+                      <th className="p-2 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {joiningPageData.items.map((row) => (
+                      <tr key={row.rowKey} className="border-t border-border">
+                        <td className="p-2 font-medium">{row.partyName}</td>
+                        <td className="p-2">{row.displayNo || "—"}</td>
+                        <td className="p-2">{row.audience === "APPLICANT" ? "Applicant" : "Member"}</td>
+                        <td className="p-2">{row.membershipType || row.membershipTypeCode || "—"}</td>
+                        <td className="p-2">{formatKes(row.amountDue)}</td>
+                        <td className="p-2">{formatKes(row.amountPaid)}</td>
+                        <td className={cn("p-2", row.arrearsAmount > 0 ? "font-medium text-amber-800" : "")}>
+                          {formatKes(row.arrearsAmount)}
+                        </td>
+                        <td className="p-2 text-right">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => printJoiningRows([row], `Joining fee · ${row.displayNo} · ${row.partyName}`)}
+                          >
+                            Print
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-3">
+                <ListPagination
+                  page={subPage}
+                  pageSize={subPageSize}
+                  totalCount={joiningPageData.totalCount}
+                  totalPages={joiningPageData.totalPages}
+                  onPageChange={setSubPage}
+                  onPageSizeChange={setSubPageSize}
+                />
+              </div>
+            </>
+          )}
+        </section>
+      ) : null}
+
       <VerifyIssueReceiptDrawer
         row={reviewRow}
         busy={busy}
@@ -1023,9 +1202,11 @@ export function FinancePage() {
 
       <PaymentProofSheet
         open={proofRow != null}
-        url={proofRow?.chequeFileUrl}
+        {...(proofRow?.chequeFileUrl !== undefined
+          ? { url: proofRow.chequeFileUrl }
+          : {})}
         fileName={proofRow?.chequeFileName || proofLabel(proofRow ?? ({} as PaymentRow))}
-        title={proofRow ? payerLabel(proofRow) : undefined}
+        {...(proofRow ? { title: payerLabel(proofRow) } : {})}
         onClose={() => setProofRow(null)}
       />
 
@@ -1374,8 +1555,8 @@ function PendingClearanceTable({
               <td className="p-2">{row.method || row.methodCode || "—"}</td>
               <td className="p-2">
                 <PaymentProofBadge
-                  url={row.chequeFileUrl}
-                  fileName={row.chequeFileName}
+                  url={row.chequeFileUrl ?? null}
+                  fileName={row.chequeFileName ?? null}
                   fallback={proofLabel(row)}
                   onView={() => onViewProof(row)}
                 />
@@ -1490,8 +1671,8 @@ function SettledTable({
                 <td className="p-2">{formatKes(row.amount)}</td>
                 <td className="p-2">
                   <PaymentProofBadge
-                    url={row.chequeFileUrl}
-                    fileName={row.chequeFileName}
+                    url={row.chequeFileUrl ?? null}
+                    fileName={row.chequeFileName ?? null}
                     fallback={proofLabel(row)}
                     onView={() => onViewProof(row)}
                   />

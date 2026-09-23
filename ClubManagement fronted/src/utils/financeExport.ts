@@ -8,9 +8,16 @@ function escapeCsv(value: string | number | null | undefined) {
   if (/[",\n\r]/.test(raw)) return `"${raw.replace(/"/g, '""')}"`;
   return raw;
 }
-export { buildInvoiceHtml, buildInvoiceHtmlForEmail, buildInvoicePrintHtml, type InvoiceDocument } from "./invoiceDocument";
+export { buildInvoiceHtml, buildInvoiceHtmlForEmail, buildInvoiceHtmlWithEmbeddedLogo, buildInvoicePrintHtml, type InvoiceDocument } from "./invoiceDocument";
 export { buildReceiptHtml, type ReceiptDocument } from "./receiptDocument";
-export { buildStatementHtml, type StatementDocument, type StatementLine } from "./statementDocument";
+export {
+  applyStatementLine,
+  buildStatementHtml,
+  statementLineKind,
+  type StatementDocument,
+  type StatementLine,
+  type StatementLineKind,
+} from "./statementDocument";
 
 export function downloadExcelCsv<T>(
   filename: string,

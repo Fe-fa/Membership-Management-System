@@ -479,3 +479,9 @@ public class ManagerItemRequest
     public string RequestType { get; set; } = string.Empty;
     public string? Message { get; set; }
 }
+
+public class ApplicantFeeInvoiceRequest
+{
+    /// <summary>JOINING or ANNUAL.</summary>
+    public string FeeCode { get; set; } = "JOINING";
+}

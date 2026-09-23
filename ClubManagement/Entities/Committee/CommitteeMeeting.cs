@@ -39,6 +39,19 @@ namespace ClubManagement.Entities.Committee
         [Column("meeting_time")]
         public string? MeetingTime { get; set; }
 
+        /// <summary>IN_PERSON or ONLINE.</summary>
+        [Column("venue_mode")]
+        public string? VenueMode { get; set; }
+
+        [Column("duration_minutes")]
+        public int? DurationMinutes { get; set; }
+
+        [Column("location")]
+        public string? Location { get; set; }
+
+        [Column("notes")]
+        public string? Notes { get; set; }
+
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 

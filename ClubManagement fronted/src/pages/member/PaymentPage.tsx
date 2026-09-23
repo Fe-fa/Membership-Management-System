@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -12,9 +12,11 @@ import {
   SubscriptionSummaryCards,
   applicationDuesToSubscription,
   useApplicationDues,
+  useMemberPaymentHistory,
   useMemberSubscription,
   usePaymentMethods,
 } from "@/components/payments";
+import { isReceiptViewable } from "@/components/payments/types";
 import { MemberStatementDialog } from "@/components/finance/MemberStatementDialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,8 +29,9 @@ import {
 import { isClubMember, readUser } from "@/lib/auth";
 import { tenantDocumentBrand, useCurrentTenant } from "@/services/tenant";
 import { useInvoiceSetup } from "@/services/finance/invoiceSetup";
-import { fetchApplication, saveDraft, extractErrorMessage, apiRequest, ApiError } from "@/services/membership/api";
-import { buildInvoiceHtml, printHtmlDocument, type InvoiceDocument } from "@/utils/financeExport";
+import { fetchApplication, saveDraft, extractErrorMessage, apiRequest } from "@/services/membership/api";
+import { buildReceiptHtml, printHtmlDocument, type ReceiptDocument } from "@/utils/financeExport";
+import { mergePaymentSetup } from "@/utils/invoiceSetup";
 import { fetchMembershipTypes } from "@/services/membership/membershipTypes";
 import { applicationQueryKey } from "@/services/membership/useApplication";
 import { emptyDraft, type MembershipType } from "@/services/membership/schema";
@@ -47,27 +50,47 @@ function MemberSubscriptionPage() {
   const invoiceSetup = useInvoiceSetup();
   const search = Route.useSearch();
   const [statementOpen, setStatementOpen] = useState(false);
+  const [printingReceipt, setPrintingReceipt] = useState(false);
   const sub = useMemberSubscription();
   const methods = usePaymentMethods();
+  const payments = useMemberPaymentHistory();
   const invoiceYear =
     sub.data?.upcomingYear && Number(sub.data.upcomingOutstanding || 0) > 0
       ? sub.data.upcomingYear
       : sub.data?.year;
-  const invoice = useQuery({
-    queryKey: ["member-invoice-current", invoiceYear],
-    enabled: Boolean(invoiceYear),
-    queryFn: async () => {
-      try {
-        return await apiRequest<InvoiceDocument>(
-          `/api/members/me/invoices/current?year=${invoiceYear}`,
-        );
-      } catch (err) {
-        if (err instanceof ApiError && err.status === 404) return null;
-        throw err;
-      }
-    },
-    retry: false,
-  });
+  const latestReceipt = useMemo(() => {
+    return [...(payments.data ?? [])]
+      .filter((row) => row.receiptNumber && isReceiptViewable(row.status, row.statusCode))
+      .sort((a, b) => {
+        const byDate = (b.paymentDate ?? "").localeCompare(a.paymentDate ?? "");
+        if (byDate !== 0) return byDate;
+        return (b.transactionId ?? 0) - (a.transactionId ?? 0);
+      })[0] ?? null;
+  }, [payments.data]);
+
+  async function printLatestReceipt() {
+    if (!latestReceipt) {
+      toast.error("No official receipt yet. It appears here after the payment is cleared.");
+      return;
+    }
+    try {
+      setPrintingReceipt(true);
+      const doc = await apiRequest<ReceiptDocument>(
+        `/api/finance/payments/${latestReceipt.transactionId}/receipt`,
+      );
+      printHtmlDocument(
+        buildReceiptHtml({
+          ...doc,
+          ...tenantDocumentBrand(tenant.data),
+          setup: mergePaymentSetup(doc.setup ?? invoiceSetup.data),
+        }),
+      );
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setPrintingReceipt(false);
+    }
+  }
 
   useEffect(() => {
     if (search.purpose || search.nmId || search.amount) {
@@ -95,9 +118,6 @@ function MemberSubscriptionPage() {
   }
 
   const row = sub.data;
-  const invoiceBalance = Number(invoice.data?.balance ?? row.balance ?? 0);
-  const invoicePaidOff = Boolean(invoice.data) && invoiceBalance <= 0.01;
-  const showInvoice = Boolean(invoice.data) && invoiceBalance > 0.01;
   const memberPaymentDefaults = {
     ...(search.purpose ? { initialPurpose: search.purpose } : {}),
     ...(typeof search.amount === "number" ? { initialAmount: search.amount } : {}),
@@ -113,42 +133,14 @@ function MemberSubscriptionPage() {
             <Button type="button" variant="outline" onClick={() => setStatementOpen(true)}>
               Print statement
             </Button>
-            {showInvoice ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  if (invoice.data)
-                    printHtmlDocument(
-                      buildInvoiceHtml({
-                        ...invoice.data,
-                        ...tenantDocumentBrand(tenant.data),
-                        setup: invoiceSetup.data,
-                      }),
-                    );
-                }}
-              >
-                Print invoice
-              </Button>
-            ) : null}
-            {invoicePaidOff ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  if (invoice.data)
-                    printHtmlDocument(
-                      buildInvoiceHtml({
-                        ...invoice.data,
-                        ...tenantDocumentBrand(tenant.data),
-                        setup: invoiceSetup.data,
-                      }),
-                    );
-                }}
-              >
-                Print receipt
-              </Button>
-            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              disabled={printingReceipt || payments.isLoading}
+              onClick={() => void printLatestReceipt()}
+            >
+              Print receipt
+            </Button>
         </div>
       </div>
 
@@ -200,7 +192,8 @@ function ApplicantPaymentPage() {
     membershipType || dues.data?.membershipTypeId || dues.data?.membershipTypeName,
   );
   const sub = dues.data ? applicationDuesToSubscription(dues.data) : null;
-  const canPay = Boolean(applicationId > 0 && hasMembershipClass && sub);
+  const invoiced = Boolean(dues.data?.joiningInvoiced || dues.data?.annualInvoiced);
+  const canPay = Boolean(applicationId > 0 && hasMembershipClass && sub && invoiced);
   const loading = application.isLoading || (applicationId > 0 && dues.isLoading);
 
   const saveType = useMutation({
@@ -293,12 +286,12 @@ function ApplicantPaymentPage() {
             </Button>
           </CardContent>
         </Card>
-      ) : !sub ? (
+      ) : !invoiced || !sub ? (
         <Card>
           <CardHeader>
-            <CardTitle>Could not load fees</CardTitle>
+            <CardTitle>No invoice has been issued yet</CardTitle>
             <CardDescription>
-              Save your application, then refresh this page to load amounts from the fee schedule.
+              Entrance fee and annual subscription appear here after the manager or the finance desk issues an invoice.
             </CardDescription>
           </CardHeader>
         </Card>

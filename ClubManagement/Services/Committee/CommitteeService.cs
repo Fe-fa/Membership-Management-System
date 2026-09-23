@@ -81,6 +81,14 @@ IF COL_LENGTH(N'dbo.Committee_meeting', N'meeting_name') IS NULL
     ALTER TABLE dbo.Committee_meeting ADD meeting_name NVARCHAR(200) NULL;
 IF COL_LENGTH(N'dbo.Committee_meeting', N'meeting_time') IS NULL
     ALTER TABLE dbo.Committee_meeting ADD meeting_time NVARCHAR(20) NULL;
+IF COL_LENGTH(N'dbo.Committee_meeting', N'venue_mode') IS NULL
+    ALTER TABLE dbo.Committee_meeting ADD venue_mode NVARCHAR(20) NULL;
+IF COL_LENGTH(N'dbo.Committee_meeting', N'duration_minutes') IS NULL
+    ALTER TABLE dbo.Committee_meeting ADD duration_minutes INT NULL;
+IF COL_LENGTH(N'dbo.Committee_meeting', N'location') IS NULL
+    ALTER TABLE dbo.Committee_meeting ADD location NVARCHAR(300) NULL;
+IF COL_LENGTH(N'dbo.Committee_meeting', N'notes') IS NULL
+    ALTER TABLE dbo.Committee_meeting ADD notes NVARCHAR(2000) NULL;
 ", cancellationToken);
 
         foreach (var (code, name, sort, canApprove) in RoleSeed)
@@ -417,6 +425,26 @@ IF COL_LENGTH(N'dbo.Committee_meeting', N'meeting_time') IS NULL
         if (timeText is not null && !TimeOnly.TryParse(timeText, out _))
             throw new InvalidOperationException("Enter a valid meeting time (HH:mm).");
 
+        var venue = (request.VenueMode ?? "ONLINE").Trim().ToUpperInvariant().Replace("-", "_").Replace(" ", "_");
+        if (venue is "INPERSON" or "IN_PERSON_INTERVIEW") venue = "IN_PERSON";
+        if (venue is "ONLINE_INTERVIEW" or "VIRTUAL") venue = "ONLINE";
+        if (venue is not ("IN_PERSON" or "ONLINE"))
+            throw new InvalidOperationException("Choose in person or online for the interview.");
+
+        var duration = request.DurationMinutes ?? 0;
+        if (duration < 15 || duration > 480)
+            throw new InvalidOperationException("Enter a duration between 15 and 480 minutes.");
+
+        var location = string.IsNullOrWhiteSpace(request.Location) ? null : request.Location.Trim();
+        var link = (request.MeetingLink ?? "").Trim();
+        var notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
+        if (venue == "IN_PERSON" && location is null)
+            throw new InvalidOperationException("Add the location for an in-person interview.");
+        if (venue == "ONLINE" && link.Length < 3)
+            throw new InvalidOperationException("Add the meeting link for an online interview.");
+        if (notes is not null && notes.Length > 2000)
+            throw new InvalidOperationException("Note must be 2000 characters or less.");
+
         if (request.ChairProfileId is long chairId)
         {
             var chairExists = await _db.Profiles.AnyAsync(p => p.ProfileId == chairId && !p.IsDeleted, cancellationToken);
@@ -430,6 +458,10 @@ IF COL_LENGTH(N'dbo.Committee_meeting', N'meeting_time') IS NULL
             MeetingDate = meetingDate,
             MeetingTime = timeText,
             MeetingName = string.IsNullOrWhiteSpace(request.MeetingName) ? null : request.MeetingName.Trim(),
+            VenueMode = venue,
+            DurationMinutes = duration,
+            Location = venue == "IN_PERSON" ? location : null,
+            Notes = notes,
             ChairProfileId = request.ChairProfileId,
             Status = "SCHEDULED",
             CreatedAt = DateTime.UtcNow,
@@ -438,8 +470,7 @@ IF COL_LENGTH(N'dbo.Committee_meeting', N'meeting_time') IS NULL
         _db.CommitteeMeetings.Add(meeting);
         await _db.SaveChangesAsync(cancellationToken);
 
-        var link = (request.MeetingLink ?? "").Trim();
-        if (link.Length >= 3)
+        if (venue == "ONLINE" && link.Length >= 3)
         {
             meeting.MinutesUrl = link;
             await _db.SaveChangesAsync(cancellationToken);
@@ -448,13 +479,16 @@ IF COL_LENGTH(N'dbo.Committee_meeting', N'meeting_time') IS NULL
         foreach (var applicationId in (request.ApplicationIds ?? []).Where(id => id > 0).Distinct())
             await _interviews.AttachAsync(meeting.CommitteeMeetingId, applicationId, actorUserId, cancellationToken);
 
-        if (link.Length >= 3 && !(request.ApplicationIds?.Any(id => id > 0) ?? false))
+        if (!(request.ApplicationIds?.Any(id => id > 0) ?? false))
         {
             var reloaded = await _db.CommitteeMeetings
                 .Include(m => m.Committee)
                 .Include(m => m.MeetingType)
                 .FirstAsync(m => m.CommitteeMeetingId == meeting.CommitteeMeetingId, cancellationToken);
-            await ShareMeetingLinkAsync(reloaded, link, cancellationToken);
+            if (venue == "ONLINE" && link.Length >= 3)
+                await ShareMeetingLinkAsync(reloaded, link, cancellationToken);
+            else if (venue == "IN_PERSON" && location is not null)
+                await ShareMeetingLinkAsync(reloaded, location, cancellationToken);
         }
 
         return (await MapMeetingAsync(meeting.CommitteeMeetingId, cancellationToken))!;
@@ -534,18 +568,24 @@ IF COL_LENGTH(N'dbo.Committee_meeting', N'meeting_time') IS NULL
         var committeeName = meeting.Committee?.CommitteeName ?? "Committee";
         var portal = (_app.PublicBaseUrl ?? "http://localhost:8080").TrimEnd('/');
 
-        var subject = $"Meeting link: {meetingLabel} — {meeting.MeetingDate:dd MMM yyyy}";
+        var inPerson = string.Equals(meeting.VenueMode, "IN_PERSON", StringComparison.OrdinalIgnoreCase);
+        var whereLabel = inPerson ? "Location" : "Link";
+        var duration = meeting.DurationMinutes is int mins && mins > 0 ? $"\nDuration: {mins} min" : "";
+        var note = string.IsNullOrWhiteSpace(meeting.Notes) ? "" : $"\nNote: {meeting.Notes.Trim()}";
+        var subject = inPerson
+            ? $"Interview location: {meetingLabel} — {meeting.MeetingDate:dd MMM yyyy}"
+            : $"Meeting link: {meetingLabel} — {meeting.MeetingDate:dd MMM yyyy}";
         var bodyForCommittee =
-            $"A meeting link has been shared for {committeeName}.\n\n" +
+            $"A sitting has been scheduled for {committeeName}.\n\n" +
             $"Meeting: {meetingLabel}\n" +
-            $"When: {when}\n" +
-            $"Link: {url}\n\n" +
+            $"When: {when}{duration}\n" +
+            $"{whereLabel}: {url}{note}\n\n" +
             $"Open your portal: {portal}/governance";
         var bodyForApplicant =
-            $"Your interview / committee sitting link is ready.\n\n" +
+            $"Your interview / committee sitting is ready.\n\n" +
             $"Meeting: {meetingLabel}\n" +
-            $"When: {when}\n" +
-            $"Link: {url}\n\n" +
+            $"When: {when}{duration}\n" +
+            $"{whereLabel}: {url}{note}\n\n" +
             $"Open your dashboard: {portal}/";
 
         var type = await EnsureNotificationTypeAsync(
@@ -1048,6 +1088,10 @@ IF COL_LENGTH(N'dbo.Committee_meeting', N'meeting_time') IS NULL
         MeetingDate = m.MeetingDate.ToString("yyyy-MM-dd"),
         MeetingTime = m.MeetingTime,
         MeetingName = m.MeetingName,
+        VenueMode = m.VenueMode,
+        DurationMinutes = m.DurationMinutes,
+        Location = m.Location,
+        Notes = m.Notes,
         ChairProfileId = m.ChairProfileId,
         ChairName = m.Chair is null
             ? null

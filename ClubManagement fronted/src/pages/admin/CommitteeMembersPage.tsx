@@ -123,10 +123,10 @@ export function CommitteeMembersPage() {
       return {
         ...m,
         accountId: hit.accountId ?? m.accountId,
-        membershipNo: hit.membershipNo || m.membershipNo,
-        membershipType: hit.membershipType || m.membershipType,
-        membershipStatus: hit.status || m.membershipStatus,
-        joinedDate: hit.joinedDate || m.joinedDate,
+        membershipNo: hit.membershipNo ?? m.membershipNo ?? null,
+        membershipType: hit.membershipType ?? m.membershipType ?? null,
+        membershipStatus: hit.status ?? m.membershipStatus ?? null,
+        joinedDate: hit.joinedDate ?? m.joinedDate ?? null,
       };
     });
   }, [committee?.members, accounts.data]);
@@ -277,7 +277,7 @@ export function CommitteeMembersPage() {
                                   <Link
                                     to="/existing-members/$accountId"
                                     params={{ accountId: String(m.accountId) }}
-                                    search={{ mode: "edit" }}
+                                    search={{ mode: "edit", tab: "register" }}
                                   >
                                     Edit
                                   </Link>

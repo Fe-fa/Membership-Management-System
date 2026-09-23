@@ -130,10 +130,59 @@ export function authHeaders(): Record<string, string> {
   return headers;
 }
 
+function roleCodesOf(user: AuthUser | null): string[] {
+  if (!user?.roles?.length) return [];
+  return user.roles.map((role) => String(role).trim().toUpperCase()).filter(Boolean);
+}
+
+function roleCodesFromAccessToken(): string[] | null {
+  const token = readToken();
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    const padded = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const json = atob(padded);
+    const payload = JSON.parse(json) as Record<string, unknown>;
+    const claim =
+      payload.role ??
+      payload.roles ??
+      payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"];
+    if (claim == null) return [];
+    const list = Array.isArray(claim) ? claim : [claim];
+    return list.map((role) => String(role).trim().toUpperCase()).filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+
 export function hasAnyRole(user: AuthUser | null, roles: string[]) {
   if (!user) return false;
-  const normalized = user.roles.map((role) => role.toUpperCase());
-  return roles.some((role) => normalized.includes(role.toUpperCase()));
+  const wanted = roles.map((role) => role.toUpperCase());
+  const normalized = roleCodesOf(user);
+  return wanted.some((role) => normalized.includes(role));
+}
+
+/** Invoice/statement approval queue: GM and Admin only. */
+export const BILLING_APPROVER_ROLES = ["ADMIN", "GENERAL_MANAGER"] as const;
+
+export function canApproveBillingDocuments(user: AuthUser | null) {
+  return hasAnyRole(user, [...BILLING_APPROVER_ROLES]);
+}
+
+/** Club-wide statements desk: Admin, GM, Treasurer. */
+export const STATEMENT_STAFF_ROLES = ["ADMIN", "GENERAL_MANAGER", "TREASURER"] as const;
+
+export function canViewFinanceStatements(user: AuthUser | null) {
+  return hasAnyRole(user, [...STATEMENT_STAFF_ROLES]);
+}
+
+/** Issued-statement delete (and ledger credit/debit on this desk): Admin role only. */
+export function canDeleteFinanceStatements(user: AuthUser | null) {
+  const fromProfile = roleCodesOf(user).includes("ADMIN");
+  const tokenRoles = roleCodesFromAccessToken();
+  if (tokenRoles && tokenRoles.length > 0) return tokenRoles.includes("ADMIN");
+  return fromProfile;
 }
 
 export function isStaff(user: AuthUser | null) {
@@ -222,6 +271,12 @@ export function canVisitPath(user: AuthUser | null, pathname: string): boolean {
   const kind = classifyPath(pathname);
   if (kind === "public") return true;
   if (!user) return pathname === "/";
+  if (pathname === "/finance/approvals" || pathname.startsWith("/finance/approvals/")) {
+    return canApproveBillingDocuments(user);
+  }
+  if (pathname === "/finance/statements" || pathname.startsWith("/finance/statements/")) {
+    return canViewFinanceStatements(user);
+  }
   if (canSwitchDashboard(user)) return true;
   if (
     pathname === "/election" ||

@@ -170,6 +170,45 @@ public class ApplicationsController : ControllerBase
     }
 
     [Authorize]
+    [HttpPost("{applicationId:long}/fee-invoices")]
+    public async Task<IActionResult> PublishApplicantFeeInvoice(
+        long applicationId,
+        [FromBody] ApplicantFeeInvoiceRequest? request,
+        CancellationToken cancellationToken)
+    {
+        if (!User.HasAnyRole("ADMIN", "GENERAL_MANAGER", "CHAIRMAN")) return Forbid();
+        try
+        {
+            await _finance.PublishApplicantFeeInvoiceAsync(
+                applicationId,
+                request?.FeeCode ?? "JOINING",
+                User.UserId(),
+                cancellationToken);
+            return Ok(new { invoiced = true });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [Authorize]
+    [HttpPost("{applicationId:long}/cheque-deposit")]
+    public async Task<IActionResult> NotifyChequeDeposit(long applicationId, CancellationToken cancellationToken)
+    {
+        if (!User.HasAnyRole("ADMIN", "GENERAL_MANAGER", "CHAIRMAN")) return Forbid();
+        try
+        {
+            await _finance.NotifyFinanceChequeDepositAsync(applicationId, cancellationToken);
+            return Ok(new { notified = true });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [Authorize]
     [HttpGet]
     public async Task<ActionResult<PagedResult<ApplicationListItemDto>>> GetAll(
         [FromQuery] PagedRequest paging,
@@ -417,8 +456,15 @@ public class ApplicationsController : ControllerBase
         CancellationToken cancellationToken)
     {
         request.VerifiedByUserId = User.UserId() ?? request.VerifiedByUserId;
-        var result = await _applicationService.VerifyDocumentAsync(applicationId, applicationDocumentId, request, cancellationToken);
-        return result is null ? NotFound() : Ok(result);
+        try
+        {
+            var result = await _applicationService.VerifyDocumentAsync(applicationId, applicationDocumentId, request, cancellationToken);
+            return result is null ? NotFound() : Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [Authorize]

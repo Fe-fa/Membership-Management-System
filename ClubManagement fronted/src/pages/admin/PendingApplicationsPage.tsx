@@ -3,29 +3,34 @@ import { useMutation, useQuery, useQueryClient, useQueries } from "@tanstack/rea
 import { useMemo, useState, useEffect, useRef, type ReactNode } from "react";
 import {
   BadgeCheck,
+  BarChart3,
   ChevronDown,
   ChevronLeft,
   Download,
+  Eye,
+  FileText,
   FileUp,
+  LayoutList,
   Loader2,
   Lock,
   Pencil,
   Printer,
   RotateCcw,
   Search,
+  ShieldCheck,
   Trash2,
   UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { ManagerStagePanel, type ManagerReadiness, type PaymentRow } from "@/components/admin/ManagerStagePanel";
-import { DashboardKpiRow } from "@/components/admin/ModuleStatsDashboard";
+import { ModuleStatsDashboard } from "@/components/admin/ModuleStatsDashboard";
 import { RejectApplicationDialog } from "@/components/admin/RejectApplicationDialog";
 import { ListPagination } from "@/components/common/ListPagination";
 import { PageBackLink, PageFrame, PageHeader } from "@/components/layout/PageFrame";
 import { PageDataGate } from "@/components/layout/PageLoading";
 import { ADMIN_OVERVIEW_QUERY_KEY, fetchAdminOverview } from "@/services/admin/dashboardData";
-import { applicantQueueKpis } from "@/services/admin/moduleDashboard";
+import { buildModuleDashboard } from "@/services/admin/moduleDashboard";
 import { ApplicantReview, parseApplicationDraft } from "@/components/panels/ApplicantReview";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +52,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -63,9 +75,10 @@ import {
   nextApplicationStage,
   type ApplicationDetailAdmin,
   type ApplicationRow,
+  type MemberRow,
 } from "@/services/admin/membershipDesk";
 import { isAuthenticated } from "@/lib/auth";
-import { apiRequest, extractErrorMessage } from "@/services/membership/api";
+import { API_BASE, apiRequest, extractErrorMessage } from "@/services/membership/api";
 import { DEFAULT_PAGE_SIZE, emptyPage, pagedQuery, type PagedResult } from "@/lib/pagination";
 import { cn } from "@/utils/cn";
 import {
@@ -87,6 +100,26 @@ type MissingFilter = (typeof MANAGER_MISSING_FILTERS)[number]["id"];
 function initials(name: string) {
   const parts = name.split(/\s+/).filter(Boolean);
   return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase();
+}
+
+/** Membership class the applicant asked for: Full Member, Country, or Overseas. */
+function appliedForLabel(name?: string | null) {
+  const raw = (name ?? "").trim();
+  if (!raw) return "—";
+  const key = raw.toLowerCase().replace(/[^a-z]/g, "");
+  if (key === "full" || key.startsWith("fullmember")) return "Full Member";
+  if (key.startsWith("country")) return "Country";
+  if (key.startsWith("overseas")) return "Overseas";
+  if (key.startsWith("life")) return "Life";
+  if (key.startsWith("temporary")) return "Temporary";
+  return raw;
+}
+
+function resolveUploadUrl(url?: string | null) {
+  if (!url) return undefined;
+  if (/^https?:\/\//i.test(url)) return url;
+  const path = url.startsWith("/") ? url : `/${url}`;
+  return `${API_BASE}${path}`;
 }
 
 function dayStamp(value?: string | null) {
@@ -411,6 +444,9 @@ function PendingApplicationsPanel({
   const [rejectTarget, setRejectTarget] = useState<ApplicationRow | null>(null);
   const [selected, setSelected] = useState<Record<number, ApplicationRow>>({});
   const [exportBusy, setExportBusy] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [deskTab, setDeskTab] = useState<"applications" | "statistics">("applications");
+  const [resumeBusyId, setResumeBusyId] = useState<number | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   // Pending view shows the queue table; history view shows the previously
@@ -449,8 +485,31 @@ function PendingApplicationsPanel({
   const overview = useQuery({
     queryKey: ADMIN_OVERVIEW_QUERY_KEY,
     queryFn: fetchAdminOverview,
-    enabled: isAuthenticated() && showQueueStats,
+    enabled: isAuthenticated() && showQueueStats && deskTab === "statistics",
   });
+  const statsApplications = useQuery({
+    queryKey: ["applications", "applicant-stats"],
+    queryFn: () =>
+      apiRequest<PagedResult<ApplicationRow>>(
+        `/api/applications?${pagedQuery({ page: 1, pageSize: 100 })}`,
+      ),
+    enabled: isAuthenticated() && showQueueStats && deskTab === "statistics",
+  });
+  const statsMembers = useQuery({
+    queryKey: ["module-dashboard", "members", "applicant-queue"],
+    queryFn: () =>
+      apiRequest<PagedResult<MemberRow>>(
+        `/api/membership-accounts?${pagedQuery({ page: 1, pageSize: 100 })}`,
+      ),
+    enabled: isAuthenticated() && showQueueStats && deskTab === "statistics",
+  });
+  const statsModel =
+    overview.data && showQueueStats
+      ? buildModuleDashboard("applicant-queue", overview.data, {
+          applications: statsApplications.data,
+          members: statsMembers.data,
+        })
+      : null;
 
   const classOptions = useMemo(() => {
     const names = new Set<string>();
@@ -474,6 +533,10 @@ function PendingApplicationsPanel({
     }
     if (!manager && (row.statusCode === "Draft" || row.statusCode === "Withdrawn")) return false;
     if (classes.length > 0 && !classes.includes(row.membershipTypeName ?? "")) return false;
+    if (!manager && statusFilter !== "all") {
+      const label = applicationStage(row);
+      if (label !== statusFilter && (row.statusCode ?? "") !== statusFilter) return false;
+    }
     if (manager) {
       if (missing === "payment" && isPaymentOk(row)) return false;
       if (missing === "details" && isMemberDetailsOk(row)) return false;
@@ -493,7 +556,7 @@ function PendingApplicationsPanel({
   const filtered = useMemo(
     () => pageData.items.filter(matchesDeskFilters),
     // matchesDeskFilters closes over the current filter state used below.
-    [authorize, classes, dateFrom, dateTo, manager, missing, pageData.items, search, showHistoryOnly],
+    [authorize, classes, dateFrom, dateTo, manager, missing, pageData.items, search, showHistoryOnly, statusFilter],
   );
 
   const rows = filtered;
@@ -873,17 +936,89 @@ function PendingApplicationsPanel({
   const missingLabel =
     MANAGER_MISSING_FILTERS.find((item) => item.id === missing)?.label ?? "Any";
   const showExtraColumns = manager;
+  const showApplicationsList = !showQueueStats || deskTab === "applications";
+  const statusOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const row of pageData.items) {
+      const label = applicationStage(row);
+      if (label && label !== "—") names.add(label);
+    }
+    return [...names].sort();
+  }, [pageData.items]);
+
+  async function openResume(row: ApplicationRow) {
+    try {
+      setResumeBusyId(row.applicationId);
+      const detail = await apiRequest<ApplicationDetailAdmin>(
+        `/api/applications/${row.applicationId}`,
+      );
+      const docs = detail.documents ?? [];
+      const cv = docs.find((doc) => {
+        const haystack = `${doc.documentTypeCode ?? ""} ${doc.documentTypeName ?? ""} ${doc.fileName ?? ""}`.toLowerCase();
+        return doc.documentTypeId === 2 || /cv|curriculum|resume|vitae/.test(haystack);
+      });
+      const draft = parseApplicationDraft(detail.formDataJson);
+      const href = resolveUploadUrl(cv?.fileUrl || draft.personal.cv?.url);
+      if (!href) {
+        toast.error("No resume has been uploaded for this applicant.");
+        return;
+      }
+      window.open(href, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setResumeBusyId(null);
+    }
+  }
 
   return (
     <TooltipProvider delayDuration={200}>
     <div className="space-y-4">
       {showQueueStats ? (
-        <DashboardKpiRow kpis={applicantQueueKpis(overview.data, pageData.totalCount)} />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Applicant Management</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Track applicants through screening · {pageData.totalCount} total
+            </p>
+          </div>
+          <div className="inline-flex w-fit rounded-lg bg-muted p-1">
+            <button
+              type="button"
+              className={cn(
+                "inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium",
+                deskTab === "applications"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground",
+              )}
+              onClick={() => setDeskTab("applications")}
+            >
+              <LayoutList className="size-4" />
+              Applications
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium",
+                deskTab === "statistics"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground",
+              )}
+              onClick={() => setDeskTab("statistics")}
+            >
+              <BarChart3 className="size-4" />
+              Statistics
+            </button>
+          </div>
+        </div>
       ) : null}
+
+      {showApplicationsList ? (
+      <>
       <div
         className={cn(
           "grid grid-cols-1 gap-3 rounded-xl border border-border bg-card p-3",
-          manager ? "sm:grid-cols-3" : "sm:grid-cols-2 xl:grid-cols-3",
+          manager ? "sm:grid-cols-3" : "sm:grid-cols-2 xl:grid-cols-4",
         )}
       >
         <div className="grid min-w-0 gap-1 text-xs font-medium text-muted-foreground">
@@ -999,6 +1134,31 @@ function PendingApplicationsPanel({
             />
           </div>
         </div>
+
+        {manager ? null : (
+          <div className="grid min-w-0 gap-1 text-xs font-medium text-muted-foreground">
+            Status
+            <Select
+              value={statusFilter}
+              onValueChange={(value) => {
+                setStatusFilter(value);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="h-9 w-full font-normal text-foreground">
+                <SelectValue placeholder="All status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All status</SelectItem>
+                {statusOptions.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       {showDeskTools ? (
@@ -1063,6 +1223,7 @@ function PendingApplicationsPanel({
       ) : null}
 
       <PageDataGate loading={isLoading} label="Loading applications…" minHeightClassName="min-h-[22rem]">
+      {manager ? (
       <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
         <table className={cn("w-full text-sm", showExtraColumns ? "min-w-[980px]" : "min-w-[720px]")}>
           <thead className="bg-secondary/40 text-left text-muted-foreground">
@@ -1241,7 +1402,10 @@ function PendingApplicationsPanel({
                               row.statusCode === "CommitteeReview" ||
                               row.statusCode === "Approved")
                           }
-                          canAdvance={processable && canAuthorizeApplication(row)}
+                          canAdvance={
+                          nextApplicationStage(row.statusCode) != null &&
+                          !canStartReview(row.statusCode)
+                        }
                           sponsorsBlocking={
                             needsCompleteSponsors(row.statusCode) && !isSponsorOk(row)
                           }
@@ -1315,6 +1479,175 @@ function PendingApplicationsPanel({
           </tbody>
         </table>
       </div>
+      ) : (
+        <div className="space-y-3">
+          <label className="flex items-center gap-2 px-1 text-sm text-muted-foreground">
+            <Checkbox
+              checked={allOnPageSelected ? true : someOnPageSelected ? "indeterminate" : false}
+              onCheckedChange={(value) => {
+                const checked = value === true;
+                setSelected((prev) => {
+                  const next = { ...prev };
+                  for (const row of rows) {
+                    if (checked) next[row.applicationId] = row;
+                    else delete next[row.applicationId];
+                  }
+                  return next;
+                });
+              }}
+              aria-label="Select all on this page"
+            />
+            Select all
+          </label>
+          {rows.length === 0 ? (
+            <div className="rounded-xl border border-border bg-card px-4 py-10 text-sm text-muted-foreground">
+              No applications match these filters.
+            </div>
+          ) : (
+            rows.map((row) => {
+              const name = applicantDisplayName(row);
+              const mark = initials(name);
+              const livePayments = paymentsByApplicationId.get(row.applicationId) ?? [];
+              const paymentView = mergePaymentView(row, livePayments);
+              const canDelete = canDeleteApplication(row) && !paymentView.received;
+              const sectionsOk = isSectionsComplete(row);
+              const processable = sectionsOk && row.statusCode !== "Rejected";
+              return (
+                <article
+                  key={row.applicationId}
+                  className={cn(
+                    "flex flex-col gap-4 rounded-xl border border-border bg-card px-4 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between",
+                    selected[row.applicationId] && "border-primary/40 bg-primary/5",
+                  )}
+                >
+                  <div className="flex min-w-0 items-start gap-3">
+                    {showDeskTools ? (
+                      <Checkbox
+                        className="mt-3"
+                        checked={Boolean(selected[row.applicationId])}
+                        onCheckedChange={(value) => {
+                          const checked = value === true;
+                          setSelected((prev) => {
+                            if (checked) return { ...prev, [row.applicationId]: row };
+                            const next = { ...prev };
+                            delete next[row.applicationId];
+                            return next;
+                          });
+                        }}
+                        aria-label={`Select ${name}`}
+                      />
+                    ) : null}
+                    <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-secondary-foreground">
+                      {mark || <UserRound className="size-4" />}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold leading-tight text-foreground">{name}</p>
+                        <StatusBadge tone={statusTone(row)}>{applicationStage(row)}</StatusBadge>
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Applied for:{" "}
+                        <span className="font-semibold uppercase tracking-wide text-foreground">
+                          {appliedForLabel(row.membershipTypeName)}
+                        </span>
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{applicationReference(row)}</p>
+                    </div>
+                  </div>
+                  <div className={cn("flex w-full shrink-0 flex-col gap-2", authorize ? "sm:w-auto" : "sm:w-40")}>
+                    {authorize ? (
+                      <AuthorizeActions
+                        row={row}
+                        busy={busy}
+                        onIssue={() => openChairmanElection(row.applicationId)}
+                        onRevoke={() => {
+                          if (
+                            window.confirm(
+                              `Revoke approval for ${applicationReference(row)}? The applicant will be rejected.`,
+                            )
+                          ) {
+                            setRejectTarget(row);
+                          }
+                        }}
+                        onAdvance={() => authorizeStage.mutate(row.applicationId)}
+                        onPrint={() =>
+                          printRows([row], `Application · ${applicantDisplayName(row)}`)
+                        }
+                        onExport={() =>
+                          exportRows([row], `${applicationReference(row).toLowerCase()}.csv`)
+                        }
+                        canIssue={
+                          processable &&
+                          (row.statusCode === "Waitlist" ||
+                            row.statusCode === "ElectionReview" ||
+                            row.statusCode === "Committee" ||
+                            row.statusCode === "CommitteeReview" ||
+                            row.statusCode === "Approved")
+                        }
+                        canAdvance={
+                          nextApplicationStage(row.statusCode) != null &&
+                          !canStartReview(row.statusCode)
+                        }
+                        sponsorsBlocking={
+                          needsCompleteSponsors(row.statusCode) && !isSponsorOk(row)
+                        }
+                      />
+                    ) : (
+                      <>
+                        <Button asChild size="sm" variant="outline" className="justify-start">
+                          <Link
+                            to="/members/$applicationId"
+                            params={{ applicationId: String(row.applicationId) }}
+                          >
+                            <Eye className="size-4" />
+                            Review
+                          </Link>
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="justify-start"
+                          disabled={resumeBusyId === row.applicationId}
+                          onClick={() => void openResume(row)}
+                        >
+                          {resumeBusyId === row.applicationId ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <FileText className="size-4" />
+                          )}
+                          Resume
+                        </Button>
+                        {canDelete ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="justify-start text-destructive hover:text-destructive"
+                            disabled={busy}
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  `Delete application ${applicationReference(row)}?`,
+                                )
+                              ) {
+                                remove.mutate(row.applicationId);
+                              }
+                            }}
+                          >
+                            <Trash2 className="size-4" />
+                            Delete
+                          </Button>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                </article>
+              );
+            })
+          )}
+        </div>
+      )}
       </PageDataGate>
 
       <ListPagination
@@ -1325,6 +1658,16 @@ function PendingApplicationsPanel({
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
       />
+      </>
+      ) : (
+        <PageDataGate
+          loading={overview.isLoading || statsApplications.isLoading || statsMembers.isLoading}
+          label="Loading statistics…"
+          minHeightClassName="min-h-[22rem]"
+        >
+          {statsModel ? <ModuleStatsDashboard model={statsModel} /> : null}
+        </PageDataGate>
+      )}
 
       {verifyingRow ? (
         <Sheet
@@ -1752,6 +2095,28 @@ function AuthorizeActions({
           <TooltipContent>Download Excel</TooltipContent>
         </Tooltip>
       ) : null}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-8"
+            disabled={busy || !canAdvance}
+            title={
+              canAdvance
+                ? "Authorize"
+                : sponsorsBlocking
+                  ? "Proposer and seconder must both endorse first"
+                  : "Authorize is not available at this stage"
+            }
+            onClick={onAdvance}
+          >
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Authorize</TooltipContent>
+      </Tooltip>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button

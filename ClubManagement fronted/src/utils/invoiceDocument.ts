@@ -10,6 +10,14 @@ import {
 } from "./aceaFinanceBrand";
 import { extraParametersForDocument, mergePaymentSetup, methodsForDocument, type PaymentMethodBlock, type PaymentSetup } from "./invoiceSetup";
 
+export type InvoiceLine = {
+  description: string;
+  period?: string | null;
+  charges: number;
+  credits: number;
+  total: number;
+};
+
 export type InvoiceDocument = {
   invoiceId: number;
   invoiceNo: string;
@@ -35,6 +43,7 @@ export type InvoiceDocument = {
   bankName?: string | null | undefined;
   bankAccount?: string | null | undefined;
   setup?: PaymentSetup | undefined;
+  lines?: InvoiceLine[] | undefined;
 };
 
 /** Print-only extras. Visual styles live inline so Gmail, print, and dashboard share one layout. */
@@ -96,6 +105,16 @@ function invoiceSheetInnerHtml(invoice: InvoiceDocument) {
   const charges = invoice.amount;
   const credits = invoice.amountPaid;
   const lineTotal = Math.max(0, charges - credits);
+  const fallbackLines = [
+    {
+      description: category,
+      period: String(invoice.year),
+      charges,
+      credits,
+      total: lineTotal,
+    },
+  ];
+  const lines = invoice.lines && invoice.lines.length > 0 ? invoice.lines : fallbackLines;
   const logo = escapeHtml(clubLogoUrl(invoice.clubLogo));
   const pinLine = setup.invoice.showPin ? `<br />PIN: ${escapeHtml(setup.pin)}` : "";
   const dueLine = setup.invoice.showDueDate
@@ -103,9 +122,6 @@ function invoiceSheetInnerHtml(invoice: InvoiceDocument) {
     : "";
   const creditHeader = setup.invoice.showCredits
     ? `<th align="right" style="padding:10px 12px;background:#1f2554;color:#ffffff;font-size:12px;font-weight:700;white-space:nowrap;">Credits [KES]</th>`
-    : "";
-  const creditCell = setup.invoice.showCredits
-    ? `<td align="right" style="padding:10px 12px;font-size:12px;border-bottom:1px solid #e5e7eb;color:#1f2554;white-space:nowrap;">${escapeHtml(money(credits))}</td>`
     : "";
   const totalColspan = setup.invoice.showCredits ? 4 : 3;
   const extraNote = setup.extraNote
@@ -154,22 +170,29 @@ function invoiceSheetInnerHtml(invoice: InvoiceDocument) {
     <td style="padding:0 18px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;overflow:hidden;">
         <tr>
-          <th align="left" style="padding:10px 12px;background:#1f2554;color:#ffffff;font-size:12px;font-weight:700;">Membership Subscription Category</th>
+          <th align="left" style="padding:10px 12px;background:#1f2554;color:#ffffff;font-size:12px;font-weight:700;">Description</th>
           <th align="center" style="padding:10px 12px;background:#1f2554;color:#ffffff;font-size:12px;font-weight:700;white-space:nowrap;">Year</th>
           <th align="right" style="padding:10px 12px;background:#1f2554;color:#ffffff;font-size:12px;font-weight:700;white-space:nowrap;">Charges [KES]</th>
           ${creditHeader}
           <th align="right" style="padding:10px 12px;background:#1f2554;color:#ffffff;font-size:12px;font-weight:700;white-space:nowrap;">Total [KES]</th>
         </tr>
-        <tr>
-          <td style="padding:10px 12px;font-size:12px;border-bottom:1px solid #e5e7eb;color:#1f2554;">${escapeHtml(category)}</td>
-          <td align="center" style="padding:10px 12px;font-size:12px;border-bottom:1px solid #e5e7eb;color:#1f2554;white-space:nowrap;">${escapeHtml(invoice.year)}</td>
-          <td align="right" style="padding:10px 12px;font-size:12px;border-bottom:1px solid #e5e7eb;color:#1f2554;white-space:nowrap;">${escapeHtml(money(charges))}</td>
-          ${creditCell}
-          <td align="right" style="padding:10px 12px;font-size:12px;border-bottom:1px solid #e5e7eb;color:#1f2554;white-space:nowrap;">${escapeHtml(money(lineTotal))}</td>
-        </tr>
+        ${lines
+          .map((line) => {
+            const lineCredit = setup.invoice.showCredits
+              ? `<td align="right" style="padding:10px 12px;font-size:12px;border-bottom:1px solid #e5e7eb;color:#1f2554;white-space:nowrap;">${escapeHtml(money(line.credits))}</td>`
+              : "";
+            return `<tr>
+          <td style="padding:10px 12px;font-size:12px;border-bottom:1px solid #e5e7eb;color:#1f2554;">${escapeHtml(line.description)}</td>
+          <td align="center" style="padding:10px 12px;font-size:12px;border-bottom:1px solid #e5e7eb;color:#1f2554;white-space:nowrap;">${escapeHtml(line.period || String(invoice.year))}</td>
+          <td align="right" style="padding:10px 12px;font-size:12px;border-bottom:1px solid #e5e7eb;color:#1f2554;white-space:nowrap;">${escapeHtml(money(line.charges))}</td>
+          ${lineCredit}
+          <td align="right" style="padding:10px 12px;font-size:12px;border-bottom:1px solid #e5e7eb;color:#1f2554;white-space:nowrap;">${escapeHtml(money(line.total))}</td>
+        </tr>`;
+          })
+          .join("")}
         <tr>
           <td colspan="${totalColspan}" style="padding:10px 12px;background:#1f2554;color:#ffffff;font-size:12px;font-weight:700;">Total</td>
-          <td align="right" style="padding:10px 12px;background:#1f2554;color:#ffffff;font-size:12px;font-weight:700;white-space:nowrap;">${escapeHtml(money(lineTotal))}</td>
+          <td align="right" style="padding:10px 12px;background:#1f2554;color:#ffffff;font-size:12px;font-weight:700;white-space:nowrap;">${escapeHtml(money(lines.reduce((sum, line) => sum + Number(line.total || 0), 0)))}</td>
         </tr>
       </table>
       <p style="margin:16px 0 0;font-size:13px;color:#1f2554;">${escapeHtml(setup.payableNote)}</p>
@@ -177,7 +200,7 @@ function invoiceSheetInnerHtml(invoice: InvoiceDocument) {
       ${extraParams}
     </td>
   </tr>
-  ${paySection}
+      ${paySection}
   <tr>
     <td style="padding:22px 18px 28px;border-top:1px solid #e4d7bf;color:#5b6472;font-size:11px;line-height:1.55;text-align:center;">
       ${escapeHtml(address)}. Tel: ${escapeHtml(phone)} | ${escapeHtml(clubName)}, Wilson Airport.<br />
@@ -202,15 +225,56 @@ ${body}
 </html>`;
 }
 
+export function invoicePayNowUrl() {
+  if (typeof window === "undefined") return "";
+  return `${window.location.origin}/?next=${encodeURIComponent("/payment")}`;
+}
+
+function wrapInvoiceEmailHtml(invoiceSheetHtml: string, payUrl: string) {
+  const url = payUrl.trim() || invoicePayNowUrl();
+  if (!url) return wrapInvoiceDocument("Invoice", invoiceSheetHtml);
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aero Club invoice</title>
+  <style>${INVOICE_CSS}</style>
+</head>
+<body style="margin:0;padding:24px 16px;background:#f4f4f5;font-family:'Segoe UI',Tahoma,sans-serif;color:#1f2554;">
+  <table data-acea-pay-now="1" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:760px;margin:0 auto 20px;">
+    <tr>
+      <td style="background:#ffffff;border:1px solid #e4d7bf;border-radius:10px;padding:20px 18px;text-align:center;">
+        <p style="margin:0 0 12px;font-size:15px;font-weight:700;">Your Aero Club invoice is below.</p>
+        <a href="${escapeHtml(url)}" style="display:inline-block;background:#1f2554;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;letter-spacing:0.04em;padding:12px 28px;border-radius:8px;">Pay now</a>
+        <p style="margin:12px 0 0;font-size:12px;color:#5b6472;line-height:1.5;">Sign in to confirm you are a member, then complete payment on your Payment page.</p>
+      </td>
+    </tr>
+  </table>
+  ${invoiceSheetHtml}
+</body>
+</html>`;
+}
+
 export function buildInvoiceHtml(invoice: InvoiceDocument) {
   return wrapInvoiceDocument(invoice.invoiceNo, invoiceSheetInnerHtml(invoice));
 }
 
-export async function buildInvoiceHtmlForEmail(invoice: InvoiceDocument) {
-  return buildInvoiceHtml({
+async function invoiceSheetWithEmbeddedLogo(invoice: InvoiceDocument) {
+  return invoiceSheetInnerHtml({
     ...invoice,
     clubLogo: await embeddedClubLogoUrl(invoice.clubLogo),
   });
+}
+
+/** Official invoice only — no Pay now. Stored on the billing document and used for print. */
+export async function buildInvoiceHtmlWithEmbeddedLogo(invoice: InvoiceDocument) {
+  return wrapInvoiceDocument(invoice.invoiceNo, await invoiceSheetWithEmbeddedLogo(invoice));
+}
+
+/** Email chrome + Pay now sit above the invoice; the invoice sheet itself stays clean. */
+export async function buildInvoiceHtmlForEmail(invoice: InvoiceDocument) {
+  return wrapInvoiceEmailHtml(await invoiceSheetWithEmbeddedLogo(invoice), invoicePayNowUrl());
 }
 
 export function buildInvoicePrintHtml(invoices: InvoiceDocument[]) {

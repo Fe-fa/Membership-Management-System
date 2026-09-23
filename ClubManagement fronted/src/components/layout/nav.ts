@@ -35,6 +35,7 @@
   Vote,
   Wallet,
   Wine,
+  Gavel,
   type LucideIcon,
 } from "lucide-react";
 
@@ -136,7 +137,18 @@ function electedMemberModuleNav(pathname: string): AppNavGroup[] {
     return [
       {
         label: "AGM / EGM Election",
-        items: [{ label: "Election", to: "/election", icon: Vote, card: "election" }],
+        items: [
+          { label: "Election", to: "/election", icon: Vote, card: "election", exact: true },
+          { label: "Cast vote", to: "/election/vote", icon: Gavel, card: "election", exact: true },
+          {
+            label: "Proxy appointment",
+            to: "/election/appoint-proxy",
+            icon: UserPlus,
+            card: "election",
+            exact: true,
+          },
+          { label: "Audit log", to: "/election/audit", icon: ScrollText, card: "election", exact: true },
+        ],
       },
     ];
   }
@@ -309,6 +321,12 @@ const MANAGER_STAGE_NAV: AppNavGroup[] = withDashboard("/members", [
         icon: ClipboardList,
         search: { view: "manager", section: "history" },
       },
+      {
+        label: "Invoice & statement approval",
+        to: "/finance/approvals",
+        icon: FileText,
+        roles: ["ADMIN", "GENERAL_MANAGER"],
+      },
     ],
   },
 ], { view: "manager", section: "dashboard" });
@@ -319,6 +337,20 @@ const FINANCE_NAV: AppNavGroup[] = withDashboard("/finance", [
     items: [
       { label: "Finance desk", to: "/finance/desk", icon: Wallet, match: ["/finance/desk"] },
       { label: "Invoices", to: "/finance/invoices", icon: FileText, match: ["/finance/invoices"] },
+      {
+        label: "Statements",
+        to: "/finance/statements",
+        icon: ScrollText,
+        match: ["/finance/statements"],
+        roles: ["ADMIN", "GENERAL_MANAGER", "TREASURER"],
+      },
+      {
+        label: "Approvals",
+        to: "/finance/approvals",
+        icon: ClipboardCheck,
+        match: ["/finance/approvals"],
+        roles: ["ADMIN", "GENERAL_MANAGER"],
+      },
       { label: "Setup", to: "/finance/invoices/setup", icon: SlidersHorizontal, match: ["/finance/invoices/setup"] },
       { label: "Accommodation", to: "/finance/non-membership/accommodation", icon: BedDouble },
       { label: "Corkage", to: "/finance/non-membership/corkage", icon: Wine },
@@ -680,6 +712,8 @@ export function isNavActive(
     if (to === "/") return pathname === "/";
     if (to === "/settings") return pathname === "/settings" || pathname === "/settings/";
     if (to === "/finance/invoices") return pathname === "/finance/invoices";
+    if (to === "/finance/statements") return pathname === "/finance/statements" || pathname.startsWith("/finance/statements/");
+    if (to === "/finance/approvals") return pathname === "/finance/approvals" || pathname.startsWith("/finance/approvals/");
     return pathname === to || pathname.startsWith(`${to}/`);
   });
 }

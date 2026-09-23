@@ -876,6 +876,47 @@ public class ApplicationService : IApplicationService
             throw new InvalidOperationException("A valid document type is required.");
         }
 
+        var existing = await _dbContext.ApplicationDocuments
+            .Include(x => x.DocumentType)
+            .Where(x => x.ApplicationId == applicationId && x.DocumentTypeId == documentTypeId)
+            .OrderByDescending(x => x.UploadedAt ?? x.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (existing is not null)
+        {
+            var sameFile =
+                string.Equals(existing.FileUrl, request.FileUrl, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(existing.FileName, request.FileName, StringComparison.OrdinalIgnoreCase);
+            if (sameFile)
+            {
+                return Map(existing);
+            }
+
+            // A replacement file opens the check again. The previous verify or reject no longer applies.
+            existing.FileName = request.FileName;
+            existing.FileUrl = request.FileUrl;
+            existing.UploadedAt = request.UploadedAt ?? DateTime.UtcNow;
+            existing.UploadedByUserId = request.UploadedByUserId;
+            existing.UpdatedByUserId = request.UploadedByUserId ?? request.CreatedByUserId;
+            existing.IsVerified = false;
+            existing.VerificationStatus = null;
+            existing.VerificationNotes = null;
+            existing.VerifiedAt = null;
+            existing.VerifiedByUserId = null;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await WriteAuditAsync(
+                "Aplication_document",
+                existing.ApplicationDocumentId,
+                "UPDATE",
+                null,
+                $"applicationId={applicationId}; typeId={existing.DocumentTypeId}; file={existing.FileName}; verification reset",
+                request.UploadedByUserId ?? request.CreatedByUserId,
+                cancellationToken);
+            try { await _managerStage.OnApplicantPrerequisitesChangedAsync(applicationId, cancellationToken); }
+            catch { /* notification failures must not block uploads */ }
+            return Map(existing);
+        }
+
         var entity = new AplicationDocument
         {
             ApplicationId = applicationId,
@@ -962,6 +1003,25 @@ public class ApplicationService : IApplicationService
         if (entity is null)
         {
             return null;
+        }
+
+        var decided = entity.VerificationStatus?.Trim();
+        var alreadyVerified = entity.IsVerified
+            || string.Equals(decided, "Verified", StringComparison.OrdinalIgnoreCase);
+        var alreadyRejected = string.Equals(decided, "Rejected", StringComparison.OrdinalIgnoreCase);
+        if (alreadyVerified && !request.Verified)
+        {
+            throw new InvalidOperationException(
+                "This document is verified. It cannot be rejected unless the applicant uploads a new file.");
+        }
+        if (alreadyRejected && request.Verified)
+        {
+            throw new InvalidOperationException(
+                "This document was rejected. It cannot be verified unless the applicant uploads a new file.");
+        }
+        if ((alreadyVerified && request.Verified) || (alreadyRejected && !request.Verified))
+        {
+            return Map(entity);
         }
 
         var before = $"verified={entity.IsVerified}; status={entity.VerificationStatus}";

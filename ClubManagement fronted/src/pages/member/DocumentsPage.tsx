@@ -1,9 +1,9 @@
 ﻿import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import {
   CheckCircle2,
   CircleDashed,
-  CreditCard,
   Download,
   FileText,
   Paperclip,
@@ -33,17 +33,53 @@ function dash(v: unknown) {
   const s = v === null || v === undefined ? "" : String(v);
   return s.trim() === "" ? "—" : s;
 }
+
 function yn(v: boolean | undefined) {
   return v ? "Yes" : "No";
+}
+
+function phoneLine(prefix?: string | null, number?: string | null) {
+  const code = (prefix ?? "").trim();
+  const line = (number ?? "").trim();
+  if (!code && !line) return "—";
+  if (!code) return line;
+  if (!line) return code;
+  return `${code} ${line}`;
+}
+
+/** Membership class written out: Full Member, Country, or Overseas. */
+function membershipClassLabel(value?: string | null) {
+  const raw = (value ?? "").trim();
+  if (!raw) return "—";
+  const key = raw.toLowerCase().replace(/[^a-z]/g, "");
+  if (key === "full" || key.startsWith("fullmember")) return "Full Member";
+  if (key.startsWith("country")) return "Country";
+  if (key.startsWith("overseas")) return "Overseas";
+  if (key.startsWith("life")) return "Life";
+  if (key.startsWith("temporary")) return "Temporary";
+  return raw;
 }
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
-      <p className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-1 truncate text-sm text-foreground">{value}</p>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="mt-1 break-words text-sm font-medium text-foreground">{value}</p>
+    </div>
+  );
+}
+
+function PersonBlock({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-secondary/30 p-4">
+      <p className="mb-3 text-sm font-semibold text-foreground">{title}</p>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">{children}</div>
     </div>
   );
 }
@@ -117,7 +153,7 @@ function MemberDocumentsHub() {
                   <p className="text-sm font-medium text-foreground">{note.title}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {note.sentDate ? formatKenyaDate(note.sentDate.slice(0, 10)) : "—"}
-                    {note.channel ? ` Â· ${note.channel}` : ""}
+                    {note.channel ? ` (${note.channel})` : ""}
                   </p>
                 </div>
                 {note.relatedEntityType === "APPLICATION" ? (
@@ -151,7 +187,7 @@ function MemberDocumentsHub() {
           ) : (
             data?.receipts.map((row, i) => (
               <p key={i}>
-                {row.receiptNumber ?? "Receipt"} Â· {row.method} Â· {row.amount}
+                {[row.receiptNumber ?? "Receipt", row.method, row.amount].filter((part) => part != null && String(part).trim() !== "").join(", ")}
               </p>
             ))
           )}
@@ -204,12 +240,12 @@ function ApplicantDocumentsHub() {
     { label: "Curriculum vitae", file: draft.personal.cv, required: true },
     { label: "ID / Passport copy", file: draft.personal.idPassport, required: true },
     {
-      label: "1. Annual subscription cheque",
+      label: "Annual subscription cheque",
       file: draft.personal.annualCheque,
       required: Boolean(draft.personal.annualCheque),
     },
     {
-      label: "2. Joining fee / entrance fee cheque",
+      label: "Joining fee cheque",
       file: draft.personal.joiningCheque,
       required: Boolean(draft.personal.joiningCheque),
     },
@@ -224,8 +260,8 @@ function ApplicantDocumentsHub() {
     <PageFrame>
       <PageBackLink to="/applications" label="Back to application" />
       <PageHeader
-        title="View & Details"
-        description="Every section, document and payment recorded for your membership application."
+        title="Documents"
+        description="Every section, file and payment saved on your membership application."
       />
 
       {record?.id ? (
@@ -245,40 +281,22 @@ function ApplicantDocumentsHub() {
               <Progress value={overallPercent} className="h-1.5" />
             </div>
             <CardContent className="space-y-1 p-2">
-              {sections.map((s, idx) => (
+              {sections.map((s) => (
                 <div
                   key={s.key}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2.5",
-                    idx === 0 && "bg-primary text-primary-foreground",
-                  )}
+                  className="flex items-center gap-3 rounded-lg px-3 py-2.5"
                 >
                   <span
                     className={cn(
                       "flex size-7 shrink-0 items-center justify-center rounded-full",
-                      idx === 0
-                        ? "bg-primary-foreground/20 text-primary-foreground"
-                        : s.done
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-secondary text-muted-foreground",
+                      s.done
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-secondary text-muted-foreground",
                     )}
                   >
-                    {idx === 0 ? (
-                      <CheckCircle2 className="size-4" />
-                    ) : s.done ? (
-                      <CheckCircle2 className="size-4" />
-                    ) : (
-                      <CircleDashed className="size-4" />
-                    )}
+                    {s.done ? <CheckCircle2 className="size-4" /> : <CircleDashed className="size-4" />}
                   </span>
-                  <span
-                    className={cn(
-                      "text-sm font-medium",
-                      idx === 0 ? "text-primary-foreground" : "text-foreground",
-                    )}
-                  >
-                    {s.title}
-                  </span>
+                  <span className="text-sm font-medium text-foreground">{s.title}</span>
                 </div>
               ))}
               <div className="mt-1 flex items-center gap-3 rounded-lg px-3 py-2.5">
@@ -303,17 +321,17 @@ function ApplicantDocumentsHub() {
           <Card>
             <CardHeader>
               <CardTitle>Personal details</CardTitle>
-              <CardDescription>From your application — editable from Continue form.</CardDescription>
+              <CardDescription>Saved on your application. Use Update form to change them.</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-3">
+            <CardContent className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
               <Field label="First name" value={dash(draft.personal.firstName)} />
               <Field label="Middle name" value={dash(draft.personal.middleName)} />
               <Field label="Last name" value={dash(draft.personal.lastName)} />
               <Field label="Email" value={dash(draft.personal.email)} />
-              <Field label="Alt. email" value={dash(draft.personal.altEmail)} />
-              <Field label="Mobile" value={`${dash(draft.personal.telPrefix)} ${dash(draft.personal.mobile)}`} />
-              <Field label="Tel. other" value={dash(draft.personal.telOther)} />
-              <Field label="ID / Passport" value={dash(draft.personal.idPassportNo)} />
+              <Field label="Alternate email" value={dash(draft.personal.altEmail)} />
+              <Field label="Mobile" value={phoneLine(draft.personal.telPrefix, draft.personal.mobile)} />
+              <Field label="Other telephone" value={dash(draft.personal.telOther)} />
+              <Field label="ID or passport number" value={dash(draft.personal.idPassportNo)} />
               <Field label="Nationality" value={dash(draft.personal.nationality)} />
               <Field label="Date of birth" value={formatKenyaDate(draft.personal.dateOfBirth)} />
               <Field label="Place of birth" value={dash(draft.personal.placeOfBirth)} />
@@ -323,36 +341,27 @@ function ApplicantDocumentsHub() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Marital &amp; family status</CardTitle>
+              <CardTitle>Marital and family</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-5">
-              <div className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-4">
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Married" value={yn(draft.family.isMarried)} />
                 <Field label="Has children" value={yn(draft.family.hasChildren)} />
               </div>
-              {(draft.family.spouses ?? []).length > 0 && (
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-3">
-                  {(draft.family.spouses ?? []).map((spouse, i) => (
-                    <Field
-                      key={i}
-                      label={`Spouse ${i + 1}`}
-                      value={`${dash(spouse.name)} Â· ${dash(spouse.phone)} Â· ${dash(spouse.email)}`}
-                    />
-                  ))}
-                </div>
-              )}
-              {(draft.family.children ?? []).length > 0 && (
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-3">
-                  {(draft.family.children ?? []).map((c, i) => (
-                    <Field
-                      key={i}
-                      label={`Child ${i + 1}`}
-                      value={`${dash(c.name)} Â· ${formatKenyaDate(c.dateOfBirth)}`}
-                    />
-                  ))}
-                </div>
-              )}
-              <div className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-3">
+              {(draft.family.spouses ?? []).map((spouse, index) => (
+                <PersonBlock key={`spouse-${index}`} title={`Spouse ${index + 1}`}>
+                  <Field label="Name" value={dash(spouse.name)} />
+                  <Field label="Phone" value={dash(spouse.phone)} />
+                  <Field label="Email" value={dash(spouse.email)} />
+                </PersonBlock>
+              ))}
+              {(draft.family.children ?? []).map((child, index) => (
+                <PersonBlock key={`child-${index}`} title={`Child ${index + 1}`}>
+                  <Field label="Name" value={dash(child.name)} />
+                  <Field label="Date of birth" value={formatKenyaDate(child.dateOfBirth)} />
+                </PersonBlock>
+              ))}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <Field label="Emergency contact" value={dash(draft.family.emergencyName)} />
                 <Field label="Emergency phone" value={dash(draft.family.emergencyPhone)} />
                 <Field label="Emergency email" value={dash(draft.family.emergencyEmail)} />
@@ -362,41 +371,74 @@ function ApplicantDocumentsHub() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Aviation &amp; membership</CardTitle>
+              <CardTitle>Aviation</CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-3">
+            <CardContent className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
               <Field label="Affiliated" value={yn(draft.aviation.isAffiliated)} />
               <Field label="Aviation role" value={dash(draft.aviation.aviationRole)} />
-              <Field label="Holds licence" value={yn(draft.aviation.holdsLicense)} />
-              <Field label="Licence" value={`${dash(draft.aviation.licenseType)} Â· ${dash(draft.aviation.licenseNumber)}`} />
-              <Field label="Issuer" value={dash(draft.aviation.licenseIssuer)} />
-              <Field label="Owns aircraft" value={yn(draft.aviation.ownsAircraft)} />
-              <Field label="Aircraft" value={`${dash(draft.aviation.aircraftType)} Â· ${dash(draft.aviation.aircraftRegistration)}`} />
+              <Field label="Holds a licence" value={yn(draft.aviation.holdsLicense)} />
+              <Field label="Licence type" value={dash(draft.aviation.licenseType)} />
+              <Field label="Licence number" value={dash(draft.aviation.licenseNumber)} />
+              <Field label="Licence issuer" value={dash(draft.aviation.licenseIssuer)} />
+              <Field label="Owns an aircraft" value={yn(draft.aviation.ownsAircraft)} />
+              <Field label="Aircraft type" value={dash(draft.aviation.aircraftType)} />
+              <Field label="Registration" value={dash(draft.aviation.aircraftRegistration)} />
               <Field label="Hangar" value={dash(draft.aviation.hangarLocation)} />
-              <Field label="Membership type" value={dash(draft.membership.membershipType)} />
-              <Field label="Applicant signature" value={`${dash(draft.membership.applicantSignature)} Â· ${formatKenyaDate(draft.membership.signatureDate)}`} />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Supporters &amp; consent</CardTitle>
+              <CardTitle>Membership</CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-3">
-              <Field label="Proposer" value={dash(draft.supporters.proposer?.name)} />
-              <Field label="Proposer since" value={dash(draft.supporters.proposer?.yearOfJoining)} />
-              <Field label="Proposer phone" value={dash(draft.supporters.proposer?.phone)} />
-              <Field label="Seconder" value={dash(draft.supporters.seconder?.name)} />
-              <Field label="Seconder since" value={dash(draft.supporters.seconder?.yearOfJoining)} />
-              <Field label="Seconder phone" value={dash(draft.supporters.seconder?.phone)} />
-              <Field label="Privacy accepted" value={yn(draft.consent.privacyPolicyAccepted)} />
-              <Field label="Declaration accepted" value={yn(draft.consent.declarationAccepted)} />
-              <Field label="Declaration signature" value={`${dash(draft.consent.declarationSignature)} Â· ${formatKenyaDate(draft.consent.declarationDate)}`} />
+            <CardContent className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-3">
+              <Field label="Applied for" value={membershipClassLabel(draft.membership.membershipType)} />
+              <Field label="Applicant signature" value={dash(draft.membership.applicantSignature)} />
+              <Field label="Signature date" value={formatKenyaDate(draft.membership.signatureDate)} />
             </CardContent>
           </Card>
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Proposer and seconder</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <PersonBlock title="Proposer">
+                <Field label="Name" value={dash(draft.supporters.proposer?.name)} />
+                <Field label="Member since" value={dash(draft.supporters.proposer?.yearOfJoining)} />
+                <Field label="Phone" value={dash(draft.supporters.proposer?.phone)} />
+              </PersonBlock>
+              <PersonBlock title="Seconder">
+                <Field label="Name" value={dash(draft.supporters.seconder?.name)} />
+                <Field label="Member since" value={dash(draft.supporters.seconder?.yearOfJoining)} />
+                <Field label="Phone" value={dash(draft.supporters.seconder?.phone)} />
+              </PersonBlock>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Other clubs and consent</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="Member of another club" value={yn(draft.clubs.memberOfOtherClub)} />
+              <Field
+                label="Club names"
+                value={
+                  (draft.clubs.otherClubs ?? [])
+                    .map((club) => club.name?.trim())
+                    .filter(Boolean)
+                    .join(", ") || "—"
+                }
+              />
+              <Field label="Privacy policy accepted" value={yn(draft.consent.privacyPolicyAccepted)} />
+              <Field label="Declaration accepted" value={yn(draft.consent.declarationAccepted)} />
+              <Field label="Declaration signature" value={dash(draft.consent.declarationSignature)} />
+              <Field label="Declaration date" value={formatKenyaDate(draft.consent.declarationDate)} />
+            </CardContent>
+          </Card>
+
+          <Card>
               <CardHeader>
                 <CardTitle>Documents</CardTitle>
                 <CardDescription>Uploaded supporting files.</CardDescription>
@@ -412,11 +454,11 @@ function ApplicantDocumentsHub() {
                     return (
                       <div
                         key={d.label}
-                        className="flex items-center justify-between gap-4 rounded-xl border border-border px-4 py-3"
+                        className="flex flex-col gap-3 rounded-xl border border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                       >
                         <div className="min-w-0">
                           <p className="font-medium text-foreground">{d.label}</p>
-                          <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                          <p className="mt-0.5 break-words text-sm text-muted-foreground">
                             {uploaded ? d.file?.fileName ?? "Uploaded" : "Not uploaded yet"}
                           </p>
                         </div>
@@ -450,25 +492,7 @@ function ApplicantDocumentsHub() {
                   })
                 )}
               </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Payment history</CardTitle>
-                <CardDescription>Most recent transactions first.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button asChild variant="outline" className="w-full">
-                  <Link to="/payment">
-                    <CreditCard className="size-4" /> Open payment page
-                  </Link>
-                </Button>
-                <p className="mt-3 text-xs text-muted-foreground">
-                  Record and verify M-Pesa / cheque payments from the dedicated payment page — that page only handles payments, nothing else.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+          </Card>
         </div>
       </div>
     </PageFrame>

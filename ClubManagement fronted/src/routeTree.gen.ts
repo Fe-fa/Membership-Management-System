@@ -48,18 +48,23 @@ import { Route as CommitteeBallotCandidatesRouteImport } from './routes/committe
 import { Route as CommitteeBallotPendingRouteImport } from './routes/committee-ballot.pending'
 import { Route as CommitteeBallotSignaturesRouteImport } from './routes/committee-ballot.signatures'
 import { Route as ElectionIndexRouteImport } from './routes/election.index'
+import { Route as ElectionAppointProxyRouteImport } from './routes/election.appoint-proxy'
+import { Route as ElectionAuditRouteImport } from './routes/election.audit'
 import { Route as ElectionMinutesRouteImport } from './routes/election.minutes'
 import { Route as ElectionNominationsRouteImport } from './routes/election.nominations'
 import { Route as ElectionNoticeRouteImport } from './routes/election.notice'
 import { Route as ElectionOfficersRouteImport } from './routes/election.officers'
 import { Route as ElectionProxiesRouteImport } from './routes/election.proxies'
 import { Route as ElectionTallyRouteImport } from './routes/election.tally'
+import { Route as ElectionVoteRouteImport } from './routes/election.vote'
 import { Route as ExistingMembersIndexRouteImport } from './routes/existing-members.index'
 import { Route as ExistingMembersAccountIdRouteImport } from './routes/existing-members.$accountId'
 import { Route as ExistingMembersPrivilegesRouteImport } from './routes/existing-members.privileges'
 import { Route as FinanceIndexRouteImport } from './routes/finance.index'
+import { Route as FinanceApprovalsRouteImport } from './routes/finance.approvals'
 import { Route as FinanceDeskRouteImport } from './routes/finance.desk'
 import { Route as FinanceInvoicesRouteImport } from './routes/finance.invoices'
+import { Route as FinanceStatementsRouteImport } from './routes/finance.statements'
 import { Route as ManageCommitteeIndexRouteImport } from './routes/manage-committee.index'
 import { Route as ManageCommitteeCurrentTermRouteImport } from './routes/manage-committee.current-term'
 import { Route as ManageCommitteeMeetingsRouteImport } from './routes/manage-committee.meetings'
@@ -293,6 +298,16 @@ const ElectionIndexRoute = ElectionIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ElectionRoute,
 } as any)
+const ElectionAppointProxyRoute = ElectionAppointProxyRouteImport.update({
+  id: '/appoint-proxy',
+  path: '/appoint-proxy',
+  getParentRoute: () => ElectionRoute,
+} as any)
+const ElectionAuditRoute = ElectionAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => ElectionRoute,
+} as any)
 const ElectionMinutesRoute = ElectionMinutesRouteImport.update({
   id: '/minutes',
   path: '/minutes',
@@ -323,6 +338,11 @@ const ElectionTallyRoute = ElectionTallyRouteImport.update({
   path: '/tally',
   getParentRoute: () => ElectionRoute,
 } as any)
+const ElectionVoteRoute = ElectionVoteRouteImport.update({
+  id: '/vote',
+  path: '/vote',
+  getParentRoute: () => ElectionRoute,
+} as any)
 const ExistingMembersIndexRoute = ExistingMembersIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -345,6 +365,11 @@ const FinanceIndexRoute = FinanceIndexRouteImport.update({
   path: '/',
   getParentRoute: () => FinanceRoute,
 } as any)
+const FinanceApprovalsRoute = FinanceApprovalsRouteImport.update({
+  id: '/approvals',
+  path: '/approvals',
+  getParentRoute: () => FinanceRoute,
+} as any)
 const FinanceDeskRoute = FinanceDeskRouteImport.update({
   id: '/desk',
   path: '/desk',
@@ -353,6 +378,11 @@ const FinanceDeskRoute = FinanceDeskRouteImport.update({
 const FinanceInvoicesRoute = FinanceInvoicesRouteImport.update({
   id: '/invoices',
   path: '/invoices',
+  getParentRoute: () => FinanceRoute,
+} as any)
+const FinanceStatementsRoute = FinanceStatementsRouteImport.update({
+  id: '/statements',
+  path: '/statements',
   getParentRoute: () => FinanceRoute,
 } as any)
 const ManageCommitteeIndexRoute = ManageCommitteeIndexRouteImport.update({
@@ -577,16 +607,21 @@ export interface FileRoutesByFullPath {
   '/committee-ballot/candidates': typeof CommitteeBallotCandidatesRoute
   '/committee-ballot/pending': typeof CommitteeBallotPendingRoute
   '/committee-ballot/signatures': typeof CommitteeBallotSignaturesRoute
+  '/election/appoint-proxy': typeof ElectionAppointProxyRoute
+  '/election/audit': typeof ElectionAuditRoute
   '/election/minutes': typeof ElectionMinutesRoute
   '/election/nominations': typeof ElectionNominationsRoute
   '/election/notice': typeof ElectionNoticeRoute
   '/election/officers': typeof ElectionOfficersRoute
   '/election/proxies': typeof ElectionProxiesRoute
   '/election/tally': typeof ElectionTallyRoute
+  '/election/vote': typeof ElectionVoteRoute
   '/existing-members/$accountId': typeof ExistingMembersAccountIdRoute
   '/existing-members/privileges': typeof ExistingMembersPrivilegesRouteWithChildren
+  '/finance/approvals': typeof FinanceApprovalsRoute
   '/finance/desk': typeof FinanceDeskRoute
   '/finance/invoices': typeof FinanceInvoicesRouteWithChildren
+  '/finance/statements': typeof FinanceStatementsRoute
   '/manage-committee/current-term': typeof ManageCommitteeCurrentTermRoute
   '/manage-committee/meetings': typeof ManageCommitteeMeetingsRouteWithChildren
   '/manage-committee/members': typeof ManageCommitteeMembersRoute
@@ -654,14 +689,19 @@ export interface FileRoutesByTo {
   '/committee-ballot/candidates': typeof CommitteeBallotCandidatesRoute
   '/committee-ballot/pending': typeof CommitteeBallotPendingRoute
   '/committee-ballot/signatures': typeof CommitteeBallotSignaturesRoute
+  '/election/appoint-proxy': typeof ElectionAppointProxyRoute
+  '/election/audit': typeof ElectionAuditRoute
   '/election/minutes': typeof ElectionMinutesRoute
   '/election/nominations': typeof ElectionNominationsRoute
   '/election/notice': typeof ElectionNoticeRoute
   '/election/officers': typeof ElectionOfficersRoute
   '/election/proxies': typeof ElectionProxiesRoute
   '/election/tally': typeof ElectionTallyRoute
+  '/election/vote': typeof ElectionVoteRoute
   '/existing-members/$accountId': typeof ExistingMembersAccountIdRoute
+  '/finance/approvals': typeof FinanceApprovalsRoute
   '/finance/desk': typeof FinanceDeskRoute
+  '/finance/statements': typeof FinanceStatementsRoute
   '/manage-committee/current-term': typeof ManageCommitteeCurrentTermRoute
   '/manage-committee/members': typeof ManageCommitteeMembersRoute
   '/manage-committee/new-term': typeof ManageCommitteeNewTermRoute
@@ -739,16 +779,21 @@ export interface FileRoutesById {
   '/committee-ballot/candidates': typeof CommitteeBallotCandidatesRoute
   '/committee-ballot/pending': typeof CommitteeBallotPendingRoute
   '/committee-ballot/signatures': typeof CommitteeBallotSignaturesRoute
+  '/election/appoint-proxy': typeof ElectionAppointProxyRoute
+  '/election/audit': typeof ElectionAuditRoute
   '/election/minutes': typeof ElectionMinutesRoute
   '/election/nominations': typeof ElectionNominationsRoute
   '/election/notice': typeof ElectionNoticeRoute
   '/election/officers': typeof ElectionOfficersRoute
   '/election/proxies': typeof ElectionProxiesRoute
   '/election/tally': typeof ElectionTallyRoute
+  '/election/vote': typeof ElectionVoteRoute
   '/existing-members/$accountId': typeof ExistingMembersAccountIdRoute
   '/existing-members/privileges': typeof ExistingMembersPrivilegesRouteWithChildren
+  '/finance/approvals': typeof FinanceApprovalsRoute
   '/finance/desk': typeof FinanceDeskRoute
   '/finance/invoices': typeof FinanceInvoicesRouteWithChildren
+  '/finance/statements': typeof FinanceStatementsRoute
   '/manage-committee/current-term': typeof ManageCommitteeCurrentTermRoute
   '/manage-committee/meetings': typeof ManageCommitteeMeetingsRouteWithChildren
   '/manage-committee/members': typeof ManageCommitteeMembersRoute
@@ -828,16 +873,21 @@ export interface FileRouteTypes {
     | '/committee-ballot/candidates'
     | '/committee-ballot/pending'
     | '/committee-ballot/signatures'
+    | '/election/appoint-proxy'
+    | '/election/audit'
     | '/election/minutes'
     | '/election/nominations'
     | '/election/notice'
     | '/election/officers'
     | '/election/proxies'
     | '/election/tally'
+    | '/election/vote'
     | '/existing-members/$accountId'
     | '/existing-members/privileges'
+    | '/finance/approvals'
     | '/finance/desk'
     | '/finance/invoices'
+    | '/finance/statements'
     | '/manage-committee/current-term'
     | '/manage-committee/meetings'
     | '/manage-committee/members'
@@ -905,14 +955,19 @@ export interface FileRouteTypes {
     | '/committee-ballot/candidates'
     | '/committee-ballot/pending'
     | '/committee-ballot/signatures'
+    | '/election/appoint-proxy'
+    | '/election/audit'
     | '/election/minutes'
     | '/election/nominations'
     | '/election/notice'
     | '/election/officers'
     | '/election/proxies'
     | '/election/tally'
+    | '/election/vote'
     | '/existing-members/$accountId'
+    | '/finance/approvals'
     | '/finance/desk'
+    | '/finance/statements'
     | '/manage-committee/current-term'
     | '/manage-committee/members'
     | '/manage-committee/new-term'
@@ -989,16 +1044,21 @@ export interface FileRouteTypes {
     | '/committee-ballot/candidates'
     | '/committee-ballot/pending'
     | '/committee-ballot/signatures'
+    | '/election/appoint-proxy'
+    | '/election/audit'
     | '/election/minutes'
     | '/election/nominations'
     | '/election/notice'
     | '/election/officers'
     | '/election/proxies'
     | '/election/tally'
+    | '/election/vote'
     | '/existing-members/$accountId'
     | '/existing-members/privileges'
+    | '/finance/approvals'
     | '/finance/desk'
     | '/finance/invoices'
+    | '/finance/statements'
     | '/manage-committee/current-term'
     | '/manage-committee/meetings'
     | '/manage-committee/members'
@@ -1347,6 +1407,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ElectionIndexRouteImport
       parentRoute: typeof ElectionRoute
     }
+    '/election/appoint-proxy': {
+      id: '/election/appoint-proxy'
+      path: '/appoint-proxy'
+      fullPath: '/election/appoint-proxy'
+      preLoaderRoute: typeof ElectionAppointProxyRouteImport
+      parentRoute: typeof ElectionRoute
+    }
+    '/election/audit': {
+      id: '/election/audit'
+      path: '/audit'
+      fullPath: '/election/audit'
+      preLoaderRoute: typeof ElectionAuditRouteImport
+      parentRoute: typeof ElectionRoute
+    }
     '/election/minutes': {
       id: '/election/minutes'
       path: '/minutes'
@@ -1389,6 +1463,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ElectionTallyRouteImport
       parentRoute: typeof ElectionRoute
     }
+    '/election/vote': {
+      id: '/election/vote'
+      path: '/vote'
+      fullPath: '/election/vote'
+      preLoaderRoute: typeof ElectionVoteRouteImport
+      parentRoute: typeof ElectionRoute
+    }
     '/existing-members/': {
       id: '/existing-members/'
       path: '/'
@@ -1417,6 +1498,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FinanceIndexRouteImport
       parentRoute: typeof FinanceRoute
     }
+    '/finance/approvals': {
+      id: '/finance/approvals'
+      path: '/approvals'
+      fullPath: '/finance/approvals'
+      preLoaderRoute: typeof FinanceApprovalsRouteImport
+      parentRoute: typeof FinanceRoute
+    }
     '/finance/desk': {
       id: '/finance/desk'
       path: '/desk'
@@ -1429,6 +1517,13 @@ declare module '@tanstack/react-router' {
       path: '/invoices'
       fullPath: '/finance/invoices'
       preLoaderRoute: typeof FinanceInvoicesRouteImport
+      parentRoute: typeof FinanceRoute
+    }
+    '/finance/statements': {
+      id: '/finance/statements'
+      path: '/statements'
+      fullPath: '/finance/statements'
+      preLoaderRoute: typeof FinanceStatementsRouteImport
       parentRoute: typeof FinanceRoute
     }
     '/manage-committee/': {
@@ -1711,22 +1806,28 @@ const CommitteeBallotRouteWithChildren = CommitteeBallotRoute._addFileChildren(
 )
 
 interface ElectionRouteChildren {
+  ElectionAppointProxyRoute: typeof ElectionAppointProxyRoute
+  ElectionAuditRoute: typeof ElectionAuditRoute
   ElectionMinutesRoute: typeof ElectionMinutesRoute
   ElectionNominationsRoute: typeof ElectionNominationsRoute
   ElectionNoticeRoute: typeof ElectionNoticeRoute
   ElectionOfficersRoute: typeof ElectionOfficersRoute
   ElectionProxiesRoute: typeof ElectionProxiesRoute
   ElectionTallyRoute: typeof ElectionTallyRoute
+  ElectionVoteRoute: typeof ElectionVoteRoute
   ElectionIndexRoute: typeof ElectionIndexRoute
 }
 
 const ElectionRouteChildren: ElectionRouteChildren = {
+  ElectionAppointProxyRoute: ElectionAppointProxyRoute,
+  ElectionAuditRoute: ElectionAuditRoute,
   ElectionMinutesRoute: ElectionMinutesRoute,
   ElectionNominationsRoute: ElectionNominationsRoute,
   ElectionNoticeRoute: ElectionNoticeRoute,
   ElectionOfficersRoute: ElectionOfficersRoute,
   ElectionProxiesRoute: ElectionProxiesRoute,
   ElectionTallyRoute: ElectionTallyRoute,
+  ElectionVoteRoute: ElectionVoteRoute,
   ElectionIndexRoute: ElectionIndexRoute,
 }
 
@@ -1799,8 +1900,10 @@ const FinanceInvoicesRouteWithChildren = FinanceInvoicesRoute._addFileChildren(
 )
 
 interface FinanceRouteChildren {
+  FinanceApprovalsRoute: typeof FinanceApprovalsRoute
   FinanceDeskRoute: typeof FinanceDeskRoute
   FinanceInvoicesRoute: typeof FinanceInvoicesRouteWithChildren
+  FinanceStatementsRoute: typeof FinanceStatementsRoute
   FinanceIndexRoute: typeof FinanceIndexRoute
   FinanceNonMembershipAccommodationRoute: typeof FinanceNonMembershipAccommodationRoute
   FinanceNonMembershipCorkageRoute: typeof FinanceNonMembershipCorkageRoute
@@ -1808,8 +1911,10 @@ interface FinanceRouteChildren {
 }
 
 const FinanceRouteChildren: FinanceRouteChildren = {
+  FinanceApprovalsRoute: FinanceApprovalsRoute,
   FinanceDeskRoute: FinanceDeskRoute,
   FinanceInvoicesRoute: FinanceInvoicesRouteWithChildren,
+  FinanceStatementsRoute: FinanceStatementsRoute,
   FinanceIndexRoute: FinanceIndexRoute,
   FinanceNonMembershipAccommodationRoute:
     FinanceNonMembershipAccommodationRoute,

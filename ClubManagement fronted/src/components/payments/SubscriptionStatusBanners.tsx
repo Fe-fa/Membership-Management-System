@@ -6,7 +6,7 @@ import { formatKes } from "@/utils/format";
 import { cn } from "@/utils/cn";
 
 import type { MemberSubscription } from "./types";
-import { liveFeeStatusLabel, standingLabel } from "./types";
+import { liveFeeStatusLabel } from "./types";
 
 export function SubscriptionStatusBanners({ sub }: { sub: MemberSubscription }) {
   const standing = sub.standing || "InGoodStanding";
@@ -21,6 +21,9 @@ export function SubscriptionStatusBanners({ sub }: { sub: MemberSubscription }) 
     && (standing === "Unpaid" || (sub.statusCode ?? "").toUpperCase() === "UNPAID");
   const unpaid = sub.balance > 0 && (sub.paysSubscription || sub.joiningOutstanding > 0);
   const settled = duesClear;
+  const awaitingInvoice =
+    (sub.annualPaymentStatus ?? "") === "NotBilled"
+    || (sub.joiningPaymentStatus ?? "") === "NotBilled";
   const currentYearSettled = sub.outstanding <= 0 && sub.joiningOutstanding <= 0;
 
   return (
@@ -91,7 +94,7 @@ export function SubscriptionStatusBanners({ sub }: { sub: MemberSubscription }) 
         </Alert>
       ) : null}
 
-      {settled && !sub.isLifeExempt ? (
+      {settled && !sub.isLifeExempt && !awaitingInvoice && (sub.joiningPaymentStatus ?? "") !== "NotBilled" ? (
         <Alert className="border-emerald-200 bg-emerald-50/80 text-emerald-950">
           <CheckCircle2 className="size-4 text-emerald-700" />
           <AlertTitle>Nothing outstanding</AlertTitle>
@@ -120,9 +123,13 @@ export function SubscriptionSummaryCards({
   onPay?: () => void;
 }) {
   const { year, outstanding, annualStatus } = billingSnapshot(sub);
-  const standing = standingLabel(sub.standing);
-  const goodStanding = sub.balance <= 0.01 || (sub.standing || "") === "InGoodStanding";
-  const joiningPaid = sub.joiningOutstanding <= 0.01;
+  const inactiveCodes = new Set(["INACTIVE", "REMOVED", "RESIGNED", "DECEASED", "SUSPENDED"]);
+  const active =
+    typeof sub.isActive === "boolean"
+      ? sub.isActive
+      : !inactiveCodes.has((sub.statusCode ?? "").toUpperCase());
+  const joiningPaid = sub.joiningOutstanding <= 0.01 && (sub.joiningPaymentStatus ?? "") !== "NotBilled";
+  const joiningAwaiting = (sub.joiningPaymentStatus ?? "") === "NotBilled";
   const annualStatusLabel = liveFeeStatusLabel(annualStatus);
 
   return (
@@ -130,18 +137,15 @@ export function SubscriptionSummaryCards({
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard title="Account Status" extra={<User className="size-5 text-muted-foreground" />}>
           <div className="mt-4 flex items-center gap-2">
-            {goodStanding ? (
+            {active ? (
               <CheckCircle2 className="size-5 text-emerald-600" />
             ) : (
               <AlertTriangle className="size-5 text-amber-600" />
             )}
-            <p className={cn("text-base font-semibold", goodStanding ? "text-emerald-700" : "text-amber-800")}>
-              {standing}
+            <p className={cn("text-base font-semibold", active ? "text-emerald-700" : "text-amber-800")}>
+              {active ? "Active" : "Inactive"}
             </p>
           </div>
-          {sub.membershipNo ? (
-            <p className="mt-2 text-sm text-muted-foreground">{sub.membershipNo}</p>
-          ) : null}
         </SummaryCard>
 
         <SummaryCard title="Joining Fee">
@@ -149,43 +153,23 @@ export function SubscriptionSummaryCards({
             {joiningPaid ? (
               <>
                 <p className="text-2xl font-semibold tracking-tight">Paid</p>
-                <span
-                  className="pointer-events-none absolute right-0 top-0 rotate-12 rounded-sm border-2 border-rose-400/80 px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.18em] text-rose-400/90"
-                  aria-hidden
-                >
-                  Paid
-                </span>
               </>
             ) : (
               <>
-                <p className="text-sm text-muted-foreground">Balance</p>
-                <p className="text-2xl font-semibold tabular-nums">{formatKes(sub.joiningOutstanding)}</p>
-                <p className="mt-1 text-xs font-medium text-amber-800">
-                  {liveFeeStatusLabel(sub.joiningPaymentStatus)}
-                </p>
+                <p className="text-2xl font-semibold tabular-nums">{formatKes(joiningAwaiting ? 0 : sub.joiningOutstanding)}</p>
               </>
             )}
           </div>
         </SummaryCard>
 
-        <SummaryCard title="Subscription Dues" accent={outstanding > 0 ? "warn" : undefined}>
-          <div className="mt-3 rounded-lg border border-border bg-white px-3 py-2.5 shadow-sm">
-            {sub.paysSubscription ? (
-              <p className="text-sm text-foreground">
-                {year} Subscription:{" "}
-                <span className="font-semibold tabular-nums">{formatKes(outstanding)}</span>
-                <span className="text-muted-foreground"> ({annualStatusLabel})</span>
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                {sub.isLifeExempt ? "Life / Senior Life — annual fee is Ksh 0." : "This class does not pay an annual subscription."}
-              </p>
-            )}
-          </div>
-        </SummaryCard>
+ <SummaryCard title="Subscription Dues" accent={outstanding > 0 ? "warn" : undefined}>
+  <p className="mt-3 text-2xl font-semibold tabular-nums">
+    {formatKes(outstanding)}
+  </p>
+</SummaryCard>
 
-        <SummaryCard title="Balances">
-          <p className="mt-3 text-2xl font-semibold tabular-nums">Total {formatKes(sub.balance)}</p>
+        <SummaryCard title="Total Balances">
+          <p className="mt-3 text-2xl font-semibold tabular-nums">{formatKes(sub.balance)}</p>
         </SummaryCard>
       </div>
     </section>

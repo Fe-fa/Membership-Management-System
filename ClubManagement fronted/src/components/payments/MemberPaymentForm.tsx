@@ -60,13 +60,26 @@ type PaymentRow = {
   reference: string;
 };
 
-function round2(value: number) {
-  return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+function roundKes(value: number) {
+  return Math.round(Number(value || 0));
 }
 
 function toNum(value: string | number) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
+}
+
+function wholeKesText(value: number) {
+  const n = roundKes(value);
+  return n > 0 ? String(n) : "";
+}
+
+function parseWholeKes(raw: string) {
+  if (!raw.trim()) return "";
+  const [whole] = raw.split(".");
+  const digits = (whole ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  return String(Number(digits));
 }
 
 function newRow(overrides: Partial<PaymentRow> = {}): PaymentRow {
@@ -139,7 +152,6 @@ export function MemberPaymentForm({
         ? Math.max(0, sub.outstanding)
         : upcomingOutstanding
       : 0;
-
   const [purpose, setPurpose] = useState<FeePurpose>(initialPurpose ?? "annual");
   const [paidAt, setPaidAt] = useState(kenyaTodayISO());
   const [lineDescription, setLineDescription] = useState(initialLineDescription ?? "");
@@ -148,11 +160,25 @@ export function MemberPaymentForm({
   const [chequeUploadingId, setChequeUploadingId] = useState<string | null>(null);
   const [stkByRow, setStkByRow] = useState<Record<string, MpesaStkResult | undefined>>({});
 
+  const openCharges = isApplicant ? [] : sub.openCharges ?? [];
+  const chargedPurpose = (p: FeePurpose) =>
+    openCharges.filter((c) => {
+      if (p === "accommodation") return c.kind === "accommodation";
+      if (p === "corkage") return c.kind === "corkage";
+      if (p === "other") return c.kind === "custom";
+      return false;
+    });
+  const billedCharge =
+    typeof nmChargeId === "number"
+      ? openCharges.find((c) => c.id === nmChargeId)
+      : chargedPurpose(purpose)[0];
+  const billedChargeAmount = billedCharge ? Math.max(0, Number(billedCharge.amount || 0)) : 0;
+
   const suggestedAmount = useMemo(() => {
     if (purpose === "joining") return Math.max(0, sub.joiningOutstanding);
     if (purpose === "annual") return annualOutstanding;
-    return 0;
-  }, [purpose, sub.joiningOutstanding, annualOutstanding]);
+    return billedChargeAmount;
+  }, [purpose, sub.joiningOutstanding, annualOutstanding, billedChargeAmount]);
 
   const defaultMethodId = useMemo(() => {
     const preferred = ["MPESA", "CASH", "CHEQUE", "CARD", "CLUB_CARD"];
@@ -166,14 +192,21 @@ export function MemberPaymentForm({
 
   useEffect(() => {
     if (!formOpen) return;
+    const extras = openCharges.find((c) => c.amount > EPSILON);
     const fallbackPurpose: FeePurpose =
       sub.joiningOutstanding > 0 && (!sub.paysSubscription || annualOutstanding <= 0)
         ? "joining"
         : sub.paysSubscription && annualOutstanding > 0
           ? "annual"
-          : isApplicant
-            ? "joining"
-            : "accommodation";
+          : extras?.kind === "accommodation"
+            ? "accommodation"
+            : extras?.kind === "corkage"
+              ? "corkage"
+              : extras?.kind === "custom"
+                ? "other"
+                : isApplicant
+                  ? "joining"
+                  : "annual";
     const nextPurpose: FeePurpose =
       initialPurpose && purposes.includes(initialPurpose) ? initialPurpose : fallbackPurpose;
     setPurpose(nextPurpose);
@@ -184,11 +217,11 @@ export function MemberPaymentForm({
           ? sub.joiningOutstanding
           : nextPurpose === "annual" && sub.paysSubscription
             ? annualOutstanding
-            : 0;
+            : Number(chargedPurpose(nextPurpose)[0]?.amount || 0);
     setRows([
       newRow({
         methodId: defaultMethodId,
-        amount: seed > 0 ? seed.toFixed(2) : "",
+        amount: wholeKesText(seed),
         mpesaMode: isApplicant ? "manual" : "stk",
       }),
     ]);
@@ -211,7 +244,7 @@ export function MemberPaymentForm({
 
   useEffect(() => {
     if (!formOpen) return;
-    if (purpose !== "joining" && purpose !== "annual") return;
+    if (suggestedAmount <= EPSILON) return;
     setRows((prev) => {
       if (prev.length !== 1) return prev;
       const only = prev[0];
@@ -220,18 +253,20 @@ export function MemberPaymentForm({
       return [
         {
           ...only,
-          amount: suggestedAmount > 0 ? suggestedAmount.toFixed(2) : "",
+          amount: wholeKesText(suggestedAmount),
         },
       ];
     });
   }, [formOpen, purpose, suggestedAmount]);
 
-  const allocated = round2(rows.reduce((sum, row) => sum + Math.max(toNum(row.amount), 0), 0));
+  const allocated = roundKes(rows.reduce((sum, row) => sum + Math.max(toNum(row.amount), 0), 0));
   const target =
-    purpose === "joining" || purpose === "annual" ? suggestedAmount : allocated;
+    purpose === "joining" || purpose === "annual" || billedChargeAmount > EPSILON
+      ? suggestedAmount
+      : allocated;
   const remaining =
-    purpose === "joining" || purpose === "annual"
-      ? round2(suggestedAmount - allocated)
+    purpose === "joining" || purpose === "annual" || billedChargeAmount > EPSILON
+      ? roundKes(suggestedAmount - allocated)
       : 0;
 
   const queryClient = useQueryClient();
@@ -241,7 +276,8 @@ export function MemberPaymentForm({
   const purposeEnabled = (p: FeePurpose) => {
     if (p === "joining") return sub.joiningOutstanding > 0;
     if (p === "annual") return sub.paysSubscription && annualOutstanding > 0;
-    return true;
+    if (isApplicant) return false;
+    return chargedPurpose(p).some((c) => c.amount > EPSILON);
   };
 
   const methodOf = (row: PaymentRow) =>
@@ -286,7 +322,7 @@ export function MemberPaymentForm({
       ...prev,
       newRow({
         methodId: defaultMethodId,
-        amount: fill > 0 ? fill.toFixed(2) : "",
+        amount: wholeKesText(fill),
       }),
     ]);
   };
@@ -303,11 +339,11 @@ export function MemberPaymentForm({
 
   const fillRemaining = (id: string) => {
     if (purpose !== "joining" && purpose !== "annual") return;
-    const other = round2(
+    const other = roundKes(
       rows.reduce((sum, row) => (row.id === id ? sum : sum + Math.max(toNum(row.amount), 0)), 0),
     );
-    const next = round2(Math.max(suggestedAmount - other, 0));
-    updateRow(id, { amount: next > 0 ? next.toFixed(2) : "" });
+    const next = roundKes(Math.max(suggestedAmount - other, 0));
+    updateRow(id, { amount: wholeKesText(next) });
   };
 
   const validate = () => {
@@ -316,12 +352,6 @@ export function MemberPaymentForm({
     }
     const active = rows.filter((r) => toNum(r.amount) > EPSILON);
     if (!active.length) throw new Error("Enter at least one payment amount.");
-
-    if (purpose === "joining" || purpose === "annual") {
-      if (remaining < -EPSILON) {
-        throw new Error("Allocated payments exceed the amount due. Reduce a row.");
-      }
-    }
 
     for (const row of active) {
       const code = methodCodeOf(row);
@@ -387,7 +417,7 @@ export function MemberPaymentForm({
     try {
       const result = await stkPush.mutateAsync({
         phone: row.mpesaPhone.trim(),
-        amount,
+        amount: roundKes(amount),
         feeTypeCode: FEE_PURPOSE_CODE[purpose],
         accountReference: sub.membershipNo ?? undefined,
       });
@@ -436,7 +466,7 @@ export function MemberPaymentForm({
           body: JSON.stringify({
             paymentMethodId: Number(row.methodId),
             feeTypeCode: FEE_PURPOSE_CODE[purpose],
-            amount: round2(toNum(row.amount)),
+            amount: roundKes(toNum(row.amount)),
             paymentDate: paidAt,
             mpesaCode: isMpesa ? row.mpesaCode.trim().toUpperCase() || undefined : undefined,
             mpesaPhone: isMpesa ? row.mpesaPhone.trim() || undefined : undefined,
@@ -452,7 +482,7 @@ export function MemberPaymentForm({
               (purpose === "accommodation" || purpose === "corkage" || purpose === "other")
                 ? lineDescription.trim() || FEE_PURPOSE_LABEL[purpose]
                 : undefined,
-            nmChargeId: !isApplicant ? nmChargeId || undefined : undefined,
+            nmChargeId: !isApplicant ? billedCharge?.id || nmChargeId || undefined : undefined,
             subscriptionYear:
               !isApplicant && purpose === "annual" ? annualBillingYear : undefined,
             paymentStatusCode:
@@ -490,7 +520,7 @@ export function MemberPaymentForm({
             layout === "page" && "rounded-xl border border-slate-200 bg-white p-5 shadow-sm",
             layout === "dialog" && "overflow-y-auto border-b border-border bg-muted/40 px-5 py-5 lg:border-b-0 lg:border-r",
           )}>
-            <StepHeading step={1} title="Review Dues" />
+            <StepHeading title="Review Dues" />
 
             <div className={cn(layout === "dialog" && "rounded-2xl border border-border bg-card p-4 shadow-sm")}>
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -499,41 +529,43 @@ export function MemberPaymentForm({
               <div className="mt-3 space-y-2.5 text-sm">
                 <div className="flex justify-between gap-3">
                   <span className="text-muted-foreground">Annual Dues ({annualBillingYear})</span>
-                  <strong className="tabular-nums">{formatKes(sub.paysSubscription ? annualOutstanding : 0)}</strong>
+                  <strong className="tabular-nums">{formatKes(sub.paysSubscription ? Math.max(0, annualOutstanding - Number(sub.broughtForward || 0)) : 0)}</strong>
                 </div>
-                {!isApplicant ? (
+                {Number(sub.broughtForward || 0) > EPSILON ? (
                   <div className="flex justify-between gap-3">
-                    <span className="text-muted-foreground">Club Card Credit</span>
-                    <strong className="tabular-nums font-medium text-rose-400">
-                      ({formatKes(sub.clubCreditBalance ?? 0)})
+                    <span className="text-muted-foreground">Brought forward (prior years)</span>
+                    <strong className="tabular-nums text-amber-800">{formatKes(Number(sub.broughtForward))}</strong>
+                  </div>
+                ) : null}
+                {(sub.joiningPaymentStatus ?? "") !== "NotBilled" ? (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">Joining balance</span>
+                    <strong
+                      className={cn(
+                        "tabular-nums",
+                        sub.joiningOutstanding <= EPSILON && "text-emerald-600",
+                      )}
+                    >
+                      {formatKes(sub.joiningOutstanding)}
                     </strong>
                   </div>
                 ) : null}
-                <div className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">Joining balance</span>
-                  <strong
-                    className={cn(
-                      "tabular-nums",
-                      sub.joiningOutstanding <= EPSILON && "text-emerald-600",
-                    )}
-                  >
-                    {formatKes(sub.joiningOutstanding)}
-                  </strong>
-                </div>
                 {!isApplicant && sub.upcomingYear && upcomingOutstanding > 0 && sub.outstanding > EPSILON ? (
                   <div className="flex justify-between gap-3 text-xs text-amber-800">
                     <span>{sub.upcomingYear} renewal also unpaid</span>
                     <span className="tabular-nums">{formatKes(upcomingOutstanding)}</span>
                   </div>
                 ) : null}
+                {openCharges.map((charge) => (
+                  <div key={`${charge.kind}-${charge.id}`} className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">{charge.description}</span>
+                    <strong className="tabular-nums">{formatKes(charge.amount)}</strong>
+                  </div>
+                ))}
                 <div className="my-1 border-t border-border" />
                 <div className="flex justify-between gap-3 text-base">
                   <span className="font-semibold">Net Dues</span>
                   <strong className="tabular-nums">{formatKes(sub.balance)}</strong>
-                </div>
-                <div className="flex justify-between gap-3 text-xs text-muted-foreground">
-                  <span>Tier</span>
-                  <span>{sub.membershipTypeName ?? sub.membershipTypeCode ?? "—"}</span>
                 </div>
               </div>
             </div>
@@ -551,24 +583,24 @@ export function MemberPaymentForm({
                 value={purpose}
                 onChange={(e) => setPurpose(e.target.value as FeePurpose)}
               >
-                {purposes.map((p) => {
-                  const locked = !purposeEnabled(p) && (p === "joining" || p === "annual");
-                  return (
-                    <option key={p} value={p} disabled={locked}>
+                {purposes.filter(purposeEnabled).length === 0 ? (
+                  <option value={purpose}>No invoiced fees yet</option>
+                ) : (
+                  purposes.filter(purposeEnabled).map((p) => (
+                    <option key={p} value={p}>
                       {FEE_PURPOSE_LABEL[p]}
-                      {locked ? " (nothing due)" : ""}
                     </option>
-                  );
-                })}
+                  ))
+                )}
               </select>
             </div>
 
-            <div className="space-y-1.5">
+            {/* <div className="space-y-1.5">
               <Label className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 Payment date
               </Label>
               <Input type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} className="rounded-xl" />
-            </div>
+            </div> */}
 
             {(purpose === "accommodation" || purpose === "corkage" || purpose === "other") && (
               <div className="space-y-1.5">
@@ -599,7 +631,7 @@ export function MemberPaymentForm({
               "flex items-center justify-between gap-3",
               layout === "page" ? "px-5 pt-5" : "border-b border-border px-5 py-3",
             )}>
-              <StepHeading step={2} title="Payment Allocation" />
+              <StepHeading title="Payment Allocation" />
               <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={addRow} disabled={busy}>
                 <Plus className="size-4" /> Add row
               </Button>
@@ -679,10 +711,11 @@ export function MemberPaymentForm({
                           className="rounded-xl"
                           type="number"
                           min="0"
-                          step="0.01"
+                          step="1"
+                          inputMode="numeric"
                           value={row.amount}
-                          onChange={(e) => updateRow(row.id, { amount: e.target.value })}
-                          placeholder="0.00"
+                          onChange={(e) => updateRow(row.id, { amount: parseWholeKes(e.target.value) })}
+                          placeholder="0"
                         />
                       </div>
                     </div>
@@ -922,6 +955,10 @@ export function MemberPaymentForm({
                 <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                   {error}
                 </div>
+              ) : (purpose === "joining" || purpose === "annual") && allocated > roundKes(suggestedAmount) + EPSILON ? (
+                <p className="text-xs text-muted-foreground">
+                  The fee balance is cleared first. Any extra is applied to the other open fee, then carried forward.
+                </p>
               ) : null}
             </div>
 
@@ -974,12 +1011,9 @@ export function MemberPaymentForm({
   );
 }
 
-function StepHeading({ step, title }: { step: number; title: string }) {
+function StepHeading({ title }: { title: string }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
-        {step}
-      </span>
       <h4 className="text-sm font-semibold tracking-tight">{title}</h4>
     </div>
   );

@@ -775,15 +775,20 @@ public class InterviewConductService : IInterviewConductService
             : meeting.MeetingName!;
         var when = $"{meeting.MeetingDate:dddd, dd MMMM yyyy}"
             + (string.IsNullOrWhiteSpace(meeting.MeetingTime) ? "" : $" at {meeting.MeetingTime}");
+        if (meeting.DurationMinutes is int mins && mins > 0)
+            when += $" ({mins} min)";
         var portal = (_app.PublicBaseUrl ?? "http://localhost:8080").TrimEnd('/');
-        var link = string.IsNullOrWhiteSpace(meeting.MinutesUrl) ? null : meeting.MinutesUrl.Trim();
-        var linkLine = link is null ? "" : $"\nJoin / meeting link: {link}\n";
+        var inPerson = string.Equals(meeting.VenueMode, "IN_PERSON", StringComparison.OrdinalIgnoreCase);
+        var place = inPerson
+            ? (string.IsNullOrWhiteSpace(meeting.Location) ? null : $"\nLocation: {meeting.Location.Trim()}\n")
+            : (string.IsNullOrWhiteSpace(meeting.MinutesUrl) ? null : $"\nJoin / meeting link: {meeting.MinutesUrl.Trim()}\n");
+        var noteLine = string.IsNullOrWhiteSpace(meeting.Notes) ? "" : $"\nNote: {meeting.Notes.Trim()}\n";
 
         var applicantName = string.Join(" ", new[] { app.Applicant.FirstName, app.Applicant.LastName }.Where(v => !string.IsNullOrWhiteSpace(v)));
         var applicantSubject = $"Interview scheduled: {label} — {meeting.MeetingDate:dd MMM yyyy}";
         var applicantBody =
             $"Dear {applicantName},\n\nYou are invited to attend your membership interview.\n\n" +
-            $"Application: {app.ApplicationNo}\nMeeting: {label}\nWhen: {when}{linkLine}\n" +
+            $"Application: {app.ApplicationNo}\nMeeting: {label}\nWhen: {when}{place}{noteLine}\n" +
             $"Open your portal: {portal}/applications";
 
         await PushInviteAsync(
@@ -800,7 +805,7 @@ public class InterviewConductService : IInterviewConductService
         var committeeSubject = $"Interview sitting: {applicantName} — {meeting.MeetingDate:dd MMM yyyy}";
         var committeeBody =
             $"{applicantName} ({app.ApplicationNo}) is scheduled for interview.\n\n" +
-            $"Meeting: {label}\nWhen: {when}{linkLine}\nOpen committee desk: {portal}/manage-committee/meetings";
+            $"Meeting: {label}\nWhen: {when}{place}{noteLine}\nOpen committee desk: {portal}/manage-committee/meetings";
 
         var members = await _db.CommitteeMembers.AsNoTracking()
             .Include(m => m.Member)

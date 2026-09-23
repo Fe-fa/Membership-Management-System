@@ -352,7 +352,8 @@ BEGIN
     );
 END");
         await DevelopmentSeeder.SeedAsync(db);
-        var bulk = await BulkMemberSeeder.SeedAsync(db);
+        var fillBulk = app.Configuration.GetValue("Seed:BulkMembers", false);
+        var bulk = await BulkMemberSeeder.SeedAsync(db, CancellationToken.None, allowTopUp: fillBulk);
         app.Logger.LogInformation("Bulk member seed: {Message}", bulk.Message);
     }
     catch (Exception ex)

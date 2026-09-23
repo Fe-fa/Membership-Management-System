@@ -3,6 +3,7 @@ using ClubManagement.DTOs.Common;
 using ClubManagement.DTOs.MembershipAccount;
 using ClubManagement.Entities;
 using ClubManagement.Entities.Facilities;
+using ClubManagement.Entities.Finance;
 using ClubManagement.Entities.Subscriptions;
 using ClubManagement.Services.Finance;
 using ClubManagement.Services.MembershipApplication;
@@ -191,10 +192,19 @@ public class MemberDashboardService : IMemberDashboardService
             && jd.Year == year
             && jd > new DateOnly(year, 6, 30);
 
-        var joining = await ResolveJoiningDuesAsync(account, cancellationToken);
-        decimal amountDue = 0, amountPaid = 0, outstanding = 0;
+        var joiningRaw = await ResolveJoiningDuesAsync(account, cancellationToken);
+        var joiningInvoiced = joiningRaw.Waived
+            || joiningRaw.Paid > 0.01m
+            || await HasPublishedJoiningInvoiceAsync(account.AccountId, account.ApplicationId, cancellationToken);
+        var joining = joiningInvoiced
+            ? joiningRaw
+            : (Due: 0m, Paid: 0m, Outstanding: 0m, Waived: joiningRaw.Waived);
+        decimal amountDue = 0, amountPaid = 0, outstanding = 0, broughtForward = 0;
         string standingCode;
         string detail;
+
+        var invoiceIssued = pays && !isLifeExempt
+            && await HasPublishedInvoiceAsync(account.AccountId, year, cancellationToken);
 
         if (!pays || isLifeExempt)
         {
@@ -203,35 +213,74 @@ public class MemberDashboardService : IMemberDashboardService
                 ? "Life / Senior Life members are exempt from annual subscription (Ksh 0)."
                 : "This membership class does not pay an annual subscription.";
         }
-        else
+        else if (invoiceIssued)
         {
-            await _finance.ReconcileAccountDuesAsync(account.AccountId, cancellationToken);
-            await EnsureYearSubscriptionAsync(account.AccountId, account.MembershipTypeId, discount, year, cancellationToken);
-            // Mid-year joiners (after 30 June) show half-rate indicator and adjust unpaid schedule once.
-            if (halfYear)
-            {
-                var subAdj = await _db.Subscriptions
-                    .FirstOrDefaultAsync(s => s.AccountId == account.AccountId && s.SubscriptionYear == year, cancellationToken);
-                if (subAdj is not null && subAdj.AmountPaid == 0 && fullAnnual > 0)
+                await _finance.ReconcileAccountDuesAsync(account.AccountId, cancellationToken);
+                // Mid-year joiners (after 30 June) show half-rate indicator and adjust unpaid schedule once.
+                if (halfYear)
                 {
-                    var half = Math.Round(fullAnnual * (100 - discount) / 100m * 0.5m, 2, MidpointRounding.AwayFromZero);
-                    if (subAdj.AmountDue != half)
+                    var subAdj = await _db.Subscriptions
+                        .FirstOrDefaultAsync(s => s.AccountId == account.AccountId && s.SubscriptionYear == year, cancellationToken);
+                    if (subAdj is not null && subAdj.AmountPaid == 0 && fullAnnual > 0)
                     {
-                        subAdj.AmountDue = half;
-                        subAdj.ArrearsAmount = Math.Max(0, half - subAdj.AmountPaid);
-                        await _db.SaveChangesAsync(cancellationToken);
+                        var half = Math.Round(fullAnnual * (100 - discount) / 100m * 0.5m, 2, MidpointRounding.AwayFromZero);
+                        if (subAdj.AmountDue != half)
+                        {
+                            subAdj.AmountDue = half;
+                            subAdj.ArrearsAmount = Math.Max(0, half - subAdj.AmountPaid);
+                            await _db.SaveChangesAsync(cancellationToken);
+                        }
                     }
                 }
-            }
 
-            var sub = await _db.Subscriptions.AsNoTracking()
-                .FirstOrDefaultAsync(s => s.AccountId == account.AccountId && s.SubscriptionYear == year, cancellationToken);
-            amountDue = sub?.AmountDue ?? 0;
-            amountPaid = sub?.AmountPaid ?? 0;
-            outstanding = Math.Max(0, amountDue - amountPaid);
-            var standing = await ResolveStandingAsync(account.AccountId, priv, account.CurrentMemberStatus.Code, cancellationToken);
-            standingCode = standing.Code;
-            detail = standing.Detail;
+                var sub = await _db.Subscriptions.AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.AccountId == account.AccountId && s.SubscriptionYear == year, cancellationToken);
+                amountDue = sub?.AmountDue ?? 0;
+                amountPaid = sub?.AmountPaid ?? 0;
+                var priorSubs = await _db.Subscriptions.AsNoTracking()
+                    .Where(s => s.AccountId == account.AccountId && s.SubscriptionYear < year && !s.WaivedFlag)
+                    .ToListAsync(cancellationToken);
+                var priorUnpaid = priorSubs.Sum(s => Math.Max(0, s.AmountDue - s.AmountPaid));
+                var yearExcess = Math.Max(0, amountPaid - amountDue);
+                broughtForward = Math.Max(0, priorUnpaid - yearExcess);
+                outstanding = Math.Max(0, amountDue - amountPaid) + broughtForward;
+                var standing = await ResolveStandingAsync(account.AccountId, priv, account.CurrentMemberStatus.Code, cancellationToken);
+                standingCode = standing.Code;
+                detail = standing.Detail;
+                if (broughtForward > 0.01m)
+                    detail = $"{detail} Includes {broughtForward:0.##} KES brought forward from prior year(s).".Trim();
+        }
+        else
+        {
+            amountDue = 0;
+            amountPaid = 0;
+            var priorSubs = await _db.Subscriptions.AsNoTracking()
+                .Where(s => s.AccountId == account.AccountId && s.SubscriptionYear < year && !s.WaivedFlag)
+                .ToListAsync(cancellationToken);
+            broughtForward = priorSubs.Sum(s => Math.Max(0, s.AmountDue - s.AmountPaid));
+            outstanding = broughtForward;
+            if (joiningInvoiced && joining.Outstanding > 0.01m)
+            {
+                standingCode = "Unpaid";
+                detail = "Joining fee invoice is unpaid.";
+            }
+            else if (broughtForward > 0.01m)
+            {
+                standingCode = "Unpaid";
+                detail = $"Prior-year subscription of {broughtForward:0.##} KES was brought forward to {year}.";
+            }
+            else
+            {
+                standingCode = "InGoodStanding";
+                detail = "No invoice has been issued yet. Amounts appear after Finance generates your invoice.";
+            }
+        }
+
+        if (joiningInvoiced && joining.Outstanding > 0.01m
+            && standingCode is "InGoodStanding" or "NotApplicable")
+        {
+            standingCode = "Unpaid";
+            detail = "Joining fee invoice is unpaid.";
         }
 
         var clubCredit = Math.Max(0, joining.Paid - joining.Due) + Math.Max(0, amountPaid - amountDue);
@@ -243,7 +292,8 @@ public class MemberDashboardService : IMemberDashboardService
                 .Where(s => s.AccountId == account.AccountId && s.SubscriptionYear > year)
                 .OrderBy(s => s.SubscriptionYear)
                 .FirstOrDefaultAsync(cancellationToken);
-            if (upcoming is not null)
+            if (upcoming is not null
+                && await HasPublishedInvoiceAsync(account.AccountId, upcoming.SubscriptionYear, cancellationToken))
             {
                 upcomingYear = upcoming.SubscriptionYear;
                 upcomingDue = upcoming.AmountDue;
@@ -252,12 +302,15 @@ public class MemberDashboardService : IMemberDashboardService
             }
         }
 
-        var duesBalance = outstanding + joining.Outstanding + upcomingOutstanding;
+        var openCharges = await ListOpenBilledChargesAsync(account.AccountId, cancellationToken);
+        var billedExtras = openCharges.Sum(c => c.Amount);
+        var membershipDues = outstanding + joining.Outstanding + upcomingOutstanding;
+        var duesBalance = membershipDues + billedExtras;
         var canVote = account.MembershipType.CanVote;
-        var votingBlocked = canVote && duesBalance > 0;
+        var votingBlocked = canVote && membershipDues > 0;
 
-        // Heal stale POSTED/REMOVED flags once the ledger is fully paid.
-        if (duesBalance <= 0)
+        // Heal stale POSTED/REMOVED flags only after a published invoice is settled.
+        if (invoiceIssued && membershipDues <= 0)
         {
             var statusCode = (account.CurrentMemberStatus?.Code ?? "").Trim().ToUpperInvariant();
             if (statusCode is "REMOVED" or "POSTED")
@@ -292,6 +345,7 @@ public class MemberDashboardService : IMemberDashboardService
             AmountDue = amountDue,
             AmountPaid = amountPaid,
             Outstanding = outstanding,
+            BroughtForward = broughtForward,
             DueDate = due,
             PostingDeadline = posting,
             RemovalDeadline = removal,
@@ -314,12 +368,13 @@ public class MemberDashboardService : IMemberDashboardService
             ContinuousMembershipYears = years,
             AgeYears = age,
             StatusCode = account.CurrentMemberStatus?.Code ?? "",
+            IsActive = account.IsActive,
             UpcomingYear = upcomingYear,
             UpcomingAmountDue = upcomingDue,
             UpcomingAmountPaid = upcomingPaid,
             UpcomingOutstanding = upcomingOutstanding,
             UpcomingPaymentStatus = upcomingYear is null
-                ? "Unpaid"
+                ? "NotBilled"
                 : await ResolveLiveFeeStatusAsync(
                     account.AccountId,
                     "ANNUAL",
@@ -328,7 +383,9 @@ public class MemberDashboardService : IMemberDashboardService
                     upcomingOutstanding,
                     waived: false,
                     cancellationToken),
-            AnnualPaymentStatus = await ResolveLiveFeeStatusAsync(
+            AnnualPaymentStatus = !invoiceIssued && pays && !isLifeExempt
+                ? "NotBilled"
+                : await ResolveLiveFeeStatusAsync(
                 account.AccountId,
                 "ANNUAL",
                 amountDue,
@@ -336,14 +393,17 @@ public class MemberDashboardService : IMemberDashboardService
                 outstanding,
                 waived: isLifeExempt,
                 cancellationToken),
-            JoiningPaymentStatus = await ResolveLiveFeeStatusAsync(
+            JoiningPaymentStatus = !joiningInvoiced && !joining.Waived
+                ? "NotBilled"
+                : await ResolveLiveFeeStatusAsync(
                 account.AccountId,
                 "JOINING",
                 joining.Due,
                 joining.Paid,
                 joining.Outstanding,
                 waived: joining.Waived,
-                cancellationToken)
+                cancellationToken),
+            OpenCharges = openCharges
         };
     }
 
@@ -398,6 +458,31 @@ public class MemberDashboardService : IMemberDashboardService
 
         if (feeCode == "ANNUAL" && !account.MembershipType.CanAccessSubscriptions)
             throw new InvalidOperationException("This membership class does not pay subscriptions.");
+        if (feeCode == "ANNUAL")
+        {
+            var billYear = request.SubscriptionYear ?? DateTime.UtcNow.Year;
+            if (!await HasPublishedInvoiceAsync(account.AccountId, billYear, cancellationToken))
+                throw new InvalidOperationException(
+                    "Finance has not issued an invoice for this year yet. Amounts appear after the invoice is generated.");
+        }
+        if (feeCode == "JOINING")
+        {
+            if (!account.EntranceFeeWaivedFlag
+                && !await HasPublishedJoiningInvoiceAsync(account.AccountId, account.ApplicationId, cancellationToken))
+                throw new InvalidOperationException(
+                    "Finance has not issued an invoice for the joining fee yet. Amounts appear after the invoice is generated.");
+        }
+        if (feeCode is "ACCOMMODATION" or "CORKAGE" or "OTHER")
+        {
+            var open = await ListOpenBilledChargesAsync(account.AccountId, cancellationToken);
+            var billed = request.NmChargeId is long billedId
+                ? open.FirstOrDefault(c => c.Id == billedId && c.FeeTypeCode == feeCode)
+                : open.FirstOrDefault(c => c.FeeTypeCode == feeCode);
+            if (billed is null)
+                throw new InvalidOperationException(
+                    "No invoice has been issued for this charge yet. Amounts appear after Finance generates the invoice.");
+            request.NmChargeId = billed.Id;
+        }
 
         var fee = await _db.FeeTypes.FirstOrDefaultAsync(
                 x => x.Code == feeCode || x.Code == request.FeeTypeCode,
@@ -554,8 +639,7 @@ public class MemberDashboardService : IMemberDashboardService
                     && (t.PaymentStatus.Code == "PAID"
                         || t.PaymentStatus.Code == "WAIVED"
                         || t.PaymentStatus.Code == "PARTIALLY_PAID"
-                        || t.PaymentStatus.Code == "SETTLED"
-                        || t.PaymentStatus.Code == "REFUNDED"))
+                        || t.PaymentStatus.Code == "SETTLED"))
                 .SumAsync(t => (decimal?)t.Amount, cancellationToken) ?? 0;
         }
 
@@ -1759,9 +1843,15 @@ public class MemberDashboardService : IMemberDashboardService
 
         var year = DateTime.UtcNow.Year;
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (!await HasPublishedInvoiceAsync(accountId, year, cancellationToken))
+            return ("InGoodStanding", "No invoice has been issued yet. Amounts appear after Finance generates the invoice.");
+
         var sub = await _db.Subscriptions.AsNoTracking()
             .FirstOrDefaultAsync(s => s.AccountId == accountId && s.SubscriptionYear == year, cancellationToken);
         var outstanding = sub is null ? 0 : Math.Max(0, sub.AmountDue - sub.AmountPaid);
+        outstanding += await _db.Subscriptions.AsNoTracking()
+            .Where(s => s.AccountId == accountId && s.SubscriptionYear < year && !s.WaivedFlag && s.AmountPaid < s.AmountDue)
+            .SumAsync(s => s.AmountDue - s.AmountPaid, cancellationToken);
 
         // Paid-up members are in good standing even if account status was not yet restored.
         if (outstanding <= 0)
@@ -1775,6 +1865,102 @@ public class MemberDashboardService : IMemberDashboardService
         if (today >= new DateOnly(year, 2, 1))
             return ("Posted", "Reminder: unpaid members are posted after 28 February.");
         return ("InGoodStanding", "Annual subscription is due 1 January.");
+    }
+
+    private async Task<bool> HasPublishedInvoiceAsync(long accountId, int year, CancellationToken cancellationToken)
+    {
+        if (await _db.MembershipInvoices.AsNoTracking()
+            .AnyAsync(i => i.AccountId == accountId && i.Year == year && i.PublishedToMember, cancellationToken))
+            return true;
+        return await _db.BillingDocuments.AsNoTracking()
+            .AnyAsync(d =>
+                d.AccountId == accountId
+                && d.Year == year
+                && d.Kind == "INVOICE"
+                && d.FeeType == "ANNUAL"
+                && (d.Status == "APPROVED" || d.Status == "PUBLISHED"),
+                cancellationToken);
+    }
+
+    private async Task<bool> HasPublishedJoiningInvoiceAsync(
+        long accountId,
+        long? applicationId,
+        CancellationToken cancellationToken)
+    {
+        return await _db.BillingDocuments.AsNoTracking()
+            .AnyAsync(d =>
+                d.Kind == "INVOICE"
+                && d.FeeType == "JOINING"
+                && (d.Status == "APPROVED" || d.Status == "PUBLISHED")
+                && (d.AccountId == accountId
+                    || (applicationId != null && d.ApplicationId == applicationId)),
+                cancellationToken);
+    }
+
+    private async Task<List<MemberOpenChargeDto>> ListOpenBilledChargesAsync(long accountId, CancellationToken cancellationToken)
+    {
+        var approved = await _db.BillingDocuments.AsNoTracking()
+            .Where(d =>
+                d.AccountId == accountId
+                && d.Kind == "INVOICE"
+                && d.ChargeId != null
+                && (d.Status == "APPROVED" || d.Status == "PUBLISHED"))
+            .Select(d => new { d.FeeType, ChargeId = d.ChargeId!.Value })
+            .ToListAsync(cancellationToken);
+        var roomIds = approved.Where(x => x.FeeType == "ACCOMMODATION").Select(x => x.ChargeId).ToHashSet();
+        var corkageIds = approved.Where(x => x.FeeType == "CORKAGE").Select(x => x.ChargeId).ToHashSet();
+        var customIds = approved.Where(x => x.FeeType is "CUSTOM" or "OTHER").Select(x => x.ChargeId).ToHashSet();
+
+        var rooms = await _db.NmAccommodationBookings.AsNoTracking()
+            .Where(x => x.AccountId == accountId && x.Status == "PENDING_ADVANCE_PAYMENT" && x.TotalAmount > 0 && roomIds.Contains(x.NmAccommodationBookingId))
+            .Select(x => new
+            {
+                x.NmAccommodationBookingId,
+                x.RoomNumber,
+                x.CheckInDate,
+                x.CheckOutDate,
+                x.TotalAmount
+            })
+            .ToListAsync(cancellationToken);
+
+        var corkage = await _db.NmCorkageCharges.AsNoTracking()
+            .Where(x => x.AccountId == accountId && x.Status == "PENDING" && x.FeeAmount > 0 && corkageIds.Contains(x.NmCorkageChargeId))
+            .Select(x => new { x.NmCorkageChargeId, x.ItemDescription, x.FeeAmount })
+            .ToListAsync(cancellationToken);
+
+        var custom = await _db.NmCustomCharges.AsNoTracking()
+            .Where(x => x.AccountId == accountId && x.Status == "PENDING" && x.TotalAmount > 0 && customIds.Contains(x.NmCustomChargeId))
+            .Select(x => new { x.NmCustomChargeId, x.Category, x.TotalAmount })
+            .ToListAsync(cancellationToken);
+
+        var items = new List<MemberOpenChargeDto>(rooms.Count + corkage.Count + custom.Count);
+        items.AddRange(rooms.Select(x => new MemberOpenChargeDto
+        {
+            Kind = "accommodation",
+            Id = x.NmAccommodationBookingId,
+            Description = string.IsNullOrWhiteSpace(x.RoomNumber)
+                ? $"Accommodation {x.CheckInDate:dd MMM} – {x.CheckOutDate:dd MMM}"
+                : $"Accommodation · Room {x.RoomNumber}",
+            Amount = x.TotalAmount,
+            FeeTypeCode = "ACCOMMODATION"
+        }));
+        items.AddRange(corkage.Select(x => new MemberOpenChargeDto
+        {
+            Kind = "corkage",
+            Id = x.NmCorkageChargeId,
+            Description = x.ItemDescription,
+            Amount = x.FeeAmount,
+            FeeTypeCode = "CORKAGE"
+        }));
+        items.AddRange(custom.Select(x => new MemberOpenChargeDto
+        {
+            Kind = "custom",
+            Id = x.NmCustomChargeId,
+            Description = (x.Category ?? "Custom charge").Replace("_", " "),
+            Amount = x.TotalAmount,
+            FeeTypeCode = "OTHER"
+        }));
+        return items;
     }
 
     private async Task EnsureYearSubscriptionAsync(long accountId, long membershipTypeId, int discount, int year, CancellationToken cancellationToken)

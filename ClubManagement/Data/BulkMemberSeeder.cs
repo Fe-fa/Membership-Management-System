@@ -69,12 +69,19 @@ public static class BulkMemberSeeder
 
     public static async Task<BulkMemberSeedResult> SeedAsync(
         ApplicationModuleDbContext db,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool allowTopUp = false)
     {
         var existing = await db.Profiles.IgnoreQueryFilters()
             .CountAsync(p => p.Email != null && p.Email.StartsWith(EmailPrefix), cancellationToken);
         if (existing >= TargetCount)
             return new BulkMemberSeedResult(0, existing, "Already at 700 seeded members — nothing inserted.");
+        // Restarts must not keep inserting 1–N demo members (that inflates Finance “Members with revenue”).
+        if (existing > 0 && !allowTopUp)
+            return new BulkMemberSeedResult(
+                0,
+                existing,
+                $"Demo seed already present ({existing} members). Startup will not add more. Set Seed:BulkMembers=true to fill to {TargetCount}.");
 
         var tenant = await db.Tenants.IgnoreQueryFilters()
             .FirstOrDefaultAsync(t => t.Code == "ACEA", cancellationToken)

@@ -22,7 +22,7 @@ import { applicationQueryKey, validateSection } from "@/services/membership/useA
 import { isClubMember, isAuthenticated, readPortalMode, readUser } from "@/lib/auth";
 import { formatKes } from "@/utils/format";
 import { cn } from "@/utils/cn";
-import { FEES, ageOn, emptyDraft, type MembershipType } from "@/services/membership/schema";
+import { emptyDraft } from "@/services/membership/schema";
 import { STEPS, type StepId } from "@/services/membership/steps";
 import { useMemberDashboard, fallbackMemberDashboard } from "@/services/member/dashboard";
 import { useApplicationDues } from "@/components/payments";
@@ -157,21 +157,13 @@ function ApplicantHome() {
   const requiredDocuments = 3 + (draft.aviation.holdsLicense ? 1 : 0);
   const documentPercent = (uploadedDocuments / Math.max(requiredDocuments, 1)) * 100;
 
-  const membershipType = draft.membership.membershipType as MembershipType | undefined;
-  const age = ageOn(draft.personal.dateOfBirth);
-  const feePlan = membershipType ? FEES[membershipType] : null;
-  // Prefer finance dues API (prorated annual) — same source as Payment page.
-  const joiningDue = dues.data
-    ? Number(dues.data.joiningFee || 0)
-    : feePlan
-      ? age !== null && age < 30
-        ? feePlan.joiningUnder30
-        : feePlan.joining
-      : 0;
-  const annualDue = dues.data
-    ? Number(dues.data.annualSubscription || 0)
-    : (feePlan?.annual ?? 0);
-  const estimatedDue = dues.data ? Number(dues.data.balance || 0) : joiningDue + annualDue;
+  const membershipType = draft.membership.membershipType;
+  const joiningInvoiced = Boolean(dues.data?.joiningInvoiced);
+  const annualInvoiced = Boolean(dues.data?.annualInvoiced);
+  const feeInvoiced = joiningInvoiced || annualInvoiced;
+  const joiningDue = joiningInvoiced ? Number(dues.data?.joiningBalance || 0) : 0;
+  const annualDue = annualInvoiced ? Number(dues.data?.annualBalance || 0) : 0;
+  const estimatedDue = joiningDue + annualDue;
   const ballotLabel = mine.data?.[0]?.applicantBallotLabel;
   const statusDisplay = ballotLabel || STATUS_COPY[status] || status;
 
@@ -277,7 +269,7 @@ function ApplicantHome() {
                   Member type · {membershipType || "Pending selection"}
                 </Badge>
                 <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary">
-                  Dues · {membershipType ? formatKes(estimatedDue) : "—"}
+                  {feeInvoiced ? `Dues · ${formatKes(estimatedDue)}` : "Waiting for invoice"}
                 </Badge>
               </div>
             </div>
@@ -360,36 +352,46 @@ function ApplicantHome() {
           <Card className="shadow-sm">
             <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 pb-2">
               <CardTitle className="text-xl tracking-tight">Payment</CardTitle>
-              <Badge variant="secondary">{membershipType ? "Ready" : "Pending"}</Badge>
+              <Badge variant="secondary">{feeInvoiced ? "Invoice issued" : "Waiting for invoice"}</Badge>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <p className="text-2xl font-semibold tracking-tight">
-                  {membershipType ? formatKes(estimatedDue) : "—"}
+              {feeInvoiced ? (
+                <>
+                  <div>
+                    <p className="text-2xl font-semibold tracking-tight">{formatKes(estimatedDue)}</p>
+                    <p className="text-sm text-muted-foreground">Balance due</p>
+                  </div>
+                  <dl className="space-y-2 text-sm">
+                    {joiningInvoiced ? (
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-muted-foreground">Joining fee</dt>
+                        <dd className="font-medium">{formatKes(joiningDue)}</dd>
+                      </div>
+                    ) : null}
+                    {annualInvoiced ? (
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-muted-foreground">Annual subscription</dt>
+                        <dd className="font-medium">{formatKes(annualDue)}</dd>
+                      </div>
+                    ) : null}
+                    <div className="flex justify-between gap-3 border-t border-border pt-2">
+                      <dt className="font-medium">Balance due</dt>
+                      <dd className="font-semibold">{formatKes(estimatedDue)}</dd>
+                    </div>
+                  </dl>
+                  <Button asChild className="w-full">
+                    <Link to="/payment">
+                      <CreditCard className="size-4" />
+                      Make a payment
+                      <ArrowRight className="size-4" />
+                    </Link>
+                  </Button>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Fees stay hidden until the manager or the finance desk issues an invoice for the entrance fee or annual subscription.
                 </p>
-                <p className="text-sm text-muted-foreground">Balance due</p>
-              </div>
-              <dl className="space-y-2 text-sm">
-                <div className="flex justify-between gap-3">
-                  <dt className="text-muted-foreground">Joining fee</dt>
-                  <dd className="font-medium">{membershipType ? formatKes(joiningDue) : "—"}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-muted-foreground">Annual subscription</dt>
-                  <dd className="font-medium">{membershipType ? formatKes(annualDue) : "—"}</dd>
-                </div>
-                <div className="flex justify-between gap-3 border-t border-border pt-2">
-                  <dt className="font-medium">Balance due</dt>
-                  <dd className="font-semibold">{membershipType ? formatKes(estimatedDue) : "—"}</dd>
-                </div>
-              </dl>
-              <Button asChild className="w-full">
-                <Link to="/payment">
-                  <CreditCard className="size-4" />
-                  Make a payment
-                  <ArrowRight className="size-4" />
-                </Link>
-              </Button>
+              )}
             </CardContent>
           </Card>
 

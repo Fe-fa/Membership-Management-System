@@ -23,6 +23,36 @@ function yn(value: boolean | undefined) {
   return value ? "Yes" : "No";
 }
 
+function phoneLine(prefix?: string | null, number?: string | null) {
+  const code = (prefix ?? "").trim();
+  const line = (number ?? "").trim();
+  if (!code && !line) return "—";
+  if (!code) return line;
+  if (!line) return code;
+  return `${code} ${line}`;
+}
+
+function membershipClassLabel(value?: string | null) {
+  const raw = (value ?? "").trim();
+  if (!raw) return "—";
+  const key = raw.toLowerCase().replace(/[^a-z]/g, "");
+  if (key === "full" || key.startsWith("fullmember")) return "Full Member";
+  if (key.startsWith("country")) return "Country";
+  if (key.startsWith("overseas")) return "Overseas";
+  if (key.startsWith("life")) return "Life";
+  if (key.startsWith("temporary")) return "Temporary";
+  return raw;
+}
+
+function isPassportPhoto(doc: { typeCode?: string | null; label: string }) {
+  const code = (doc.typeCode ?? "").replace(/[\s_-]/g, "").toUpperCase();
+  if (code === "PHOTO") return true;
+  if (code === "IDPASSPORT" || code === "ID") return false;
+  const label = doc.label.toLowerCase();
+  if (/\bid\b|licence|license|curriculum|vitae|cheque/.test(label)) return false;
+  return label.includes("passport photo") || label === "photo";
+}
+
 function resolveUploadUrl(url?: string | null) {
   if (!url) return undefined;
   if (/^https?:\/\//i.test(url)) return url;
@@ -38,8 +68,8 @@ function isImageFile(fileName?: string, url?: string) {
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</p>
-      <p className="mt-1 text-sm text-foreground">{value}</p>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="mt-1 break-words text-sm font-medium text-foreground">{value}</p>
     </div>
   );
 }
@@ -56,6 +86,7 @@ export function parseApplicationDraft(formDataJson?: string | null): Application
 type ReviewDoc = {
   key: string;
   applicationDocumentId?: number;
+  typeCode?: string | null;
   label: string;
   fileName: string;
   url?: string;
@@ -71,6 +102,7 @@ function collectDocuments(draft: ApplicationDraft, stored: ApplicationDocumentRo
     return {
       key: `stored-${doc.applicationDocumentId}`,
       applicationDocumentId: doc.applicationDocumentId,
+      typeCode: doc.documentTypeCode,
       label:
         doc.documentTypeName ||
         DOCUMENT_TYPE_LABEL[doc.documentTypeId] ||
@@ -139,7 +171,9 @@ export function ApplicantReview({
   documents?: ApplicationDocumentRow[];
 }) {
   const docs = collectDocuments(draft, documents);
-  const photo = docs.find((doc) => doc.preview && doc.url);
+  const passport = docs.find((doc) => isPassportPhoto(doc) && doc.url);
+  const portraitUrl = passport?.url ?? resolveUploadUrl(draft.personal.photo?.url);
+  const portraitName = passport?.fileName ?? draft.personal.photo?.fileName ?? "Passport photo";
   const queryClient = useQueryClient();
 
   const verify = useMutation({
@@ -170,15 +204,14 @@ export function ApplicantReview({
         <Card>
           <CardHeader>
             <CardTitle>Passport photo</CardTitle>
-            <CardDescription>Uploaded with the application.</CardDescription>
           </CardHeader>
           <CardContent>
-            {photo?.url ? (
-              <a href={photo.url} target="_blank" rel="noreferrer" className="block">
+            {portraitUrl ? (
+              <a href={portraitUrl} target="_blank" rel="noreferrer" className="block">
                 <img
-                  src={photo.url}
-                  alt={photo.fileName}
-                  className="h-56 w-full rounded-lg border border-border object-cover"
+                  src={portraitUrl}
+                  alt={portraitName}
+                  className="h-56 w-full rounded-lg border border-border bg-secondary object-contain"
                 />
               </a>
             ) : (
@@ -198,18 +231,15 @@ export function ApplicantReview({
           <CardHeader>
             <CardTitle>Personal details</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-3">
+          <CardContent className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="First name" value={dash(draft.personal.firstName)} />
             <Field label="Middle name" value={dash(draft.personal.middleName)} />
             <Field label="Last name" value={dash(draft.personal.lastName)} />
             <Field label="Email" value={dash(draft.personal.email)} />
-            <Field label="Alt. email" value={dash(draft.personal.altEmail)} />
-            <Field
-              label="Mobile"
-              value={`${dash(draft.personal.telPrefix)} ${dash(draft.personal.mobile)}`}
-            />
-            <Field label="Tel. other" value={dash(draft.personal.telOther)} />
-            <Field label="ID / Passport" value={dash(draft.personal.idPassportNo)} />
+            <Field label="Alternate email" value={dash(draft.personal.altEmail)} />
+            <Field label="Mobile" value={phoneLine(draft.personal.telPrefix, draft.personal.mobile)} />
+            <Field label="Other telephone" value={dash(draft.personal.telOther)} />
+            <Field label="ID or passport number" value={dash(draft.personal.idPassportNo)} />
             <Field label="Nationality" value={dash(draft.personal.nationality)} />
             <Field label="Date of birth" value={formatKenyaDate(draft.personal.dateOfBirth)} />
             <Field label="Place of birth" value={dash(draft.personal.placeOfBirth)} />
@@ -226,7 +256,7 @@ export function ApplicantReview({
 
         <Card>
           <CardHeader>
-            <CardTitle>Family &amp; emergency contact</CardTitle>
+            <CardTitle>Family and emergency contact</CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-4">
@@ -234,28 +264,27 @@ export function ApplicantReview({
               <Field label="Has children" value={yn(draft.family.hasChildren)} />
             </div>
             {(draft.family.spouses ?? []).length > 0 ? (
-              <div className="grid grid-cols-1 gap-x-6 gap-y-4 lg:grid-cols-2">
+              <div className="space-y-4">
                 {(draft.family.spouses ?? []).map((spouse, index) => (
-                  <Field
-                    key={`spouse-${index}`}
-                    label={`Spouse ${index + 1}`}
-                    value={`${dash(spouse.name)} Â· ${dash(spouse.phone)} Â· ${dash(spouse.email)}`}
-                  />
+                  <div key={`spouse-${index}`} className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <Field label={`Spouse ${index + 1} name`} value={dash(spouse.name)} />
+                    <Field label={`Spouse ${index + 1} phone`} value={dash(spouse.phone)} />
+                    <Field label={`Spouse ${index + 1} email`} value={dash(spouse.email)} />
+                  </div>
                 ))}
               </div>
             ) : null}
             {(draft.family.children ?? []).length > 0 ? (
-              <div className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-3">
+              <div className="space-y-4">
                 {(draft.family.children ?? []).map((child, index) => (
-                  <Field
-                    key={`child-${index}`}
-                    label={`Child ${index + 1}`}
-                    value={`${dash(child.name)} Â· ${formatKenyaDate(child.dateOfBirth)}`}
-                  />
+                  <div key={`child-${index}`} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <Field label={`Child ${index + 1} name`} value={dash(child.name)} />
+                    <Field label={`Child ${index + 1} date of birth`} value={formatKenyaDate(child.dateOfBirth)} />
+                  </div>
                 ))}
               </div>
             ) : null}
-            <div className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
               <Field label="Emergency contact" value={dash(draft.family.emergencyName)} />
               <Field label="Emergency phone" value={dash(draft.family.emergencyPhone)} />
               <Field label="Emergency email" value={dash(draft.family.emergencyEmail)} />
@@ -265,43 +294,37 @@ export function ApplicantReview({
 
         <Card>
           <CardHeader>
-            <CardTitle>Aviation &amp; membership</CardTitle>
+            <CardTitle>Aviation and membership</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-3">
+          <CardContent className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Affiliated" value={yn(draft.aviation.isAffiliated)} />
             <Field label="Aviation role" value={dash(draft.aviation.aviationRole)} />
             <Field label="Holds licence" value={yn(draft.aviation.holdsLicense)} />
-            <Field
-              label="Licence"
-              value={`${dash(draft.aviation.licenseType)} Â· ${dash(draft.aviation.licenseNumber)}`}
-            />
-            <Field label="Issuer" value={dash(draft.aviation.licenseIssuer)} />
+            <Field label="Licence type" value={dash(draft.aviation.licenseType)} />
+            <Field label="Licence number" value={dash(draft.aviation.licenseNumber)} />
+            <Field label="Licence issuer" value={dash(draft.aviation.licenseIssuer)} />
             <Field label="Owns aircraft" value={yn(draft.aviation.ownsAircraft)} />
-            <Field
-              label="Aircraft"
-              value={`${dash(draft.aviation.aircraftType)} Â· ${dash(draft.aviation.aircraftRegistration)}`}
-            />
+            <Field label="Aircraft type" value={dash(draft.aviation.aircraftType)} />
+            <Field label="Registration" value={dash(draft.aviation.aircraftRegistration)} />
             <Field label="Hangar" value={dash(draft.aviation.hangarLocation)} />
-            <Field label="Membership type" value={dash(draft.membership.membershipType)} />
-            <Field
-              label="Applicant signature"
-              value={`${dash(draft.membership.applicantSignature)} Â· ${formatKenyaDate(draft.membership.signatureDate)}`}
-            />
+            <Field label="Applied for" value={membershipClassLabel(draft.membership.membershipType)} />
+            <Field label="Applicant signature" value={dash(draft.membership.applicantSignature)} />
+            <Field label="Signature date" value={formatKenyaDate(draft.membership.signatureDate)} />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Supporters, clubs &amp; consent</CardTitle>
+            <CardTitle>Supporters, clubs and consent</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-3">
+          <CardContent className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Proposer" value={dash(draft.supporters.proposer?.name)} />
-            <Field label="Proposer since" value={dash(draft.supporters.proposer?.yearOfJoining)} />
+            <Field label="Member since" value={dash(draft.supporters.proposer?.yearOfJoining)} />
             <Field label="Proposer phone" value={dash(draft.supporters.proposer?.phone)} />
             <Field label="Seconder" value={dash(draft.supporters.seconder?.name)} />
-            <Field label="Seconder since" value={dash(draft.supporters.seconder?.yearOfJoining)} />
+            <Field label="Member since" value={dash(draft.supporters.seconder?.yearOfJoining)} />
             <Field label="Seconder phone" value={dash(draft.supporters.seconder?.phone)} />
-            <Field label="Other clubs" value={yn(draft.clubs.memberOfOtherClub)} />
+            <Field label="Member of another club" value={yn(draft.clubs.memberOfOtherClub)} />
             <Field
               label="Club names"
               value={
@@ -311,21 +334,16 @@ export function ApplicantReview({
                   .join(", ") || "—"
               }
             />
-            <Field label="Privacy accepted" value={yn(Boolean(draft.consent.privacyPolicyAccepted))} />
+            <Field label="Privacy policy accepted" value={yn(Boolean(draft.consent.privacyPolicyAccepted))} />
             <Field label="Declaration accepted" value={yn(Boolean(draft.consent.declarationAccepted))} />
-            <Field
-              label="Declaration signature"
-              value={`${dash(draft.consent.declarationSignature)} Â· ${formatKenyaDate(draft.consent.declarationDate)}`}
-            />
+            <Field label="Declaration signature" value={dash(draft.consent.declarationSignature)} />
+            <Field label="Declaration date" value={formatKenyaDate(draft.consent.declarationDate)} />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
             <CardTitle>Uploaded documents</CardTitle>
-            <CardDescription>
-              Open each file, then verify that it belongs to this applicant and is acceptable.
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {docs.length === 0 ? (
@@ -346,7 +364,7 @@ export function ApplicantReview({
                       </span>
                       <div className="min-w-0">
                         <p className="font-medium text-foreground">{doc.label}</p>
-                        <p className="truncate text-sm text-muted-foreground">{doc.fileName}</p>
+                        <p className="break-words text-sm text-muted-foreground">{doc.fileName}</p>
                         {doc.verificationNotes ? (
                           <p className="mt-1 text-xs text-muted-foreground">{doc.verificationNotes}</p>
                         ) : null}
@@ -365,7 +383,7 @@ export function ApplicantReview({
                                 : "bg-secondary text-secondary-foreground",
                         )}
                       >
-                        {verified ? "Verified" : rejected ? "Not accepted" : doc.uploaded ? "Needs check" : "Missing"}
+                        {verified ? "Verified" : rejected ? "Rejected" : doc.uploaded ? "Needs check" : "Missing"}
                       </span>
                       {doc.url ? (
                         <>
@@ -383,11 +401,11 @@ export function ApplicantReview({
                           </Button>
                         </>
                       ) : null}
-                      {doc.applicationDocumentId ? (
+                      {doc.applicationDocumentId && !verified && !rejected ? (
                         <>
                           <Button
                             size="sm"
-                            disabled={verify.isPending || verified}
+                            disabled={verify.isPending}
                             onClick={() =>
                               verify.mutate({
                                 applicationDocumentId: doc.applicationDocumentId!,
@@ -395,13 +413,15 @@ export function ApplicantReview({
                               })
                             }
                           >
-                            {verify.isPending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                            {verify.isPending && verify.variables?.applicationDocumentId === doc.applicationDocumentId && verify.variables?.verified ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : null}
                             Verify
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
-                            disabled={verify.isPending || rejected}
+                            disabled={verify.isPending}
                             onClick={() =>
                               verify.mutate({
                                 applicationDocumentId: doc.applicationDocumentId!,

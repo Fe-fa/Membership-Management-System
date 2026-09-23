@@ -171,12 +171,12 @@ export function MemberStatementDialog({ open, onClose, mode, year }: Props) {
       >
         <DialogHeader>
           <DialogTitle>
-            {mode === "self" ? "My statement of account" : "Print member statement"}
+            {mode === "self" ? "My statement of invoices" : "Print member statement"}
           </DialogTitle>
           <DialogDescription>
             {mode === "self"
-              ? "Choose a period and print your statement of account."
-              : "Look up a member and print their statement of account."}
+              ? "Choose a period and print the invoices issued to your account."
+              : "Look up a member and print the invoices issued to their account."}
           </DialogDescription>
         </DialogHeader>
 

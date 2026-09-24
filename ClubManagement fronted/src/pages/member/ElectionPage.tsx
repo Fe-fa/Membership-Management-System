@@ -3,6 +3,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  ClipboardList,
   CloudUpload,
   FileText,
   Gavel,
@@ -25,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { isStaff, readUser } from "@/lib/auth";
+import { useMemberDashboard } from "@/services/member/dashboard";
 import { apiRequest, extractErrorMessage, uploadFile } from "@/services/membership/api";
 import { cn } from "@/utils/cn";
 import { KENYA_TIME_ZONE } from "@/utils/kenyaDate";
@@ -190,7 +192,7 @@ const MEMBER_ELECTION_CYCLES = [
   },
 ];
 
-/** Standalone Election page — AGM notices / member ballot. Committee application ballot is never shown here. */
+/** Standalone Election page — AGM notices / member ballot, plus Committee For/Against for sitting members. */
 export function ElectionPage() {
   return <MemberElectionCards />;
 }
@@ -492,6 +494,8 @@ function CountdownBanner({
 
 function MemberElectionCards() {
   const { staff, mine, data, countdown, notice, items, votedCount } = useMemberElection();
+  const member = useMemberDashboard();
+  const showCommitteeVote = Boolean(member.data?.cards.committeeBallot);
 
   return (
     <PageFrame width="lg">
@@ -540,6 +544,34 @@ function MemberElectionCards() {
                 <p className="mt-1 text-sm text-muted-foreground">{description}</p>
               </Link>
             ))}
+            {showCommitteeVote ? (
+              <>
+                <Link
+                  to="/election/committee-vote"
+                  className="rounded-xl border border-border bg-background px-4 py-4 shadow-sm transition-colors hover:border-emerald-600 hover:bg-emerald-50/40"
+                >
+                  <span className="inline-flex size-9 items-center justify-center rounded-full border border-border">
+                    <ClipboardList className="size-4" />
+                  </span>
+                  <p className="mt-3 font-medium">Committee vote</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Review a membership applicant, then vote For or Against.
+                  </p>
+                </Link>
+                <Link
+                  to="/election/committee-signatures"
+                  className="rounded-xl border border-border bg-background px-4 py-4 shadow-sm transition-colors hover:border-emerald-600 hover:bg-emerald-50/40"
+                >
+                  <span className="inline-flex size-9 items-center justify-center rounded-full border border-border">
+                    <ScrollText className="size-4" />
+                  </span>
+                  <p className="mt-3 font-medium">Signatures</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Sign as a Committee member when a ballot has passed.
+                  </p>
+                </Link>
+              </>
+            ) : null}
           </div>
         </section>
 

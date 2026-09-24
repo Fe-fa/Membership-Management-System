@@ -58,6 +58,8 @@ builder.Services.AddScoped<IMemberAccountProvisioner, MemberAccountProvisioner>(
 builder.Services.AddScoped<IMemberLifecycleService, MemberLifecycleService>();
 builder.Services.AddScoped<IMemberProfileService, MemberProfileService>();
 builder.Services.AddScoped<IMemberDashboardService, MemberDashboardService>();
+builder.Services.AddScoped<IMembershipTransitionService, MembershipTransitionService>();
+builder.Services.AddHostedService<MembershipTransitionWorker>();
 builder.Services.AddScoped<IEndorsementInviteService, EndorsementInviteService>();
 builder.Services.AddScoped<IManagerStageService, ManagerStageService>();
 builder.Services.AddScoped<ICommitteeService, CommitteeService>();
@@ -156,6 +158,8 @@ using (var scope = app.Services.CreateScope())
         await nmBilling.EnsureSchemaAsync(CancellationToken.None);
         var finance = scope.ServiceProvider.GetRequiredService<IFinanceService>();
         await finance.EnsureSchemaAsync(CancellationToken.None);
+        var transitions = scope.ServiceProvider.GetRequiredService<IMembershipTransitionService>();
+        await transitions.EnsureSchemaAsync(CancellationToken.None);
         var supportDesk = scope.ServiceProvider.GetRequiredService<ISupportService>();
         await supportDesk.EnsureSchemaAsync(CancellationToken.None);
         await db.Database.ExecuteSqlRawAsync(@"
@@ -333,6 +337,8 @@ if (app.Environment.IsDevelopment())
         await nmBilling.EnsureSchemaAsync(CancellationToken.None);
         var finance = scope.ServiceProvider.GetRequiredService<IFinanceService>();
         await finance.EnsureSchemaAsync(CancellationToken.None);
+        var transitions = scope.ServiceProvider.GetRequiredService<IMembershipTransitionService>();
+        await transitions.EnsureSchemaAsync(CancellationToken.None);
         var supportDesk = scope.ServiceProvider.GetRequiredService<ISupportService>();
         await supportDesk.EnsureSchemaAsync(CancellationToken.None);
         await db.Database.ExecuteSqlRawAsync(@"

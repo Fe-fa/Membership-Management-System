@@ -1,9 +1,19 @@
+import { useState } from "react";
 import { Check, Loader2 } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   applicantInitials,
   ballotPhotoUrl,
@@ -134,6 +144,7 @@ export function BallotCandidateCard({
   row,
   seats,
   busy,
+  canVoteOnBehalf = false,
   onVote,
   onSetVoting,
   onMoveToSignatures,
@@ -141,7 +152,8 @@ export function BallotCandidateCard({
   row: BallotItem;
   seats: Seat[];
   busy: boolean;
-  onVote: (voteValue: "FOR" | "AGAINST") => void;
+  canVoteOnBehalf?: boolean;
+  onVote: (voteValue: "FOR" | "AGAINST", voterProfileId?: number) => void;
   onSetVoting: (open: boolean) => void;
   onMoveToSignatures: () => void;
 }) {
@@ -154,6 +166,26 @@ export function BallotCandidateCard({
   const photo = ballotPhotoUrl(row);
   const totalVoters = seats.length;
   const nonVoters = Math.max(totalVoters - row.votesCast, 0);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [behalfProfileId, setBehalfProfileId] = useState("");
+  const [behalfVote, setBehalfVote] = useState<"FOR" | "AGAINST" | "">("");
+
+  const unvotedMembers = seats.filter((s) => s.present && !votedIds.has(s.profileId));
+  const canOpenOptions =
+    canVoteOnBehalf && votingOpen && !row.autoRejected && unvotedMembers.length > 0;
+
+  function closeOptions() {
+    setOptionsOpen(false);
+    setBehalfProfileId("");
+    setBehalfVote("");
+  }
+
+  function submitOnBehalf() {
+    const profileId = Number(behalfProfileId);
+    if (!profileId || (behalfVote !== "FOR" && behalfVote !== "AGAINST")) return;
+    onVote(behalfVote, profileId);
+    closeOptions();
+  }
 
   return (
     <article className="space-y-4">
@@ -288,6 +320,23 @@ export function BallotCandidateCard({
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Actions
               </p>
+              {canVoteOnBehalf ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy || !canOpenOptions}
+                  title={
+                    !votingOpen
+                      ? "Open voting first"
+                      : unvotedMembers.length === 0
+                        ? "Mark attendance first, or every present member has already voted"
+                        : "Record a vote for a member who cannot use the portal or voted in person"
+                  }
+                  onClick={() => setOptionsOpen(true)}
+                >
+                  Voting options
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="secondary"
@@ -346,6 +395,77 @@ export function BallotCandidateCard({
           .
         </p>
       ) : null}
+
+      <Dialog
+        open={optionsOpen}
+        onOpenChange={(open) => {
+          if (!open) closeOptions();
+          else setOptionsOpen(true);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Voting options</DialogTitle>
+            <DialogDescription>
+              Record a vote for {row.applicantName} on behalf of a present Committee member who
+              cannot use the portal or who voted in person. Mark attendance first if needed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <label className="grid gap-1.5 text-sm">
+              <Label>Committee member</Label>
+              <select
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={behalfProfileId}
+                onChange={(e) => setBehalfProfileId(e.target.value)}
+                disabled={busy}
+              >
+                <option value="">Select member…</option>
+                {unvotedMembers.map((seat) => (
+                  <option key={seat.committeeMemberId} value={seat.profileId}>
+                    {seat.name}
+                    {seat.roleName ? ` · ${seat.roleName}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="grid gap-1.5">
+              <Label>Vote</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={behalfVote === "FOR" ? "default" : "outline"}
+                  disabled={busy}
+                  onClick={() => setBehalfVote("FOR")}
+                >
+                  For
+                </Button>
+                <Button
+                  type="button"
+                  variant={behalfVote === "AGAINST" ? "default" : "outline"}
+                  disabled={busy}
+                  onClick={() => setBehalfVote("AGAINST")}
+                >
+                  Against
+                </Button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={busy} onClick={closeOptions}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={busy || !behalfProfileId || !behalfVote}
+              onClick={submitOnBehalf}
+            >
+              {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+              Record vote
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </article>
   );
 }

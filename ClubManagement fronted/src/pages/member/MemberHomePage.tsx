@@ -12,10 +12,24 @@ import {
   Vote,
   Wine,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import heroImage from "@/assets/acea-hero.jpg";
 import { AdminPortalCard } from "@/components/card/AdminPortalCard";
+import { Button } from "@/components/ui/button";
 import type { MemberDashboard } from "@/services/member/dashboard";
+import { apiRequest, extractErrorMessage } from "@/services/membership/api";
+import { formatMembershipDate } from "@/services/admin/membershipDesk";
+import { printHtmlDocument } from "@/utils/financeExport";
+
+type LifeLetter = {
+  membershipTransitionId: number;
+  kind: string;
+  at: string;
+  emailed: boolean;
+  html: string;
+};
 
 export function MemberHomePage({ me }: { me: MemberDashboard }) {
   const cards = [
@@ -63,7 +77,7 @@ export function MemberHomePage({ me }: { me: MemberDashboard }) {
       id: "committee-ballot",
       title: "Committee Ballot",
       description: "Membership admission ballot per candidate (Article 6).",
-      to: "/committee-ballot/attendance",
+      to: "/election/committee-vote",
       icon: ClipboardList,
       tone: "violet" as const,
       locked: !me.cards.committeeBallot,
@@ -135,6 +149,12 @@ export function MemberHomePage({ me }: { me: MemberDashboard }) {
     },
   ];
 
+  const letter = useQuery({
+    queryKey: ["member-life-letter", me.profileId],
+    enabled: me.profileId > 0,
+    queryFn: () => apiRequest<LifeLetter | undefined>("/api/members/me/life-letter"),
+  });
+
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
       <section className="relative overflow-hidden rounded-2xl">
@@ -155,6 +175,27 @@ export function MemberHomePage({ me }: { me: MemberDashboard }) {
           {me.childrenRequiringOwnMembership} child record(s) are 21 or over and should take out their own
           membership (Bye-Laws).
         </p>
+      ) : null}
+      {letter.data ? (
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-4 py-4">
+          <div>
+            <h2 className="text-base font-semibold">Congratulations</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              You were promoted to {letter.data.kind} on {formatMembershipDate(letter.data.at)}.
+              {letter.data.emailed ? " A copy was sent to your email." : ""}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              const html = letter.data?.html;
+              if (!html || !printHtmlDocument(html)) toast.error("Allow pop-ups to open your letter.");
+            }}
+          >
+            Open letter
+          </Button>
+        </section>
       ) : null}
       <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {cards

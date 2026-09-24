@@ -10,8 +10,15 @@ public record AdminOverviewDto(
     FacilityRollup Facilities);
 
 public record ApplicationRollup(int PendingApprovals, int Waitlisted, int Rejected, int ExistingMembers);
-public record FinanceRollup(decimal AnnualSubscriptionRevenue, decimal OutstandingBalances, IReadOnlyList<PaymentMethodCount> RecentTransactions);
-public record PaymentMethodCount(string Method, int Count);
+public record FinanceRollup(
+    decimal AnnualSubscriptionRevenue,
+    decimal OutstandingBalances,
+    IReadOnlyList<PaymentMethodCount> RecentTransactions,
+    IReadOnlyList<FinanceMonthPoint> Months,
+    IReadOnlyList<RecentPaymentRow> RecentPayments);
+public record PaymentMethodCount(string Method, int Count, decimal Amount);
+public record FinanceMonthPoint(int Month, decimal Receipts, decimal ArrearsOpened);
+public record RecentPaymentRow(string Member, string Method, decimal Amount, string Status, string Date);
 public record GovernanceRollup(int ActiveCommitteeMembers, IReadOnlyList<CommitteeRow> CommitteeMembers, IReadOnlyList<MeetingRow> UpcomingMeetings, IReadOnlyList<DocumentRow> Documents);
 public record CommitteeRow(string Name, string Role);
 public record MeetingRow(string Title, string MeetingDate, string MeetingType, string Status);
@@ -38,12 +45,45 @@ public class DashboardService : IDashboardService
         var members = await _db.Accounts.CountAsync(a => a.IsActive && !a.IsDeleted && a.CurrentMemberStatus.IsActiveStatus, cancellationToken);
 
         var year = DateTime.UtcNow.Year;
+        var yearStart = new DateOnly(year, 1, 1);
+        var yearEnd = new DateOnly(year, 12, 31);
+        var since = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30));
         var revenue = await _db.Subscriptions.Where(s => s.SubscriptionYear == year).SumAsync(s => (decimal?)s.AmountPaid, cancellationToken) ?? 0;
         var outstanding = await _db.Arrearses.Where(a => a.Status == "OPEN").SumAsync(a => (decimal?)a.Amount, cancellationToken) ?? 0;
         var methods = await _db.Transactions.AsNoTracking()
-            .Where(t => t.PaymentDate != null && t.PaymentDate.Value >= DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30)))
+            .Where(t => t.PaymentDate != null && t.PaymentDate >= since)
             .GroupBy(t => t.PaymentMethod.Name)
-            .Select(g => new PaymentMethodCount(g.Key, g.Count()))
+            .Select(g => new PaymentMethodCount(g.Key ?? "Other", g.Count(), g.Sum(x => x.Amount)))
+            .ToListAsync(cancellationToken);
+
+        var yearPayments = await _db.Transactions.AsNoTracking()
+            .Where(t => t.PaymentDate != null && t.PaymentDate >= yearStart && t.PaymentDate <= yearEnd)
+            .Select(t => new { Month = t.PaymentDate!.Value.Month, t.Amount })
+            .ToListAsync(cancellationToken);
+        var yearArrears = await _db.Arrearses.AsNoTracking()
+            .Where(a => a.OpenedDate >= yearStart && a.OpenedDate <= yearEnd)
+            .Select(a => new { a.OpenedDate, a.Amount })
+            .ToListAsync(cancellationToken);
+        var months = Enumerable.Range(1, 12).Select(month => new FinanceMonthPoint(
+            month,
+            yearPayments.Where(row => row.Month == month).Sum(row => row.Amount),
+            yearArrears.Where(row => row.OpenedDate.Month == month).Sum(row => row.Amount))).ToList();
+
+        var recentPayments = await _db.Transactions.AsNoTracking()
+            .Where(t => t.PaymentDate != null)
+            .OrderByDescending(t => t.PaymentDate)
+            .ThenByDescending(t => t.TransactionId)
+            .Take(20)
+            .Select(t => new RecentPaymentRow(
+                t.Account != null
+                    ? ((t.Account.Profile.FirstName ?? "") + " " + (t.Account.Profile.LastName ?? "")).Trim()
+                    : t.Profile != null
+                        ? ((t.Profile.FirstName ?? "") + " " + (t.Profile.LastName ?? "")).Trim()
+                        : "Member",
+                t.PaymentMethod.Name ?? "Payment",
+                t.Amount,
+                t.PaymentStatus.Name ?? t.PaymentStatus.Code ?? "Recorded",
+                t.PaymentDate!.Value.ToString("yyyy-MM-dd")))
             .ToListAsync(cancellationToken);
 
         var committee = await _db.CommitteeMembers.AsNoTracking()
@@ -72,7 +112,7 @@ public class DashboardService : IDashboardService
 
         return new AdminOverviewDto(
             new ApplicationRollup(pending, waitlisted, rejected, members),
-            new FinanceRollup(revenue, outstanding, methods),
+            new FinanceRollup(revenue, outstanding, methods, months, recentPayments),
             new GovernanceRollup(committee.Count, committee, meetings, Array.Empty<DocumentRow>()),
             new FacilityRollup(24, occupied, 24 == 0 ? 0 : occupied / 24m, upcoming));
     }

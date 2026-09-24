@@ -51,16 +51,21 @@ public class MembershipAccountsController : ControllerBase
         return Ok(await _profiles.GetAuditAsync(accountId, cancellationToken));
     }
 
+    [HttpGet("summary")]
+    public async Task<ActionResult<MemberRegisterSummaryDto>> Summary(CancellationToken cancellationToken) =>
+        Ok(await _members.GetRegisterSummaryAsync(cancellationToken));
+
     [HttpGet]
     public async Task<ActionResult<PagedResult<MemberListItemDto>>> Search(
         [FromQuery] PagedRequest paging,
         [FromQuery] string? search,
         [FromQuery] string? status,
         [FromQuery] string? type,
+        [FromQuery] bool withArrears,
         CancellationToken cancellationToken) =>
-        Ok(await _members.SearchAsync(search, status, type, paging, cancellationToken));
+        Ok(await _members.SearchAsync(search, status, type, withArrears, paging, cancellationToken));
 
-    [Authorize(Roles = "GENERAL_MANAGER,CHAIRMAN")]
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,CHAIRMAN")]
     [HttpPost("register-existing")]
     public async Task<ActionResult<RegisterExistingMemberResult>> Register([FromBody] RegisterExistingMemberRequest request, CancellationToken cancellationToken)
     {

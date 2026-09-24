@@ -85,6 +85,7 @@ public partial class ApplicationModuleDbContext : DbContext
     public DbSet<ReversalEntry> ReversalEntries => Set<ReversalEntry>();
     public DbSet<MembershipInvoice> MembershipInvoices => Set<MembershipInvoice>();
     public DbSet<BillingDocument> BillingDocuments => Set<BillingDocument>();
+    public DbSet<MembershipTransition> MembershipTransitions => Set<MembershipTransition>();
     public DbSet<FeeWaiver> FeeWaivers => Set<FeeWaiver>();
     public DbSet<MembershipFeeSchedule> MembershipFeeSchedules => Set<MembershipFeeSchedule>();
     public DbSet<UserAccount> UserAccounts => Set<UserAccount>();
@@ -555,6 +556,12 @@ public partial class ApplicationModuleDbContext : DbContext
             entity.HasOne(x => x.MembershipType).WithMany(x => x.MAccounts).HasForeignKey(x => x.MembershipTypeId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.ElectionType).WithMany(x => x.MAccounts).HasForeignKey(x => x.ElectionTypeId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.CurrentMemberStatus).WithMany(x => x.MAccounts).HasForeignKey(x => x.CurrentMemberStatusId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MembershipTransition>(entity =>
+        {
+            entity.HasKey(x => x.MembershipTransitionId);
+            entity.HasOne(x => x.Account).WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Subscription>(entity =>

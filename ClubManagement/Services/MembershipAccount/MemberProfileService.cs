@@ -343,9 +343,10 @@ public class MemberProfileService : IMemberProfileService
             && arrears <= 0;
         var code = account.MembershipType.Code ?? "";
         var classAllowsVote = account.MembershipType.CanVote && VotingCodes.Contains(code) && !NonVotingCodes.Contains(code);
-        var eligibleSeniorLife = years >= 50;
+        var eligibleSeniorLife = years >= 50
+            && code.Trim().ToUpperInvariant() is "FULL" or "COUNTRY" or "OVERSEAS" or "SENIOR";
         var eligibleSenior = age >= 55 && years >= 25;
-        var recommendedCode = eligibleSeniorLife ? "SENIOR_LIFE" : eligibleSenior ? "SENIOR" : null;
+        var recommendedCode = eligibleSeniorLife ? "LIFE" : eligibleSenior ? "SENIOR" : null;
         MembershipType? recommended = null;
         if (recommendedCode is not null && !code.Equals(recommendedCode, StringComparison.OrdinalIgnoreCase))
             recommended = await _db.MembershipTypes.AsNoTracking().FirstOrDefaultAsync(t => t.Code == recommendedCode, cancellationToken);
@@ -498,11 +499,11 @@ public class MemberProfileService : IMemberProfileService
                 ContinuousMembershipYears = years,
                 EligibleForSenior = eligibleSenior,
                 EligibleForSeniorLife = eligibleSeniorLife,
-                SubscriptionDiscountPercent = eligibleSenior || eligibleSeniorLife ? 50 : 0,
+                SubscriptionDiscountPercent = eligibleSeniorLife ? 100 : eligibleSenior ? 50 : 0,
                 RecommendedMembershipTypeCode = recommended?.Code,
                 RecommendedMembershipTypeName = recommended?.Name,
                 SeniorityReason = eligibleSeniorLife
-                    ? "50 or more years of continuous membership — Senior Life."
+                    ? "50 or more years of continuous membership — Life membership and Life privileges."
                     : eligibleSenior
                         ? "Age 55+ with 25 or more years of continuous membership — Senior (50% subscription)."
                         : $"Age {age?.ToString() ?? "unknown"}; {years} continuous membership year(s).",

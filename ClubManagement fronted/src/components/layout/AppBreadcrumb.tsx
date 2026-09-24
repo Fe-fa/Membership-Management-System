@@ -130,6 +130,10 @@ export function crumbsForLocation(
     rest.push({ label: "AGM/EGM Election", to: "/election/notice" }, { label: "Nominations" });
   } else if (pathname.startsWith("/election/minutes")) {
     rest.push({ label: "AGM/EGM Election", to: "/election/notice" }, { label: "Meeting minutes" });
+  } else if (pathname.startsWith("/election/committee-signatures")) {
+    rest.push({ label: "Applicant election", to: "/election/committee-vote" }, { label: "Signatures" });
+  } else if (pathname.startsWith("/election/committee-vote")) {
+    rest.push({ label: "Applicant election", to: "/election/committee-vote" }, { label: "Committee vote" });
   } else if (pathname.startsWith("/election/vote")) {
     rest.push({ label: "AGM/EGM Election", to: "/election" }, { label: "Cast vote" });
   } else if (pathname.startsWith("/election/appoint-proxy")) {
@@ -161,6 +165,11 @@ export function crumbsForLocation(
       rest.push(
         { label: "Manage records", to: "/existing-members", search: { tab: "dashboard" } },
         { label: "Dashboard" },
+      );
+    } else if (tab === "transition") {
+      rest.push(
+        { label: "Manage records", to: "/existing-members", search: { tab: "dashboard" } },
+        { label: "Member transition" },
       );
     } else {
       rest.push(

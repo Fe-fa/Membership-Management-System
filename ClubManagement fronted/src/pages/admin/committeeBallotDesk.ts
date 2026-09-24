@@ -203,16 +203,29 @@ export function useAdmissionBallot() {
   });
 
   const vote = useMutation({
-    mutationFn: ({ itemId, voteValue }: { itemId: number; voteValue: "FOR" | "AGAINST" }) =>
+    mutationFn: ({
+      itemId,
+      voteValue,
+      voterProfileId,
+    }: {
+      itemId: number;
+      voteValue: "FOR" | "AGAINST";
+      voterProfileId?: number;
+    }) =>
       apiRequest(`/api/committees/ballot/${itemId}/vote`, {
         method: "POST",
-        body: JSON.stringify({ voteValue }),
+        body: JSON.stringify({
+          voteValue,
+          voterProfileId: voterProfileId || undefined,
+        }),
       }),
-    onSuccess: (row: BallotItem) => {
+    onSuccess: (row: BallotItem, vars) => {
       if (row.autoRejected) {
         toast.message(
           `2 adverse votes — excluded until ${row.excludedUntil ?? "one year from today"} (Article 6b).`,
         );
+      } else if (vars.voterProfileId) {
+        toast.success("Vote recorded on behalf of the member.");
       } else {
         toast.success("Vote recorded.");
       }

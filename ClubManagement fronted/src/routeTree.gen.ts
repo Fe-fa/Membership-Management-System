@@ -50,6 +50,8 @@ import { Route as CommitteeBallotSignaturesRouteImport } from './routes/committe
 import { Route as ElectionIndexRouteImport } from './routes/election.index'
 import { Route as ElectionAppointProxyRouteImport } from './routes/election.appoint-proxy'
 import { Route as ElectionAuditRouteImport } from './routes/election.audit'
+import { Route as ElectionCommitteeSignaturesRouteImport } from './routes/election.committee-signatures'
+import { Route as ElectionCommitteeVoteRouteImport } from './routes/election.committee-vote'
 import { Route as ElectionMinutesRouteImport } from './routes/election.minutes'
 import { Route as ElectionNominationsRouteImport } from './routes/election.nominations'
 import { Route as ElectionNoticeRouteImport } from './routes/election.notice'
@@ -306,6 +308,17 @@ const ElectionAppointProxyRoute = ElectionAppointProxyRouteImport.update({
 const ElectionAuditRoute = ElectionAuditRouteImport.update({
   id: '/audit',
   path: '/audit',
+  getParentRoute: () => ElectionRoute,
+} as any)
+const ElectionCommitteeSignaturesRoute =
+  ElectionCommitteeSignaturesRouteImport.update({
+    id: '/committee-signatures',
+    path: '/committee-signatures',
+    getParentRoute: () => ElectionRoute,
+  } as any)
+const ElectionCommitteeVoteRoute = ElectionCommitteeVoteRouteImport.update({
+  id: '/committee-vote',
+  path: '/committee-vote',
   getParentRoute: () => ElectionRoute,
 } as any)
 const ElectionMinutesRoute = ElectionMinutesRouteImport.update({
@@ -609,6 +622,8 @@ export interface FileRoutesByFullPath {
   '/committee-ballot/signatures': typeof CommitteeBallotSignaturesRoute
   '/election/appoint-proxy': typeof ElectionAppointProxyRoute
   '/election/audit': typeof ElectionAuditRoute
+  '/election/committee-signatures': typeof ElectionCommitteeSignaturesRoute
+  '/election/committee-vote': typeof ElectionCommitteeVoteRoute
   '/election/minutes': typeof ElectionMinutesRoute
   '/election/nominations': typeof ElectionNominationsRoute
   '/election/notice': typeof ElectionNoticeRoute
@@ -691,6 +706,8 @@ export interface FileRoutesByTo {
   '/committee-ballot/signatures': typeof CommitteeBallotSignaturesRoute
   '/election/appoint-proxy': typeof ElectionAppointProxyRoute
   '/election/audit': typeof ElectionAuditRoute
+  '/election/committee-signatures': typeof ElectionCommitteeSignaturesRoute
+  '/election/committee-vote': typeof ElectionCommitteeVoteRoute
   '/election/minutes': typeof ElectionMinutesRoute
   '/election/nominations': typeof ElectionNominationsRoute
   '/election/notice': typeof ElectionNoticeRoute
@@ -781,6 +798,8 @@ export interface FileRoutesById {
   '/committee-ballot/signatures': typeof CommitteeBallotSignaturesRoute
   '/election/appoint-proxy': typeof ElectionAppointProxyRoute
   '/election/audit': typeof ElectionAuditRoute
+  '/election/committee-signatures': typeof ElectionCommitteeSignaturesRoute
+  '/election/committee-vote': typeof ElectionCommitteeVoteRoute
   '/election/minutes': typeof ElectionMinutesRoute
   '/election/nominations': typeof ElectionNominationsRoute
   '/election/notice': typeof ElectionNoticeRoute
@@ -875,6 +894,8 @@ export interface FileRouteTypes {
     | '/committee-ballot/signatures'
     | '/election/appoint-proxy'
     | '/election/audit'
+    | '/election/committee-signatures'
+    | '/election/committee-vote'
     | '/election/minutes'
     | '/election/nominations'
     | '/election/notice'
@@ -957,6 +978,8 @@ export interface FileRouteTypes {
     | '/committee-ballot/signatures'
     | '/election/appoint-proxy'
     | '/election/audit'
+    | '/election/committee-signatures'
+    | '/election/committee-vote'
     | '/election/minutes'
     | '/election/nominations'
     | '/election/notice'
@@ -1046,6 +1069,8 @@ export interface FileRouteTypes {
     | '/committee-ballot/signatures'
     | '/election/appoint-proxy'
     | '/election/audit'
+    | '/election/committee-signatures'
+    | '/election/committee-vote'
     | '/election/minutes'
     | '/election/nominations'
     | '/election/notice'
@@ -1419,6 +1444,20 @@ declare module '@tanstack/react-router' {
       path: '/audit'
       fullPath: '/election/audit'
       preLoaderRoute: typeof ElectionAuditRouteImport
+      parentRoute: typeof ElectionRoute
+    }
+    '/election/committee-signatures': {
+      id: '/election/committee-signatures'
+      path: '/committee-signatures'
+      fullPath: '/election/committee-signatures'
+      preLoaderRoute: typeof ElectionCommitteeSignaturesRouteImport
+      parentRoute: typeof ElectionRoute
+    }
+    '/election/committee-vote': {
+      id: '/election/committee-vote'
+      path: '/committee-vote'
+      fullPath: '/election/committee-vote'
+      preLoaderRoute: typeof ElectionCommitteeVoteRouteImport
       parentRoute: typeof ElectionRoute
     }
     '/election/minutes': {
@@ -1808,6 +1847,8 @@ const CommitteeBallotRouteWithChildren = CommitteeBallotRoute._addFileChildren(
 interface ElectionRouteChildren {
   ElectionAppointProxyRoute: typeof ElectionAppointProxyRoute
   ElectionAuditRoute: typeof ElectionAuditRoute
+  ElectionCommitteeSignaturesRoute: typeof ElectionCommitteeSignaturesRoute
+  ElectionCommitteeVoteRoute: typeof ElectionCommitteeVoteRoute
   ElectionMinutesRoute: typeof ElectionMinutesRoute
   ElectionNominationsRoute: typeof ElectionNominationsRoute
   ElectionNoticeRoute: typeof ElectionNoticeRoute
@@ -1821,6 +1862,8 @@ interface ElectionRouteChildren {
 const ElectionRouteChildren: ElectionRouteChildren = {
   ElectionAppointProxyRoute: ElectionAppointProxyRoute,
   ElectionAuditRoute: ElectionAuditRoute,
+  ElectionCommitteeSignaturesRoute: ElectionCommitteeSignaturesRoute,
+  ElectionCommitteeVoteRoute: ElectionCommitteeVoteRoute,
   ElectionMinutesRoute: ElectionMinutesRoute,
   ElectionNominationsRoute: ElectionNominationsRoute,
   ElectionNoticeRoute: ElectionNoticeRoute,

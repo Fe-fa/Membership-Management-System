@@ -389,9 +389,22 @@ public class CommitteesController : ControllerBase
         if (!await CanAccessBallotAsync(cancellationToken)) return BallotForbidden();
         var profileId = User.ProfileId();
         if (profileId is null) return Unauthorized();
+
+        long voterProfileId = profileId.Value;
+        if (request.VoterProfileId is long onBehalf && onBehalf > 0)
+        {
+            if (!User.HasAnyRole("ADMIN", "GENERAL_MANAGER", "CHAIRMAN"))
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new { message = "Only Admin, General Manager, or Chairman may record a vote on behalf of a member." });
+            }
+            voterProfileId = onBehalf;
+        }
+
         try
         {
-            return Ok(await _ballots.CastVoteAsync(itemId, profileId.Value, request.VoteValue, User.UserId(), cancellationToken));
+            return Ok(await _ballots.CastVoteAsync(itemId, voterProfileId, request.VoteValue, User.UserId(), cancellationToken));
         }
         catch (InvalidOperationException ex)
         {

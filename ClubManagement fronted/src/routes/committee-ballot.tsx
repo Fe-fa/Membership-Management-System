@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { canVisitPath, homePathForUser, readUser } from "@/lib/auth";
+import { canVisitPath, homePathForUser, isStaff, readPortalMode, readUser } from "@/lib/auth";
 import { CommitteeBallotLayout } from "@/pages/admin/CommitteeBallotAdmissionPage";
 
 export const Route = createFileRoute("/committee-ballot")({
@@ -8,6 +8,9 @@ export const Route = createFileRoute("/committee-ballot")({
     const user = readUser();
     if (!canVisitPath(user, "/committee-ballot")) {
       throw redirect({ to: homePathForUser(user) });
+    }
+    if (!(isStaff(user) && readPortalMode(user) === "admin")) {
+      throw redirect({ to: "/election/committee-vote" });
     }
   },
   head: () => ({

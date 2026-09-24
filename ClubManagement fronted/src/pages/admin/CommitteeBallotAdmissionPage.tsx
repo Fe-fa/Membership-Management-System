@@ -207,6 +207,8 @@ function InterviewDetailsCard({ data }: { data: AdmissionDesk }) {
 }
 
 export function BallotCandidatesPage() {
+  const user = readUser();
+  const canVoteOnBehalf = hasAnyRole(user, ["ADMIN", "GENERAL_MANAGER", "CHAIRMAN"]);
   return (
     <BallotLoadGate>
       {(ballot) => {
@@ -239,8 +241,13 @@ export function BallotCandidatesPage() {
                     row={row}
                     seats={seats}
                     busy={busy}
-                    onVote={(voteValue) =>
-                      vote.mutate({ itemId: row.committeeBallotItemId, voteValue })
+                    canVoteOnBehalf={canVoteOnBehalf}
+                    onVote={(voteValue, voterProfileId) =>
+                      vote.mutate({
+                        itemId: row.committeeBallotItemId,
+                        voteValue,
+                        voterProfileId,
+                      })
                     }
                     onSetVoting={(open) =>
                       setVoting.mutate({ itemId: row.committeeBallotItemId, open })

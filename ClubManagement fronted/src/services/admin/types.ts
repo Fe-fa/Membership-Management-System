@@ -23,7 +23,10 @@ export type AdminOverview = {
     recentTransactions: {
       method: string;
       count: number;
+      amount?: number;
     }[];
+    months?: { month: number; receipts: number; arrearsOpened: number }[];
+    recentPayments?: { member: string; method: string; amount: number; status: string; date: string }[];
   };
   /** CAM 3 — Club Operations & Governance */
   governance: {

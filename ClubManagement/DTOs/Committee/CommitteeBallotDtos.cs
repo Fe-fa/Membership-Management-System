@@ -11,6 +11,11 @@ public class CastCommitteeBallotRequest
 {
     /// <summary>FOR | AGAINST</summary>
     public string VoteValue { get; set; } = string.Empty;
+    /// <summary>
+    /// When set by Admin / GM / Chairman, records the vote for this sitting member
+    /// (portal unavailable or physical vote). Otherwise the caller votes as themselves.
+    /// </summary>
+    public long? VoterProfileId { get; set; }
 }
 
 public class SetBallotVotingRequest
@@ -91,6 +96,7 @@ public class CommitteeBallotItemDto
     public bool ChairmanSigned { get; set; }
     public bool ReadyForChairman { get; set; }
     public string? AppliedMembershipType { get; set; }
+    public string? Occupation { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
     [JsonPropertyName("voted")]

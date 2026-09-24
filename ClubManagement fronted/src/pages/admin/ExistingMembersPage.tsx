@@ -1,13 +1,14 @@
 ﻿import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { Loader2, Pencil, Trash2, UserPlus, UserRound } from "lucide-react";
+import { useRef, useState } from "react";
+import { Download, FileUp, Loader2, Pencil, Printer, Trash2, UserPlus, UserRound } from "lucide-react";
 import { toast } from "sonner";
 
 import { ListPagination } from "@/components/common/ListPagination";
 import { PageBackLink, PageFrame } from "@/components/layout/PageFrame";
 import { PageBodyLoading, PageDataGate } from "@/components/layout/PageLoading";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +28,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   formatMembershipDate,
@@ -37,6 +45,12 @@ import {
 } from "@/services/admin/membershipDesk";
 import { apiRequest, extractErrorMessage } from "@/services/membership/api";
 import { DEFAULT_PAGE_SIZE, emptyPage, pagedQuery, type PagedResult } from "@/lib/pagination";
+import {
+  downloadMemberImportTemplate,
+  downloadMembersExcel,
+  printMembers,
+  readMemberImportFile,
+} from "@/utils/memberRegisterExport";
 import { cn } from "@/utils/cn";
 
 const routeApi = getRouteApi("/existing-members/");
@@ -78,26 +92,46 @@ export function ExistingMembersPage() {
 
 function ExistingMembersPanel() {
   const queryClient = useQueryClient();
+  const importRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
+  const [classFilter, setClassFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [withArrears, setWithArrears] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [selected, setSelected] = useState<Record<number, MemberRow>>({});
+  const [exportBusy, setExportBusy] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [invite, setInvite] = useState<{ username: string; inviteUrl: string; emailSent: boolean } | null>(null);
 
+  const listQuery = {
+    search: search.trim() || undefined,
+    status: statusFilter === "all" ? undefined : statusFilter,
+    type: classFilter === "all" ? undefined : classFilter,
+    withArrears: withArrears || undefined,
+  };
+
   const members = useQuery({
-    queryKey: ["members", search, page, pageSize],
+    queryKey: ["members", listQuery, page, pageSize],
     queryFn: () =>
       apiRequest<PagedResult<MemberRow>>(
-        `/api/membership-accounts?${pagedQuery({
-          page,
-          pageSize,
-          search: search.trim() || undefined,
-        })}`,
+        `/api/membership-accounts?${pagedQuery({ page, pageSize, ...listQuery })}`,
+      ),
+  });
+  const summary = useQuery({
+    queryKey: ["members", "summary"],
+    queryFn: () =>
+      apiRequest<{ total: number; active: number; inactive: number; withArrears: number }>(
+        "/api/membership-accounts/summary",
       ),
   });
   const types = useQuery({
     queryKey: ["membership-types"],
     queryFn: () => apiRequest<MembershipTypeRow[]>("/api/membership-types"),
+  });
+  const statuses = useQuery({
+    queryKey: ["lookups", "member-statuses"],
+    queryFn: () => apiRequest<LookupRow[]>("/api/lookups/member-statuses"),
   });
 
   const changeType = useMutation({
@@ -152,19 +186,228 @@ function ExistingMembersPanel() {
 
   const pageData = members.data ?? emptyPage<MemberRow>(page, pageSize);
   const rows = pageData.items;
+  const selectedRows = Object.values(selected);
+  const selectedCount = selectedRows.length;
+  const allOnPageSelected = rows.length > 0 && rows.every((row) => Boolean(selected[row.accountId]));
+  const someOnPageSelected = rows.some((row) => Boolean(selected[row.accountId]));
+  const stats = summary.data;
+  const statValue = (value?: number) => (summary.isSuccess && value != null ? value : "—");
+
+  async function fetchMatching() {
+    const collected: MemberRow[] = [];
+    let pageNum = 1;
+    let totalPages = 1;
+    do {
+      const result = await apiRequest<PagedResult<MemberRow>>(
+        `/api/membership-accounts?${pagedQuery({ page: pageNum, pageSize: 500, ...listQuery })}`,
+      );
+      collected.push(...result.items);
+      totalPages = Math.max(1, result.totalPages || 1);
+      pageNum += 1;
+    } while (pageNum <= totalPages);
+    return collected;
+  }
+
+  function rowsForExport(list: MemberRow[]) {
+    return selectedCount > 0 ? selectedRows : list;
+  }
+
+  async function handlePrint() {
+    try {
+      setExportBusy(true);
+      const list = rowsForExport(selectedCount > 0 ? selectedRows : await fetchMatching());
+      if (list.length === 0) {
+        toast.error("Nothing to print.");
+        return;
+      }
+      const title = selectedCount > 0 ? `Member register · ${selectedCount} selected` : "Member register";
+      if (!printMembers(title, list)) toast.error("Could not open the print dialog.");
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setExportBusy(false);
+    }
+  }
+
+  async function handleDownload() {
+    try {
+      setExportBusy(true);
+      const list = rowsForExport(selectedCount > 0 ? selectedRows : await fetchMatching());
+      if (list.length === 0) {
+        toast.error("Nothing to download.");
+        return;
+      }
+      const filename = selectedCount > 0 ? `members-selected-${selectedCount}.csv` : "member-register.csv";
+      downloadMembersExcel(filename, list);
+      toast.success(`Downloaded ${list.length} member(s).`);
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setExportBusy(false);
+    }
+  }
+
+  async function handleImport(file: File) {
+    try {
+      setExportBusy(true);
+      const incoming = await readMemberImportFile(file);
+      if (incoming.length === 0) {
+        toast.error("No member rows found. Use the template columns: FirstName, LastName, Email, MembershipNo, MembershipClass, JoinedDate.");
+        return;
+      }
+      const elections = await apiRequest<LookupRow[]>("/api/lookups/election-types");
+      const electionTypeId = elections[0]?.id ?? 1;
+      const classRows = types.data ?? [];
+      let created = 0;
+      const failures: string[] = [];
+      for (const row of incoming) {
+        const match = classRows.find((type) => {
+          const wanted = row.membershipClass.trim().toLowerCase();
+          return type.code.toLowerCase() === wanted || type.name.toLowerCase() === wanted;
+        });
+        if (!row.email.trim()) {
+          failures.push(`${row.membershipNo}: email is required.`);
+          continue;
+        }
+        if (!match) {
+          failures.push(`${row.membershipNo}: unknown class “${row.membershipClass || "blank"}”.`);
+          continue;
+        }
+        try {
+          await apiRequest("/api/membership-accounts/register-existing", {
+            method: "POST",
+            body: JSON.stringify({
+              firstName: row.firstName,
+              lastName: row.lastName,
+              email: row.email || null,
+              mobile: row.mobile || null,
+              membershipNo: row.membershipNo,
+              membershipTypeId: match.membershipTypeId,
+              electionTypeId,
+              joinedDate: row.joinedDate || new Date().toISOString().slice(0, 10),
+            }),
+          });
+          created += 1;
+        } catch (err) {
+          failures.push(`${row.membershipNo}: ${extractErrorMessage(err)}`);
+        }
+      }
+      void queryClient.invalidateQueries({ queryKey: ["members"] });
+      if (created) toast.success(`Imported ${created} member(s).`);
+      if (failures.length) toast.error(failures.slice(0, 3).join(" "));
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setExportBusy(false);
+      if (importRef.current) importRef.current.value = "";
+    }
+  }
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Input
-          value={search}
-          onChange={(event) => {
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Total members"
+          value={statValue(stats?.total)}
+          active={!withArrears && statusFilter === "all" && classFilter === "all"}
+          onClick={() => {
+            setStatusFilter("all");
+            setClassFilter("all");
+            setWithArrears(false);
             setPage(1);
-            setSearch(event.target.value);
           }}
-          placeholder="Search name, membership no., or email"
-          className="sm:max-w-sm"
         />
+        <StatCard
+          label="Active"
+          value={statValue(stats?.active)}
+          active={statusFilter === "ACTIVE" && !withArrears}
+          onClick={() => {
+            setStatusFilter("ACTIVE");
+            setWithArrears(false);
+            setPage(1);
+          }}
+        />
+        <StatCard
+          label="Inactive"
+          value={statValue(stats?.inactive)}
+          active={statusFilter === "INACTIVE"}
+          onClick={() => {
+            setStatusFilter("INACTIVE");
+            setWithArrears(false);
+            setPage(1);
+          }}
+        />
+        <StatCard
+          label="With arrears"
+          value={statValue(stats?.withArrears)}
+          active={withArrears}
+          onClick={() => {
+            setWithArrears(true);
+            setStatusFilter("all");
+            setPage(1);
+          }}
+        />
+      </div>
+
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="grid flex-1 gap-3 sm:grid-cols-3">
+          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+            Search
+            <Input
+              value={search}
+              onChange={(event) => {
+                setPage(1);
+                setSearch(event.target.value);
+              }}
+              placeholder="Name, membership no., or email"
+            />
+          </label>
+          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+            Class
+            <Select
+              value={classFilter}
+              onValueChange={(value) => {
+                setClassFilter(value);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="font-normal text-foreground">
+                <SelectValue placeholder="All classes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All classes</SelectItem>
+                {(types.data ?? []).map((type) => (
+                  <SelectItem key={type.membershipTypeId} value={type.code}>
+                    {type.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </label>
+          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+            Status
+            <Select
+              value={statusFilter}
+              onValueChange={(value) => {
+                setStatusFilter(value);
+                setWithArrears(false);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="font-normal text-foreground">
+                <SelectValue placeholder="All statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                {(statuses.data ?? []).map((status) => (
+                  <SelectItem key={status.code} value={status.code}>
+                    {status.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </label>
+        </div>
         <Button asChild>
           <Link to="/register-member">
             <UserPlus className="size-4" />
@@ -173,11 +416,64 @@ function ExistingMembersPanel() {
         </Button>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          ref={importRef}
+          type="file"
+          accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void handleImport(file);
+          }}
+        />
+        <Button type="button" variant="outline" size="sm" disabled={exportBusy} onClick={() => importRef.current?.click()}>
+          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <FileUp className="size-4" />}
+          Import Excel
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => downloadMemberImportTemplate()}>
+          <Download className="size-4" />
+          Template
+        </Button>
+        {selectedCount > 0 ? (
+          <Button type="button" variant="ghost" size="sm" onClick={() => setSelected({})}>
+            Clear ({selectedCount})
+          </Button>
+        ) : null}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <Button type="button" variant="outline" size="sm" disabled={exportBusy} onClick={() => void handlePrint()}>
+            {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Printer className="size-4" />}
+            {selectedCount > 0 ? `Print (${selectedCount})` : "Print all"}
+          </Button>
+          <Button type="button" variant="outline" size="sm" disabled={exportBusy} onClick={() => void handleDownload()}>
+            {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+            {selectedCount > 0 ? `Download Excel (${selectedCount})` : "Download Excel"}
+          </Button>
+        </div>
+      </div>
+
       <PageDataGate loading={members.isLoading} label="Loading members…" minHeightClassName="min-h-[22rem]">
       <div className="overflow-x-auto rounded-xl border border-border bg-card">
-        <table className="w-full min-w-[920px] text-sm">
+        <table className="w-full min-w-[980px] text-sm">
           <thead className="bg-secondary/60 text-left">
             <tr>
+              <th className="w-10 px-4 py-3">
+                <Checkbox
+                  checked={allOnPageSelected ? true : someOnPageSelected ? "indeterminate" : false}
+                  onCheckedChange={(value) => {
+                    const checked = value === true;
+                    setSelected((prev) => {
+                      const next = { ...prev };
+                      for (const row of rows) {
+                        if (checked) next[row.accountId] = row;
+                        else delete next[row.accountId];
+                      }
+                      return next;
+                    });
+                  }}
+                  aria-label="Select all members on this page"
+                />
+              </th>
               {["Member", "Class", "Status", "Joined", "Arrears", "Actions"].map((heading) => (
                 <th key={heading} className="px-4 py-3 font-medium">
                   {heading}
@@ -188,7 +484,7 @@ function ExistingMembersPanel() {
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td className="px-4 py-6 text-muted-foreground" colSpan={6}>
+                <td className="px-4 py-6 text-muted-foreground" colSpan={7}>
                   No members yet. Register a legacy member or elect an applicant.
                 </td>
               </tr>
@@ -204,6 +500,20 @@ function ExistingMembersPanel() {
                 const inactive = /inactive|removed|posted/i.test(row.status);
                 return (
                   <tr key={row.accountId} className="border-t border-border">
+                    <td className="px-4 py-3">
+                      <Checkbox
+                        checked={Boolean(selected[row.accountId])}
+                        onCheckedChange={(value) =>
+                          setSelected((prev) => {
+                            const next = { ...prev };
+                            if (value === true) next[row.accountId] = row;
+                            else delete next[row.accountId];
+                            return next;
+                          })
+                        }
+                        aria-label={`Select ${row.fullName}`}
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold">
@@ -300,6 +610,32 @@ function ExistingMembersPanel() {
       />
       <PortalInviteDialog invite={invite} onClose={() => setInvite(null)} />
     </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  active,
+  onClick,
+}: {
+  label: string;
+  value: number | string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-xl border bg-card px-4 py-3 text-left transition-colors",
+        active ? "border-primary" : "hover:bg-muted/40",
+      )}
+    >
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-2 text-2xl font-semibold tabular-nums">{typeof value === "number" ? value.toLocaleString() : value}</p>
+    </button>
   );
 }
 

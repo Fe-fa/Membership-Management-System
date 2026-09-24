@@ -12,6 +12,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ClubManagement.Services.MembershipAccount;
 
+public record MemberRegisterSummaryDto(int Total, int Active, int Inactive, int WithArrears);
+
 public record MemberListItemDto(
     long AccountId,
     long ProfileId,
@@ -53,7 +55,8 @@ public record ChangeMemberTypeRequest(long MembershipTypeId, string? Reason);
 
 public interface IMemberLifecycleService
 {
-    Task<PagedResult<MemberListItemDto>> SearchAsync(string? search, string? statusCode, string? typeCode, PagedRequest paging, CancellationToken cancellationToken);
+    Task<MemberRegisterSummaryDto> GetRegisterSummaryAsync(CancellationToken cancellationToken);
+    Task<PagedResult<MemberListItemDto>> SearchAsync(string? search, string? statusCode, string? typeCode, bool withArrears, PagedRequest paging, CancellationToken cancellationToken);
     Task<RegisterExistingMemberResult> RegisterExistingAsync(RegisterExistingMemberRequest request, long? actorUserId, CancellationToken cancellationToken);
     Task<RegisterExistingMemberResult?> IssuePortalInviteAsync(long accountId, long? actorUserId, CancellationToken cancellationToken);
     Task<MemberListItemDto?> ChangeStatusAsync(long accountId, ChangeMemberStatusRequest request, long? actorUserId, CancellationToken cancellationToken);
@@ -82,7 +85,19 @@ public class MemberLifecycleService : IMemberLifecycleService
         _users = users;
     }
 
-    public async Task<PagedResult<MemberListItemDto>> SearchAsync(string? search, string? statusCode, string? typeCode, PagedRequest paging, CancellationToken cancellationToken)
+    public async Task<MemberRegisterSummaryDto> GetRegisterSummaryAsync(CancellationToken cancellationToken)
+    {
+        var accounts = _db.Accounts.AsNoTracking().Where(a => !a.IsDeleted);
+        var total = await accounts.CountAsync(cancellationToken);
+        var active = await accounts.CountAsync(a => a.CurrentMemberStatus.Code == "ACTIVE", cancellationToken);
+        var inactive = await accounts.CountAsync(a => a.CurrentMemberStatus.Code == "INACTIVE", cancellationToken);
+        var withArrears = await accounts.CountAsync(
+            a => _db.Arrearses.Any(ar => ar.AccountId == a.AccountId && ar.Status == "OPEN" && ar.Amount > 0),
+            cancellationToken);
+        return new MemberRegisterSummaryDto(total, active, inactive, withArrears);
+    }
+
+    public async Task<PagedResult<MemberListItemDto>> SearchAsync(string? search, string? statusCode, string? typeCode, bool withArrears, PagedRequest paging, CancellationToken cancellationToken)
     {
         var query = _db.Accounts.AsNoTracking()
             .Where(a => !a.IsDeleted)
@@ -95,6 +110,8 @@ public class MemberLifecycleService : IMemberLifecycleService
             query = query.Where(a => a.CurrentMemberStatus.Code == statusCode);
         if (!string.IsNullOrWhiteSpace(typeCode))
             query = query.Where(a => a.MembershipType.Code == typeCode);
+        if (withArrears)
+            query = query.Where(a => _db.Arrearses.Any(ar => ar.AccountId == a.AccountId && ar.Status == "OPEN" && ar.Amount > 0));
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = search.Trim();

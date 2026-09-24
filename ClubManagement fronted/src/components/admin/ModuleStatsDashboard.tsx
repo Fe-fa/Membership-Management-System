@@ -157,7 +157,7 @@ export function ModuleStatsDashboard({ model }: { model: ModuleDashboardModel })
         </ChartCard>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ChartCard title={model.breakdownTitle}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={model.breakdown} layout="vertical" margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
@@ -181,8 +181,9 @@ export function ModuleStatsDashboard({ model }: { model: ModuleDashboardModel })
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
+      </div>
 
-        <section className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200/80">
+      <section className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200/80">
           <div className="flex items-center justify-between bg-slate-950 px-4 py-2.5 text-white">
             <h2 className="text-sm font-semibold">Recent Activity</h2>
           </div>
@@ -201,9 +202,9 @@ export function ModuleStatsDashboard({ model }: { model: ModuleDashboardModel })
             <table className="w-full text-left text-xs">
               <thead className="border-y border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-3 py-2 font-semibold">Action</th>
-                  <th className="px-3 py-2 font-semibold">Staff</th>
-                  <th className="px-3 py-2 font-semibold">By</th>
+                  <th className="px-3 py-2 font-semibold">{model.moduleId === "finance" ? "Status" : "Action"}</th>
+                  <th className="px-3 py-2 font-semibold">{model.moduleId === "finance" ? "Member" : "Staff"}</th>
+                  <th className="px-3 py-2 font-semibold">{model.moduleId === "finance" ? "Method" : "By"}</th>
                   <th className="px-3 py-2 font-semibold">Date</th>
                 </tr>
               </thead>
@@ -216,7 +217,7 @@ export function ModuleStatsDashboard({ model }: { model: ModuleDashboardModel })
                           {row.action}
                         </span>
                       </td>
-                      <td className="max-w-[10rem] truncate px-3 py-2 text-slate-600">{row.staff}</td>
+                      <td className="px-3 py-2 text-slate-600">{row.staff}</td>
                       <td className="px-3 py-2 text-slate-500">{row.by}</td>
                       <td className="px-3 py-2 text-slate-500">{formatDate(row.date)}</td>
                     </tr>
@@ -250,7 +251,6 @@ export function ModuleStatsDashboard({ model }: { model: ModuleDashboardModel })
             </button>
           </div>
         </section>
-      </div>
 
       {expanded ? (
         <ChartCard title={model.extraBreakdownTitle} className="xl:col-span-3">

@@ -355,7 +355,8 @@ END
         }
 
         if (item.Votes.Any(v => v.VoterProfileId == voterProfileId))
-            throw new InvalidOperationException("You have already voted on this application (one vote per Committee member).");
+            throw new InvalidOperationException(
+                "This Committee member has already voted on this application (one vote per member).");
 
         item.Votes.Add(new CommitteeBallotVote
         {
@@ -883,6 +884,7 @@ END
                                && gmSigs >= 1
                                && !chairmanSigned,
             AppliedMembershipType = item.Application.ElectionType?.Name,
+            Occupation = item.Application.Applicant?.Occupation,
             Voted = voted,
             NotVoted = notVoted,
             Signatures = signatures,

@@ -27,6 +27,7 @@
   ShieldCheck,
   SlidersHorizontal,
   UserPlus,
+  ArrowRightLeft,
   UserRound,
   UserCog,
   Users,
@@ -128,6 +129,32 @@ function electedMemberModuleNav(pathname: string): AppNavGroup[] {
             to: "/governance",
             icon: Landmark,
             card: "committee",
+          },
+        ],
+      },
+    ];
+  }
+  if (
+    pathname === "/election/committee-vote"
+    || pathname === "/election/committee-signatures"
+  ) {
+    return [
+      {
+        label: "Applicant election",
+        items: [
+          {
+            label: "Committee vote",
+            to: "/election/committee-vote",
+            icon: ClipboardList,
+            card: "committeeBallot",
+            exact: true,
+          },
+          {
+            label: "Signatures",
+            to: "/election/committee-signatures",
+            icon: FileSignature,
+            card: "committeeBallot",
+            exact: true,
           },
         ],
       },
@@ -266,6 +293,12 @@ const MANAGE_RECORDS_NAV: AppNavGroup[] = withDashboard("/existing-members", [
         search: { tab: "register" },
       },
       { label: "Register member", to: "/register-member", icon: UserPlus },
+      {
+        label: "Member transition",
+        to: "/existing-members",
+        icon: ArrowRightLeft,
+        search: { tab: "transition" },
+      },
     ],
   },
   {
@@ -572,7 +605,7 @@ function currentView(search: unknown): string {
 function currentTab(search: unknown): string {
   if (search && typeof search === "object" && "tab" in search) {
     const tab = String((search as { tab?: unknown }).tab ?? "");
-    if (tab === "register" || tab === "privileges" || tab === "dashboard") return tab;
+    if (tab === "register" || tab === "privileges" || tab === "dashboard" || tab === "transition") return tab;
   }
   return "register";
 }

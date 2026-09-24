@@ -8,7 +8,9 @@ export const Route = createFileRoute("/existing-members")({
         ? ("privileges" as const)
         : search.tab === "dashboard"
           ? ("dashboard" as const)
-          : ("register" as const);
+          : search.tab === "transition"
+            ? ("transition" as const)
+            : ("register" as const);
     const mode = search.mode === "edit" ? ("edit" as const) : search.mode === "view" ? ("view" as const) : undefined;
     return mode ? { tab, mode } : { tab };
   },

@@ -14,7 +14,7 @@ public static class MemberClassPrivileges
             "LIFE" => new MemberPrivilegeSet(false, true, true, true, 0, "full"),
             "HONORARY" => new MemberPrivilegeSet(false, false, false, false, 0, "readonly"),
             "SENIOR" => PayVoteOfficeGuests(50),
-            "SENIOR_LIFE" => new MemberPrivilegeSet(true, true, true, true, 0, "full"),
+            "SENIOR_LIFE" => new MemberPrivilegeSet(false, true, true, true, 0, "full"),
             "TEMPORARY" or "FOREIGN_AIR_CREW" or "SPECIAL_EVENT" =>
                 new MemberPrivilegeSet(false, false, false, false, 0, "hidden"),
             _ => PayVoteOfficeGuests()

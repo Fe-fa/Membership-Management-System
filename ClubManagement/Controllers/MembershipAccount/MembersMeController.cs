@@ -17,17 +17,20 @@ public class MembersMeController : ControllerBase
     private readonly IMemberProfileService _profiles;
     private readonly IFinanceService _finance;
     private readonly INonMembershipBillingService _nmBilling;
+    private readonly IMembershipTransitionService _transitions;
 
     public MembersMeController(
         IMemberDashboardService dashboard,
         IMemberProfileService profiles,
         IFinanceService finance,
-        INonMembershipBillingService nmBilling)
+        INonMembershipBillingService nmBilling,
+        IMembershipTransitionService transitions)
     {
         _dashboard = dashboard;
         _profiles = profiles;
         _finance = finance;
         _nmBilling = nmBilling;
+        _transitions = transitions;
     }
 
     [HttpGet]
@@ -37,6 +40,15 @@ public class MembersMeController : ControllerBase
         if (profileId is null) return Unauthorized();
         var me = await _dashboard.GetMineAsync(profileId.Value, cancellationToken);
         return me is null ? NotFound() : Ok(me);
+    }
+
+    [HttpGet("life-letter")]
+    public async Task<IActionResult> LifeLetter(CancellationToken cancellationToken)
+    {
+        var profileId = User.ProfileId();
+        if (profileId is null) return Unauthorized();
+        var letter = await _transitions.GetOwnLetterAsync(profileId.Value, cancellationToken);
+        return letter is null ? NoContent() : Ok(letter);
     }
 
     [HttpGet("profile")]

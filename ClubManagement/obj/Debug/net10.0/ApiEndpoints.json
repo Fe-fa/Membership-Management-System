@@ -5633,6 +5633,16 @@
   },
   {
     "ContainingType": "ClubManagement.Controllers.MembershipAccount.MembersMeController",
+    "Method": "LifeLetter",
+    "RelativePath": "api/members/me/life-letter",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.MembershipAccount.MembersMeController",
     "Method": "Notifications",
     "RelativePath": "api/members/me/notifications",
     "HttpMethod": "GET",
@@ -5960,6 +5970,11 @@
         "Name": "type",
         "Type": "System.String",
         "IsRequired": false
+      },
+      {
+        "Name": "withArrears",
+        "Type": "System.Boolean",
+        "IsRequired": false
       }
     ],
     "ReturnTypes": [
@@ -6212,6 +6227,135 @@
         "StatusCode": 200
       }
     ]
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.MembershipAccount.MembershipAccountsController",
+    "Method": "Summary",
+    "RelativePath": "api/membership-accounts/summary",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "ClubManagement.Services.MembershipAccount.MemberRegisterSummaryDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.MembershipAccount.MembershipTransitionsController",
+    "Method": "Hub",
+    "RelativePath": "api/membership-transitions",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "ClubManagement.Services.MembershipAccount.TransitionHubDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.MembershipAccount.MembershipTransitionsController",
+    "Method": "Letter",
+    "RelativePath": "api/membership-transitions/{transitionId}/letter",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "transitionId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.MembershipAccount.MembershipTransitionsController",
+    "Method": "Nominate",
+    "RelativePath": "api/membership-transitions/nominations",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "ClubManagement.Services.MembershipAccount.NominateLifeRequest",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "ClubManagement.Services.MembershipAccount.LifeNominationDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.MembershipAccount.MembershipTransitionsController",
+    "Method": "Vote",
+    "RelativePath": "api/membership-transitions/nominations/{transitionId}/vote",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "transitionId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "ClubManagement.Services.MembershipAccount.RecordLifeVoteRequest",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "ClubManagement.Services.MembershipAccount.LifeNominationDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "ClubManagement.Controllers.MembershipAccount.MembershipTransitionsController",
+    "Method": "ConfirmSeniorLife",
+    "RelativePath": "api/membership-transitions/senior-life",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "ClubManagement.Services.MembershipAccount.ConfirmSeniorLifeRequest",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
   },
   {
     "ContainingType": "ClubManagement.Controllers.MembershipApplication.MembershipTypesController",

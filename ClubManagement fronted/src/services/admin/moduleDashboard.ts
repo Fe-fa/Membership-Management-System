@@ -200,6 +200,26 @@ export function buildModuleDashboard(
   const statusBars = countBy(applications.map((row) => row.statusName || row.statusCode || "Unknown"));
   const memberStatusBars = countBy(members.map((row) => row.status));
   const paymentBars = overview.finances.recentTransactions.map((row) => ({ name: row.method, value: row.count }));
+  const amountBars = overview.finances.recentTransactions
+    .map((row) => ({ name: row.method, value: Math.round(row.amount ?? 0) }))
+    .filter((row) => row.value > 0)
+    .sort((a, b) => b.value - a.value);
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const financeMonths = monthNames.map((month, index) => {
+    const point = (overview.finances.months ?? []).find((row) => row.month === index + 1);
+    return {
+      month,
+      primary: Math.round(point?.receipts ?? 0),
+      secondary: Math.round(point?.arrearsOpened ?? 0),
+      trend: 0,
+    };
+  });
+  financeMonths.reduce((running, row) => {
+    running += row.primary;
+    row.trend = running;
+    return running;
+  }, 0);
+  const paidThisYear = (overview.finances.months ?? []).reduce((sum, row) => sum + (row.receipts ?? 0), 0);
   const votingBars = countBy(members.map((row) => (row.canVote ? "Voting" : "Non-voting")));
 
   const appActivity: DashboardActivity[] = applications.slice(0, 12).map((row) => ({
@@ -357,7 +377,7 @@ export function buildModuleDashboard(
         kpis: [
           { id: "revenue", label: "Subscriptions collected", value: formatKesShort(overview.finances.annualSubscriptionRevenue), icon: Wallet, tone: "violet", spark: spark(0.4) },
           { id: "tx", label: "Payments (30 days)", value: paymentBars.reduce((sum, row) => sum + row.value, 0), icon: CircleDollarSign, tone: "sky", spark: spark(1.7) },
-          { id: "ok", label: "Paid this year", value: formatKesShort(overview.finances.annualSubscriptionRevenue), icon: UserCheck, tone: "emerald", spark: spark(2.4) },
+          { id: "ok", label: "Paid this year", value: formatKesShort(paidThisYear || overview.finances.annualSubscriptionRevenue), icon: UserCheck, tone: "emerald", spark: spark(2.4) },
           { id: "due", label: "Outstanding arrears", value: formatKesShort(overview.finances.outstandingBalances), icon: Ban, tone: "rose", spark: spark(3.3) },
         ],
         ratioTitle: "Payment methods",
@@ -369,17 +389,18 @@ export function buildModuleDashboard(
         })),
         movementTitle: "Collections vs arrears trend",
         movementPrimary: "Receipts",
-        movementSecondary: "Arrears",
+        movementSecondary: "Arrears opened",
+        months: financeMonths,
         breakdownTitle: "Method breakdown",
         breakdown: paymentBars,
         rankingTitle: "Top payment methods",
-        ranking: paymentBars.slice(0, 5),
-        activity: paymentBars.map((row) => ({
-          action: "PAYMENT",
-          staff: row.name,
-          by: "Finance",
-          date: overview.meta.generatedAt,
-          tone: "update" as const,
+        ranking: amountBars.length ? amountBars : paymentBars,
+        activity: (overview.finances.recentPayments ?? []).map((row) => ({
+          action: (row.status || "PAYMENT").toUpperCase(),
+          staff: row.member || "Member",
+          by: `${row.method} · Ksh ${Math.round(row.amount).toLocaleString("en-KE")}`,
+          date: row.date,
+          tone: activityTone(row.status || ""),
         })),
         extraBreakdownTitle: "Balances",
         extraBreakdown: [

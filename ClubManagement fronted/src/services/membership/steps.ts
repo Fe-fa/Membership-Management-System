@@ -3,7 +3,7 @@ export const STEPS = [
   { key: "family", title: "Marital & family status", short: "Family" },
   { key: "aviation", title: "Aviation affiliation", short: "Aviation" },
   { key: "membership", title: "Membership type", short: "Membership" },
-  { key: "supporters", title: "Proposer & seconder", short: "Support" },
+  { key: "supporters", title: "Proposer & seconder", short: "Endorsers" },
   { key: "clubs", title: "Other club memberships", short: "Clubs" },
   { key: "consent", title: "Data consent & declaration", short: "Consent" },
   { key: "review", title: "Review & submit", short: "Review" },
@@ -16,7 +16,11 @@ export const EXISTING_MEMBER_STEPS = [
   { key: "membership", title: "Membership type", short: "Membership" },
   { key: "clubs", title: "Other club memberships", short: "Clubs" },
   { key: "review", title: "Review & save", short: "Review" },
-] as const satisfies ReadonlyArray<(typeof STEPS)[number]>;
+] as const satisfies ReadonlyArray<{
+  key: (typeof STEPS)[number]["key"];
+  title: string;
+  short: string;
+}>;
 
 export type StepId = (typeof STEPS)[number]["key"];
 export const stepIndex = (key: StepId, steps: ReadonlyArray<{ key: StepId }> = STEPS) =>

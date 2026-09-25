@@ -24,6 +24,7 @@ import {
   type ExtraParameter,
   type PaymentMethodBlock,
   type PaymentSetup,
+  type ProrationMode,
 } from "@/utils/invoiceSetup";
 import { cn } from "@/utils/cn";
 
@@ -185,6 +186,10 @@ export function PaymentSetupPage() {
                   onChange={(showCredits) => patch({ invoice: { ...setup.invoice, showCredits } })}
                 />
               </DisplayCard>
+              <ProrationModeCard
+                value={setup.prorationMode}
+                onChange={(prorationMode) => patch({ prorationMode })}
+              />
               <SharedFields setup={setup} patch={patch} />
             </TabsContent>
 
@@ -461,6 +466,70 @@ function ExtraParametersCard({
           })}
         </div>
       )}
+    </section>
+  );
+}
+export function prorationBreakdown(mode: ProrationMode, fullAnnual: number, today = new Date()) {
+  const asOf = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  const yearStart = Date.UTC(asOf.getUTCFullYear(), 0, 1);
+  const yearEnd = Date.UTC(asOf.getUTCFullYear(), 11, 31);
+  const asOfMs = Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth(), asOf.getUTCDate());
+  const daysInYear = Math.round((yearEnd - yearStart) / 86_400_000) + 1; // 365, or 366 in a leap year
+  const remainingDays = Math.min(Math.max(Math.round((yearEnd - asOfMs) / 86_400_000) + 1, 1), daysInYear);
+  const remainingMonths = 13 - (asOf.getUTCMonth() + 1); // join month billed in full
+
+  const full = Math.round(fullAnnual * 100) / 100;
+  if (full <= 0) return { full, mode, daysInYear, remainingDays, remainingMonths, payable: 0, isProrated: false };
+
+  const units = mode === "DAILY" ? remainingDays : remainingMonths;
+  const divisor = mode === "DAILY" ? daysInYear : 12;
+  // Single rounding at the end, half away from zero — same as the backend.
+  const payable = Math.round((full * units) / divisor * 100) / 100;
+  return { full, mode, daysInYear, remainingDays, remainingMonths, payable, isProrated: payable < full };
+}
+
+function money(n: number) {
+  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function ProrationModeCard({
+  value,
+  onChange,
+  sampleAnnual = 39500,
+}: {
+  value: ProrationMode;
+  onChange: (next: ProrationMode) => void;
+  sampleAnnual?: number;
+}) {
+  const options: { mode: ProrationMode; label: string }[] = [
+    { mode: "DAILY", label: "Daily" },
+    { mode: "MONTHLY", label: "Monthly" },
+  ];
+  const b = prorationBreakdown(value, sampleAnnual);
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <h2 className="text-sm font-semibold">Fee proration</h2>
+      <div className="mt-3 flex gap-2">
+        {options.map(({ mode, label }) => {
+          const active = value === mode;
+          return (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onChange(mode)}
+              className={cn(
+                "rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                active
+                  ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                  : "border-slate-200 bg-white hover:border-primary/40 hover:bg-slate-50",
+              )}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
     </section>
   );
 }

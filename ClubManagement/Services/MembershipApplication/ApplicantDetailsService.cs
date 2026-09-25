@@ -102,16 +102,56 @@ public class ApplicantDetailsService : IApplicantDetailsService
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(request.Family.EmergencyName))
+            var emergencyRows = request.Family.EmergencyContacts
+                .Where(c => !string.IsNullOrWhiteSpace(c.Name))
+                .Select(c => (c.Name, c.Phone, c.Email, c.Relationship))
+                .ToList();
+            if (emergencyRows.Count == 0 && !string.IsNullOrWhiteSpace(request.Family.EmergencyName))
             {
+                emergencyRows.Add((
+                    request.Family.EmergencyName,
+                    request.Family.EmergencyPhone,
+                    request.Family.EmergencyEmail,
+                    "OTHER"));
+            }
+
+            var primary = true;
+            foreach (var (name, phone, email, relationship) in emergencyRows)
+            {
+                var rel = await LookupResolver.ResolveRelationshipTypeAsync(
+                    _db,
+                    string.IsNullOrWhiteSpace(relationship) ? "OTHER" : relationship,
+                    cancellationToken) ?? otherRelationship;
                 _db.MemberEmergencyContacts.Add(new MemberEmergencyContact
                 {
                     ProfileId = profileId,
-                    ContactName = request.Family.EmergencyName.Trim(),
-                    RelationshipTypeId = otherRelationship!.RelationshipTypeId,
-                    Telephone = NullIfEmpty(request.Family.EmergencyPhone),
-                    Email = NullIfEmpty(request.Family.EmergencyEmail),
-                    IsPrimaryFlag = true,
+                    ContactName = name.Trim(),
+                    RelationshipTypeId = rel!.RelationshipTypeId,
+                    Telephone = NullIfEmpty(phone),
+                    Email = NullIfEmpty(email),
+                    IsPrimaryFlag = primary,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+                primary = false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.Family.NextOfKinName))
+            {
+                var kinRel = await LookupResolver.ResolveRelationshipTypeAsync(
+                    _db,
+                    string.IsNullOrWhiteSpace(request.Family.NextOfKinRelationship)
+                        ? "OTHER"
+                        : request.Family.NextOfKinRelationship.Trim().ToUpperInvariant().Replace(' ', '_'),
+                    cancellationToken) ?? otherRelationship;
+                _db.MemberEmergencyContacts.Add(new MemberEmergencyContact
+                {
+                    ProfileId = profileId,
+                    ContactName = request.Family.NextOfKinName.Trim(),
+                    RelationshipTypeId = kinRel!.RelationshipTypeId,
+                    Telephone = NullIfEmpty(request.Family.NextOfKinPhone),
+                    Email = NullIfEmpty(request.Family.NextOfKinEmail),
+                    IsPrimaryFlag = false,
                     IsActive = true,
                     CreatedAt = DateTime.UtcNow
                 });

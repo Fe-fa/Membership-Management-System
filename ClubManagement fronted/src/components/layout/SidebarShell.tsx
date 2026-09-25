@@ -154,7 +154,7 @@ function NavItems({
   group: AppNavGroup;
   pathname: string;
   search: unknown;
-  onNavigate?: () => void;
+  onNavigate?: (() => void) | undefined;
 }) {
   return (
     <div className="mt-2 space-y-1">
@@ -179,10 +179,10 @@ function NavItems({
         }
         return (
           <Link
-            key={`${to}-${itemSearch?.tab ?? itemSearch?.view ?? itemSearch?.section ?? ""}`}
+            key={`${to}-${itemSearch?.["tab"] ?? itemSearch?.["view"] ?? itemSearch?.["section"] ?? ""}`}
             to={to}
             search={(itemSearch ?? {}) as never}
-            activeOptions={item.exact ? { exact: true } : undefined}
+            {...(item.exact ? { activeOptions: { exact: true } } : {})}
             onClick={onNavigate}
             className={className}
           >
@@ -204,7 +204,7 @@ function NavGroupBlock({
   group: AppNavGroup;
   pathname: string;
   search: unknown;
-  onNavigate?: () => void;
+  onNavigate?: (() => void) | undefined;
 }) {
   const childActive = group.items.some((item) => isNavActive(pathname, search, item));
   const [open, setOpen] = useState(childActive || !group.collapsible);
@@ -243,7 +243,7 @@ function NavList({
 }: {
   pathname: string;
   search: unknown;
-  onNavigate?: () => void;
+  onNavigate?: (() => void) | undefined;
   user: AuthUser | null;
 }) {
   const member = useMemberDashboard();

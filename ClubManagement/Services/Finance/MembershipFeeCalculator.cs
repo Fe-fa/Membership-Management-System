@@ -2,6 +2,12 @@ using System.Text.Json;
 
 namespace ClubManagement.Services.Finance;
 
+public enum ProrationMode
+{
+    Daily,
+    Monthly
+}
+
 public record MembershipFeeFacts(
     long MembershipTypeId,
     string MembershipType,
@@ -11,14 +17,23 @@ public record MembershipFeeFacts(
     DateOnly AsOf,
     bool IsChildOfMember,
     string? ParentStatusCode,
-    int? ParentContinuousYears);
+    int? ParentContinuousYears,
+    ProrationMode ProrationMode = ProrationMode.Daily);
 
+/// <summary>
+/// Result of prorating the first-year annual subscription.
+/// RemainingDays / DaysInYear are always populated (also in Monthly mode) so
+/// documents and quotes can display the full breakdown either way.
+/// </summary>
 public record AnnualProration(
     decimal FullAnnual,
     decimal PayableAnnual,
     int RemainingDays,
     int DaysInYear,
-    bool IsProrated);
+    bool IsProrated,
+    ProrationMode Mode = ProrationMode.Daily,
+    int RemainingMonths = 12,
+    int MonthsInYear = 12);
 
 public record EntranceFeeDecision(
     decimal StandardEntranceFee,
@@ -62,7 +77,7 @@ public static class MembershipFeeCalculator
             facts.IsChildOfMember,
             facts.ParentStatusCode,
             facts.ParentContinuousYears);
-        var annual = ProrateAnnual(facts.StandardAnnualSubscription, facts.AsOf);
+        var annual = ProrateAnnual(facts.StandardAnnualSubscription, facts.AsOf, facts.ProrationMode);
 
         return new MembershipFeeCalculation(
             facts.MembershipTypeId,
@@ -112,20 +127,60 @@ public static class MembershipFeeCalculator
             "Standard entrance fee applies. " + string.Join("; ", failed) + ".");
     }
 
-    public static AnnualProration ProrateAnnual(decimal fullAnnual, DateOnly asOf)
+    /// <summary>
+    /// Prorates the first-year annual subscription against 31 December of the join year.
+    ///
+    ///   Daily   : Payable = Round(FullAnnual / DaysInYear(asOf) x DaysRemaining, 2)
+    ///             - DaysInYear(asOf) is 365, or 366 when the JOIN year is a leap year,
+    ///               so the divisor always follows the leap status of the billing period.
+    ///             - DaysRemaining counts the join day through 31 December, both inclusive.
+    ///   Monthly : Payable = Round(FullAnnual / 12 x MonthsRemaining, 2)
+    ///             - MonthsRemaining = 13 - join month; the join month is billed in full.
+    ///
+    /// Rounding is half away from zero ("commercial" half-up), applied exactly once at the
+    /// end. The product full x units is an exact decimal, so a single division followed by a
+    /// single round is equivalent to exact rational arithmetic - no double rounding.
+    /// </summary>
+    public static AnnualProration ProrateAnnual(decimal fullAnnual, DateOnly asOf, ProrationMode mode = ProrationMode.Daily)
     {
         var full = decimal.Round(fullAnnual, 2, MidpointRounding.AwayFromZero);
-        if (full <= 0)
-            return new AnnualProration(0m, 0m, DaysRemainingInYear(asOf), DaysInYear(asOf), false);
-
         var daysInYear = DaysInYear(asOf);
-        var remaining = DaysRemainingInYear(asOf);
-        if (remaining >= daysInYear)
-            return new AnnualProration(full, full, remaining, daysInYear, false);
+        var remainingDays = DaysRemainingInYear(asOf);
+        var remainingMonths = RemainingMonthsInYear(asOf);
 
-        var prorated = decimal.Round(remaining / (decimal)daysInYear * full, 2, MidpointRounding.AwayFromZero);
-        return new AnnualProration(full, prorated, remaining, daysInYear, prorated < full);
+        if (full <= 0)
+            return new AnnualProration(0m, 0m, remainingDays, daysInYear, false, mode, remainingMonths, 12);
+
+        return mode == ProrationMode.Monthly
+            ? ProrateMonthly(full, remainingDays, daysInYear, remainingMonths)
+            : ProrateDaily(full, remainingDays, daysInYear, remainingMonths);
     }
+
+    private static AnnualProration ProrateDaily(decimal full, int remainingDays, int daysInYear, int remainingMonths)
+    {
+        if (remainingDays >= daysInYear)
+            return new AnnualProration(full, full, remainingDays, daysInYear, false, ProrationMode.Daily, remainingMonths, 12);
+
+        // full * remainingDays is an exact decimal; a single division keeps one rounding point
+        // (previously days/(decimal)daysInYear * full rounded twice and could drift a half-cent).
+        var prorated = decimal.Round(full * remainingDays / daysInYear, 2, MidpointRounding.AwayFromZero);
+        return new AnnualProration(full, prorated, remainingDays, daysInYear, prorated < full, ProrationMode.Daily, remainingMonths, 12);
+    }
+
+    private static AnnualProration ProrateMonthly(decimal full, int remainingDays, int daysInYear, int remainingMonths)
+    {
+        if (remainingMonths >= 12)
+            return new AnnualProration(full, full, remainingDays, daysInYear, false, ProrationMode.Monthly, remainingMonths, 12);
+
+        var prorated = decimal.Round(full * remainingMonths / 12m, 2, MidpointRounding.AwayFromZero);
+        return new AnnualProration(full, prorated, remainingDays, daysInYear, prorated < full, ProrationMode.Monthly, remainingMonths, 12);
+    }
+
+    /// <summary>
+    /// Remaining months in the year, counting the join month as a full month
+    /// (e.g. joining any day in September still bills September through December = 4 months).
+    /// </summary>
+    public static int RemainingMonthsInYear(DateOnly asOf) => 13 - asOf.Month;
 
     public static int CompletedYears(DateOnly from, DateOnly asOf)
     {
@@ -135,6 +190,7 @@ public static class MembershipFeeCalculator
         return years < 0 ? 0 : years;
     }
 
+    /// <summary>365, or 366 when the year of <paramref name="asOf"/> (the billing period year) is a leap year.</summary>
     public static int DaysInYear(DateOnly asOf)
     {
         var start = new DateOnly(asOf.Year, 1, 1);
@@ -180,6 +236,11 @@ public static class MembershipFeeCalculator
         }
     }
 
+    /// <summary>
+    /// Days from <paramref name="asOf"/> through 31 December of that year, both inclusive,
+    /// clamped to [1, DaysInYear]. A 1 January join therefore yields the full year and no
+    /// proration; 31 December yields a single billable day.
+    /// </summary>
     public static int DaysRemainingInYear(DateOnly asOf)
     {
         var end = new DateOnly(asOf.Year, 12, 31);

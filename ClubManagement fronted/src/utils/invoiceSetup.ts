@@ -37,6 +37,8 @@ export type ReceiptDisplay = {
   showSignatures: boolean;
 };
 
+export type ProrationMode = "DAILY" | "MONTHLY";
+
 export type PaymentSetup = {
   pin: string;
   website: string;
@@ -46,6 +48,8 @@ export type PaymentSetup = {
   receipt: ReceiptDisplay;
   methods: PaymentMethodBlock[];
   extraParameters: ExtraParameter[];
+  /** Controls how the first-year annual subscription is prorated for new joiners. */
+  prorationMode: ProrationMode;
 };
 
 /** @deprecated Use PaymentSetup. Kept so existing invoice/email callers keep compiling. */
@@ -133,6 +137,7 @@ export const DEFAULT_PAYMENT_SETUP: PaymentSetup = {
   receipt: { showPin: true, showWebsite: true, showAmountInWords: true, showSignatures: true },
   methods: defaultPaymentMethods(),
   extraParameters: [],
+  prorationMode: "DAILY",
 };
 
 export const DEFAULT_INVOICE_SETUP = DEFAULT_PAYMENT_SETUP;
@@ -143,6 +148,10 @@ function text(value: unknown, fallback: string) {
 
 function flag(value: unknown, fallback: boolean) {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function prorationMode(value: unknown, fallback: ProrationMode): ProrationMode {
+  return typeof value === "string" && value.trim().toUpperCase() === "MONTHLY" ? "MONTHLY" : fallback;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -269,6 +278,7 @@ export function mergePaymentSetup(partial?: Partial<PaymentSetup> | Record<strin
     },
     methods: mergeMethods(lifted.methods),
     extraParameters: mergeExtraParameters(lifted.extraParameters),
+    prorationMode: prorationMode(lifted.prorationMode, DEFAULT_PAYMENT_SETUP.prorationMode),
   };
 }
 

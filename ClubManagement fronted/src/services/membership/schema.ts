@@ -66,7 +66,17 @@ export const personalSchema = z.object({
   countryOfResidence: req("Country of residence"),
   occupation: req("Occupation"),
   company: opt(),
-  role: opt(),
+  role: opt(120),
+  nextOfKinName: req("Next of kin full name"),
+  nextOfKinRelationship: req("Relationship"),
+  nextOfKinPhone: z
+    .string()
+    .trim()
+    .max(24)
+    .regex(/^$|^[+0-9][0-9\s()-]*$/, "Digits, spaces, + ( ) and - only")
+    .optional()
+    .or(z.literal("")),
+  nextOfKinEmail: z.string().trim().email("Enter a valid email").max(255).optional().or(z.literal("")),
   // Lookup values are stored as the lookup `code` (e.g. "A+", "Female"). The
   // SQL Server FK on MProfile.gender_id / blood_group_id is the real
   // enforcement; these are non-empty strings sourced from /api/lookups.
@@ -85,6 +95,12 @@ export const spouseSchema = z.object({
   email: z.string().trim().max(255).optional().or(z.literal("")),
 });
 
+export const emergencyContactSchema = z.object({
+  name: req("Emergency contact name"),
+  phone: phone("Emergency contact phone"),
+  email: email("Emergency contact email"),
+});
+
 export const familySchema = z
   .object({
     isMarried: z.boolean(),
@@ -97,9 +113,11 @@ export const familySchema = z
       .array(z.object({ name: opt(), dateOfBirth: opt(10) }))
       .max(10, "Up to 10 children")
       .default([]),
-    emergencyName: req("Emergency contact name"),
-    emergencyPhone: phone("Emergency contact phone"),
-    emergencyEmail: email("Emergency contact email"),
+    emergencyContacts: z
+      .array(emergencyContactSchema)
+      .min(1, "Add at least one emergency contact")
+      .max(5, "Up to 5 emergency contacts")
+      .default([]),
   })
   .superRefine((v, ctx) => {
     if (v.isMarried) {
@@ -149,6 +167,13 @@ export const familySchema = z
           });
       });
     }
+    if (v.emergencyContacts.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["emergencyContacts"],
+        message: "Add at least one emergency contact",
+      });
+    }
   });
 
 export const aviationSchema = z
@@ -166,19 +191,16 @@ export const aviationSchema = z
     hangarLocation: opt(120),
   })
   .superRefine((v, ctx) => {
-    if (v.isAffiliated && !v.aviationRole)
-      ctx.addIssue({
-        code: "custom",
-        path: ["aviationRole"],
-        message: "Specify your aviation role",
-      });
-    if (v.holdsLicense) {
+    if (!v.isAffiliated) return;
+    const licenseStarted = Boolean(
+      v.licenseType || v.licenseNumber || v.licenseIssuer || v.licenseFile,
+    );
+    const aircraftStarted = Boolean(
+      v.aircraftType || v.aircraftRegistration || v.hangarLocation,
+    );
+    if (licenseStarted) {
       if (!v.licenseType)
-        ctx.addIssue({
-          code: "custom",
-          path: ["licenseType"],
-          message: "License type is required",
-        });
+        ctx.addIssue({ code: "custom", path: ["licenseType"], message: "License type is required" });
       if (!v.licenseNumber)
         ctx.addIssue({
           code: "custom",
@@ -194,7 +216,7 @@ export const aviationSchema = z
           message: "Attach a copy of your license",
         });
     }
-    if (v.ownsAircraft) {
+    if (aircraftStarted) {
       if (!v.aircraftType)
         ctx.addIssue({
           code: "custom",
@@ -232,7 +254,8 @@ const supporterSchema = z.object({
     .number({ message: "Enter the year of joining" })
     .int()
     .min(1927)
-    .max(kenyaYear())
+    .max(kenyaYear()),
+  joinedDate: opt(10),
 });
 export type Supporter = z.infer<typeof supporterSchema>;
 
@@ -335,6 +358,9 @@ type LegacyFamily = ApplicationDraft["family"] & {
   spouseName?: string;
   spousePhone?: string;
   spouseEmail?: string;
+  emergencyName?: string;
+  emergencyPhone?: string;
+  emergencyEmail?: string;
 };
 
 export function normalizeFamily(family: LegacyFamily): ApplicationDraft["family"] {
@@ -350,19 +376,46 @@ export function normalizeFamily(family: LegacyFamily): ApplicationDraft["family"
             },
           ]
         : [];
+  const emergencyContacts =
+    family.emergencyContacts && family.emergencyContacts.length > 0
+      ? family.emergencyContacts
+      : family.emergencyName || family.emergencyPhone || family.emergencyEmail
+        ? [
+            {
+              name: family.emergencyName ?? "",
+              phone: family.emergencyPhone ?? "",
+              email: family.emergencyEmail ?? "",
+            },
+          ]
+        : [{ name: "", phone: "", email: "" }];
   return {
     isMarried: family.isMarried,
     spouses,
     hasChildren: family.hasChildren,
     children: family.children ?? [],
-    emergencyName: family.emergencyName,
-    emergencyPhone: family.emergencyPhone,
-    emergencyEmail: family.emergencyEmail,
+    emergencyContacts,
   };
 }
 
 export function normalizeDraft(draft: ApplicationDraft): ApplicationDraft {
-  return { ...draft, family: normalizeFamily(draft.family as LegacyFamily) };
+  const personal = {
+    ...draft.personal,
+    nextOfKinName: draft.personal.nextOfKinName ?? "",
+    nextOfKinRelationship: draft.personal.nextOfKinRelationship ?? "",
+    nextOfKinPhone: draft.personal.nextOfKinPhone ?? "",
+    nextOfKinEmail: draft.personal.nextOfKinEmail ?? "",
+  };
+  const aviation = {
+    ...draft.aviation,
+    holdsLicense: draft.aviation.isAffiliated ? true : Boolean(draft.aviation.holdsLicense),
+    ownsAircraft: draft.aviation.isAffiliated ? true : Boolean(draft.aviation.ownsAircraft),
+  };
+  return {
+    ...draft,
+    personal,
+    family: normalizeFamily(draft.family as LegacyFamily),
+    aviation,
+  };
 }
 
 export const emptyDraft = (): ApplicationDraft => ({
@@ -388,6 +441,10 @@ export const emptyDraft = (): ApplicationDraft => ({
     occupation: "",
     company: "",
     role: "",
+    nextOfKinName: "",
+    nextOfKinRelationship: "",
+    nextOfKinPhone: "",
+    nextOfKinEmail: "",
     bloodGroup: undefined as never,
     gender: undefined as never,
     photo: null,
@@ -401,9 +458,7 @@ export const emptyDraft = (): ApplicationDraft => ({
     spouses: [],
     hasChildren: false,
     children: [],
-    emergencyName: "",
-    emergencyPhone: "",
-    emergencyEmail: "",
+    emergencyContacts: [{ name: "", phone: "", email: "" }],
   },
   aviation: {
     isAffiliated: false,

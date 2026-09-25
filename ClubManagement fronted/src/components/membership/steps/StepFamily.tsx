@@ -8,10 +8,13 @@ import type { ErrorMap } from "@/services/membership/useApplication";
 
 type Value = ApplicationDraft["family"];
 type Spouse = NonNullable<Value["spouses"]>[number];
+type EmergencyContact = NonNullable<Value["emergencyContacts"]>[number];
 
 const MAX_CHILDREN = 10;
 const MAX_SPOUSES = 8;
+const MAX_EMERGENCY = 5;
 const emptySpouse = (): Spouse => ({ name: "", phone: "", email: "" });
+const emptyEmergency = (): EmergencyContact => ({ name: "", phone: "", email: "" });
 
 export const StepFamily = memo(function StepFamily({
   value,
@@ -24,12 +27,7 @@ export const StepFamily = memo(function StepFamily({
 }) {
   const children = value.children ?? [];
   const spouses = value.spouses ?? [];
-
-  const set = useCallback(
-    (key: keyof Value) => (e: React.ChangeEvent<HTMLInputElement>) =>
-      onChange({ [key]: e.target.value } as Partial<Value>),
-    [onChange],
-  );
+  const emergencyContacts = value.emergencyContacts ?? [];
 
   const updateChild = useCallback(
     (index: number, patch: { name?: string; dateOfBirth?: string }) =>
@@ -43,10 +41,18 @@ export const StepFamily = memo(function StepFamily({
     [spouses, onChange],
   );
 
+  const updateEmergency = useCallback(
+    (index: number, patch: Partial<EmergencyContact>) =>
+      onChange({
+        emergencyContacts: emergencyContacts.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+      }),
+    [emergencyContacts, onChange],
+  );
+
   return (
     <div className="space-y-8">
       <section className="space-y-4">
-        <SectionTitle note="You may record more than one spouse.">Marital status</SectionTitle>
+        <SectionTitle >Marital status</SectionTitle>
         <YesNoField
           label="Are you married?"
           value={value.isMarried}
@@ -63,7 +69,6 @@ export const StepFamily = memo(function StepFamily({
             {spouses.map((spouse, index) => (
               <div key={index} className="rounded-lg border border-border bg-secondary/40 p-3">
                 <div className="mb-3 flex items-center justify-between">
-                  <p className="text-sm font-medium">Spouse {index + 1}</p>
                   <Button
                     type="button"
                     variant="ghost"
@@ -134,7 +139,7 @@ export const StepFamily = memo(function StepFamily({
               >
                 <TextField
                   containerClassName="min-w-56 flex-1"
-                  label={`Child ${index + 1} name`}
+                  label={`Full name`}
                   value={child.name ?? ""}
                   onChange={(e) => updateChild(index, { name: e.target.value })}
                   error={errors[`children.${index}.name`]}
@@ -172,31 +177,65 @@ export const StepFamily = memo(function StepFamily({
       </section>
 
       <section className="space-y-4">
-        <SectionTitle>Emergency contact</SectionTitle>
-        <Grid>
-          <TextField
-            label="Name"
-            required
-            value={value.emergencyName}
-            onChange={set("emergencyName")}
-            error={errors["emergencyName"]}
-          />
-          <TextField
-            label="Telephone no."
-            required
-            value={value.emergencyPhone}
-            onChange={set("emergencyPhone")}
-            error={errors["emergencyPhone"]}
-          />
-          <TextField
-            label="Email"
-            type="email"
-            required
-            value={value.emergencyEmail}
-            onChange={set("emergencyEmail")}
-            error={errors["emergencyEmail"]}
-          />
-        </Grid>
+        <SectionTitle >Emergency contacts</SectionTitle>
+        {errors["emergencyContacts"] ? (
+          <p className="text-xs font-medium text-destructive">{errors["emergencyContacts"]}</p>
+        ) : null}
+        <div className="space-y-3">
+          {emergencyContacts.map((contact, index) => (
+            <div key={index} className="rounded-lg border border-border bg-secondary/40 p-3">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-sm font-medium">Emergency contact </p>
+                {emergencyContacts.length > 1 ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() =>
+                      onChange({ emergencyContacts: emergencyContacts.filter((_, i) => i !== index) })
+                    }
+                  >
+                    <Trash2 className="size-4" />
+                    <span className="sr-only">Remove emergency contact {index + 1}</span>
+                  </Button>
+                ) : null}
+              </div>
+              <Grid>
+                <TextField
+                  label="Name"
+                  required
+                  value={contact.name ?? ""}
+                  onChange={(e) => updateEmergency(index, { name: e.target.value })}
+                  error={errors[`emergencyContacts.${index}.name`]}
+                />
+                <TextField
+                  label="Telephone no."
+                  required
+                  value={contact.phone ?? ""}
+                  onChange={(e) => updateEmergency(index, { phone: e.target.value })}
+                  error={errors[`emergencyContacts.${index}.phone`]}
+                />
+                <TextField
+                  label="Email"
+                  type="email"
+                  required
+                  value={contact.email ?? ""}
+                  onChange={(e) => updateEmergency(index, { email: e.target.value })}
+                  error={errors[`emergencyContacts.${index}.email`]}
+                />
+              </Grid>
+            </div>
+          ))}
+          {emergencyContacts.length < MAX_EMERGENCY ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onChange({ emergencyContacts: [...emergencyContacts, emptyEmergency()] })}
+            >
+              <Plus className="size-4" /> Add emergency contact
+            </Button>
+          ) : null}
+        </div>
       </section>
     </div>
   );

@@ -43,10 +43,22 @@ export function formatKenyaDate(value?: string | null) {
   return `${day}/${month}/${year}`;
 }
 
+/** Display a stored ISO date as Kenya DD/MM/YY (two-digit year). */
+export function formatKenyaDateShort(value?: string | null) {
+  const full = formatKenyaDate(value);
+  if (full === "—") return full;
+  const parts = full.split("/");
+  if (parts.length !== 3) return full;
+  const [day, month, year] = parts;
+  return `${day}/${month}/${year!.slice(-2)}`;
+}
+
 /** Next anniversary of an ISO date (`yyyy-MM-dd`), one year after appointment and every year after that. */
 export function nextAnnualFrom(iso?: string | null, today = kenyaTodayISO()) {
   if (!iso || !/^\d{4}-\d{2}-\d{2}/.test(iso)) return null;
-  const [year, month, day] = iso.slice(0, 10).split("-").map(Number);
+  const year = Number(iso.slice(0, 4));
+  const month = Number(iso.slice(5, 7));
+  const day = Number(iso.slice(8, 10));
   const stamp = (y: number) => {
     const last = new Date(Date.UTC(y, month, 0)).getUTCDate();
     const d = Math.min(day, last);

@@ -1978,6 +1978,9 @@ public partial class FinanceService
         setup.Receipt ??= new ReceiptDisplayDto();
         setup.Methods ??= new List<PaymentMethodBlockDto>();
         setup.ExtraParameters ??= new List<ExtraParameterDto>();
+        setup.ProrationMode = string.Equals(setup.ProrationMode, "MONTHLY", StringComparison.OrdinalIgnoreCase)
+            ? "MONTHLY"
+            : "DAILY";
         foreach (var method in setup.Methods)
         {
             method.Id = string.IsNullOrWhiteSpace(method.Id) ? Guid.NewGuid().ToString("N") : method.Id.Trim();

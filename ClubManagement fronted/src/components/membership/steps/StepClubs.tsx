@@ -21,7 +21,7 @@ export const StepClubs = memo(function StepClubs({
 
   return (
     <div className="space-y-6">
-      <SectionTitle note="List up to three clubs where you currently hold membership.">
+      <SectionTitle >
         Other club memberships
       </SectionTitle>
       <YesNoField
@@ -41,7 +41,7 @@ export const StepClubs = memo(function StepClubs({
             <div key={index} className="flex items-end gap-3">
               <TextField
                 containerClassName="flex-1"
-                label={`Name of club ${index + 1}`}
+                label={`Name of club `}
                 value={club.name ?? ""}
                 onChange={(e) =>
                   onChange({

@@ -35,7 +35,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     title: "Guest visits",
     description: "View guests in the club and the member who accompanied them.",
     to: "/reception",
-    search: { section: "dashboard" },
+    search: { section: "visit" },
     icon: ConciergeBell,
     tone: "emerald",
     roles: ["ADMIN", "GENERAL_MANAGER", "CHAIRMAN"],

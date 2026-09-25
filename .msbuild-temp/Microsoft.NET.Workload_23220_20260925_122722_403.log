@@ -1,0 +1,14 @@
+[2026-09-25 12:27:22.424] [00005AB4] === Logging started ===
+[2026-09-25 12:27:22.439] [00005AB4] Executing: "C:\Program Files\dotnet\dotnet.exe" build .\ClubManagement\ClubManagement.csproj --no-restore -v q, PID: 23220, PPID: 30432
+[2026-09-25 12:27:22.449] [00005AB4] IsElevated: False
+[2026-09-25 12:27:22.449] [00005AB4] Is64BitProcess: True
+[2026-09-25 12:27:22.449] [00005AB4] RebootPending: False
+[2026-09-25 12:27:22.449] [00005AB4] ProcessorArchitecture: amd64
+[2026-09-25 12:27:22.449] [00005AB4] HostArchitecture: x64
+[2026-09-25 12:27:22.458] [00005AB4] SdkDirectory: 10.0.302
+[2026-09-25 12:27:22.458] [00005AB4] VerifySignatures: False
+[2026-09-25 12:27:22.458] [00005AB4] SDK feature band: 10.0.300
+[2026-09-25 12:27:24.355] [00005AB4] Shutting down
+[2026-09-25 12:27:24.355] [00005AB4] Shutdown completed.
+[2026-09-25 12:27:24.355] [00005AB4] Restart required: False
+[2026-09-25 12:27:24.356] [00005AB4] === Logging ended ===

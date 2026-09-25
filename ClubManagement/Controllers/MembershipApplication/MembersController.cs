@@ -26,6 +26,7 @@ public class MembersController : ControllerBase
         [FromQuery] string? search,
         [FromQuery] int minYears = 3,
         [FromQuery] long? applicationId = null,
+        [FromQuery] bool exact = false,
         CancellationToken cancellationToken = default)
     {
         var term = (search ?? "").Trim();
@@ -49,12 +50,19 @@ public class MembersController : ControllerBase
             declinedForApplication = declinedIds.ToHashSet();
         }
 
-        // Find by membership number among live accounts (eligibility applied after load).
-        var rows = await _dbContext.Accounts
+        // Exact membership number when requested (proposer/seconder); otherwise Contains for staff tools.
+        var query = _dbContext.Accounts
             .AsNoTracking()
-            .Where(a => !a.IsDeleted && a.MembershipNo != null && a.MembershipNo.Contains(term))
+            .Where(a => !a.IsDeleted && a.MembershipNo != null);
+
+        var termLower = term.ToLower();
+        query = exact
+            ? query.Where(a => a.MembershipNo == term || a.MembershipNo!.ToLower() == termLower)
+            : query.Where(a => a.MembershipNo!.Contains(term));
+
+        var rows = await query
             .OrderBy(a => a.MembershipNo)
-            .Take(25)
+            .Take(exact ? 5 : 25)
             .Select(a => new
             {
                 a.ProfileId,
@@ -108,6 +116,7 @@ public class MembersController : ControllerBase
                 Phone = a.Phone ?? string.Empty,
                 MembershipType = a.MembershipType,
                 YearOfJoining = yearOfJoining,
+                JoinedDate = a.JoinedDate?.ToString("yyyy-MM-dd"),
                 IsActive = a.IsActive && a.ProfileActive && a.StatusActive,
                 InGoodStanding = !a.HasOpenArrears,
                 Eligible = reason is null,
@@ -129,6 +138,7 @@ public class EligibleSupporterDto
     public string Phone { get; set; } = string.Empty;
     public string MembershipType { get; set; } = string.Empty;
     public int YearOfJoining { get; set; }
+    public string? JoinedDate { get; set; }
     public bool IsActive { get; set; }
     public bool InGoodStanding { get; set; }
     public bool Eligible { get; set; }

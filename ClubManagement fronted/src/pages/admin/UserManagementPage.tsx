@@ -337,18 +337,15 @@ function CreateUserDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Add new user</DialogTitle>
-          <DialogDescription>
-            Admin accounts are system-wide and must not belong to a company. Applicant, member
-            (including Chairman, General Manager, Treasurer, Committee Member), and receptionist
-            accounts must belong to a company. Applicants still self-register on the public page.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-lg flex-col gap-0 overflow-hidden p-0">
+        <div className="shrink-0 border-b border-border px-6 py-4 pr-12">
+          <DialogHeader>
+            <DialogTitle>Add new user</DialogTitle>
+          </DialogHeader>
+        </div>
 
         {invite ? (
-          <div className="space-y-3 text-sm">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4 text-sm">
             <p>
               {invite.emailSent
                 ? "Verification email sent."
@@ -357,7 +354,7 @@ function CreateUserDialog({
             <p className="break-all rounded-md border border-border bg-muted/40 p-3 font-mono text-xs">
               {invite.inviteUrl}
             </p>
-            <DialogFooter>
+            <DialogFooter className="border-0 bg-transparent p-0 pt-2 sm:justify-end">
               <Button
                 type="button"
                 variant="outline"
@@ -375,107 +372,105 @@ function CreateUserDialog({
           </div>
         ) : (
           <form
-            className="space-y-3"
+            className="flex min-h-0 flex-1 flex-col"
             onSubmit={(event) => {
               event.preventDefault();
               create.mutate();
             }}
           >
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="First name">
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="First name">
+                  <Input
+                    required
+                    value={form.firstName}
+                    onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                  />
+                </Field>
+                <Field label="Last name">
+                  <Input
+                    required
+                    value={form.lastName}
+                    onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                  />
+                </Field>
+              </div>
+              <Field label="Email">
                 <Input
+                  type="email"
                   required
-                  value={form.firstName}
-                  onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
                 />
               </Field>
-              <Field label="Last name">
+              <Field label="Phone">
+                <Input value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} />
+              </Field>
+              <Field label="Roles">
+                <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border border-input p-2">
+                  {options.map((option) => {
+                    const checked = form.roleCodes.includes(option.code);
+                    return (
+                      <label
+                        key={option.code}
+                        className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60"
+                      >
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-primary"
+                          checked={checked}
+                          onChange={() => toggleRole(option.code)}
+                        />
+                        <span>{option.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </Field>
+              {needsCompany ? (
+                <Field label="Company">
+                  <select
+                    required
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={form.companyId}
+                    onChange={(e) => setForm({ ...form, companyId: e.target.value })}
+                  >
+                    <option value="">Select company</option>
+                    {(companies.data ?? []).map((company) => (
+                      <option key={company.id} value={String(company.id)}>
+                        {company.companyName}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Admin does not belong to a company.
+                </p>
+              )}
+              {needsMembershipNo ? (
+                <Field label="Membership no.">
+                  <Input
+                    required
+                    placeholder="e.g. AC-0001"
+                    value={form.membershipNo}
+                    onChange={(e) => setForm({ ...form, membershipNo: e.target.value })}
+                  />
+                </Field>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Admin and receptionist accounts do not need a membership number.
+                </p>
+              )}
+              <Field label="Username (optional)">
                 <Input
-                  required
-                  value={form.lastName}
-                  onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                  placeholder={needsMembershipNo ? "Defaults to membership no." : "Defaults to email"}
+                  value={form.username}
+                  onChange={(e) => setForm({ ...form, username: e.target.value })}
                 />
               </Field>
             </div>
-            <Field label="Email">
-              <Input
-                type="email"
-                required
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-              />
-            </Field>
-            <Field label="Phone">
-              <Input value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} />
-            </Field>
-            <Field label="Roles">
-              <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border border-input p-2">
-                {options.map((option) => {
-                  const checked = form.roleCodes.includes(option.code);
-                  return (
-                    <label
-                      key={option.code}
-                      className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60"
-                    >
-                      <input
-                        type="checkbox"
-                        className="size-4 accent-primary"
-                        checked={checked}
-                        onChange={() => toggleRole(option.code)}
-                      />
-                      <span>{option.name}</span>
-                    </label>
-                  );
-                })}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Admin cannot be combined with company roles. Other roles are the union of assigned
-                permissions and require a company.
-              </p>
-            </Field>
-            {needsCompany ? (
-              <Field label="Company">
-                <select
-                  required
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  value={form.companyId}
-                  onChange={(e) => setForm({ ...form, companyId: e.target.value })}
-                >
-                  <option value="">Select company</option>
-                  {(companies.data ?? []).map((company) => (
-                    <option key={company.id} value={String(company.id)}>
-                      {company.companyName}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Admin does not belong to a company.
-              </p>
-            )}
-            {needsMembershipNo ? (
-              <Field label="Membership no.">
-                <Input
-                  required
-                  placeholder="e.g. AC-0001"
-                  value={form.membershipNo}
-                  onChange={(e) => setForm({ ...form, membershipNo: e.target.value })}
-                />
-              </Field>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Admin and receptionist accounts do not need a membership number.
-              </p>
-            )}
-            <Field label="Username (optional)">
-              <Input
-                placeholder={needsMembershipNo ? "Defaults to membership no." : "Defaults to email"}
-                value={form.username}
-                onChange={(e) => setForm({ ...form, username: e.target.value })}
-              />
-            </Field>
-            <DialogFooter>
+            <DialogFooter className="shrink-0 border-t border-border bg-background px-6 py-4">
               <Button type="button" variant="outline" onClick={close}>
                 Cancel
               </Button>

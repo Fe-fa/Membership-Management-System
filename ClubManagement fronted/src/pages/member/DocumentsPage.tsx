@@ -361,11 +361,20 @@ function ApplicantDocumentsHub() {
                   <Field label="Date of birth" value={formatKenyaDate(child.dateOfBirth)} />
                 </PersonBlock>
               ))}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <Field label="Emergency contact" value={dash(draft.family.emergencyName)} />
-                <Field label="Emergency phone" value={dash(draft.family.emergencyPhone)} />
-                <Field label="Emergency email" value={dash(draft.family.emergencyEmail)} />
-              </div>
+              {(draft.family.emergencyContacts ?? []).map((contact, index) => (
+                <PersonBlock
+                  key={`emergency-${index}`}
+                  title={
+                    (draft.family.emergencyContacts?.length ?? 0) > 1
+                      ? `Emergency contact ${index + 1}`
+                      : "Emergency contact"
+                  }
+                >
+                  <Field label="Name" value={dash(contact.name)} />
+                  <Field label="Phone" value={dash(contact.phone)} />
+                  <Field label="Email" value={dash(contact.email)} />
+                </PersonBlock>
+              ))}
             </CardContent>
           </Card>
 
@@ -375,15 +384,16 @@ function ApplicantDocumentsHub() {
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
               <Field label="Affiliated" value={yn(draft.aviation.isAffiliated)} />
-              <Field label="Aviation role" value={dash(draft.aviation.aviationRole)} />
-              <Field label="Holds a licence" value={yn(draft.aviation.holdsLicense)} />
-              <Field label="Licence type" value={dash(draft.aviation.licenseType)} />
-              <Field label="Licence number" value={dash(draft.aviation.licenseNumber)} />
-              <Field label="Licence issuer" value={dash(draft.aviation.licenseIssuer)} />
-              <Field label="Owns an aircraft" value={yn(draft.aviation.ownsAircraft)} />
-              <Field label="Aircraft type" value={dash(draft.aviation.aircraftType)} />
-              <Field label="Registration" value={dash(draft.aviation.aircraftRegistration)} />
-              <Field label="Hangar" value={dash(draft.aviation.hangarLocation)} />
+              {draft.aviation.isAffiliated ? (
+                <>
+                  <Field label="Licence type" value={dash(draft.aviation.licenseType)} />
+                  <Field label="Licence number" value={dash(draft.aviation.licenseNumber)} />
+                  <Field label="Licence issuer" value={dash(draft.aviation.licenseIssuer)} />
+                  <Field label="Aircraft type" value={dash(draft.aviation.aircraftType)} />
+                  <Field label="Registration" value={dash(draft.aviation.aircraftRegistration)} />
+                  <Field label="Hangar" value={dash(draft.aviation.hangarLocation)} />
+                </>
+              ) : null}
             </CardContent>
           </Card>
 

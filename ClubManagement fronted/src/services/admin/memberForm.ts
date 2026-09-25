@@ -45,9 +45,14 @@ export function memberProfileToDraft(profile: MemberProfile): ApplicationDraft {
       spouses: profile.spouses.map((row) => ({ name: row.name, phone: row.phone ?? "", email: row.email ?? "" })),
       hasChildren: profile.children.length > 0,
       children: profile.children.map((row) => ({ name: row.name, dateOfBirth: row.dateOfBirth?.slice(0, 10) ?? "" })),
-      emergencyName: emergency?.name ?? "",
-      emergencyPhone: emergency?.phone ?? "",
-      emergencyEmail: emergency?.email ?? "",
+      emergencyContacts:
+        profile.emergencyContacts.length > 0
+          ? profile.emergencyContacts.map((row) => ({
+              name: row.name,
+              phone: row.phone ?? "",
+              email: row.email ?? "",
+            }))
+          : [{ name: "", phone: "", email: "" }],
     },
     aviation: {
       isAffiliated: profile.aviation.isAffiliated,
@@ -128,22 +133,21 @@ export function draftToMemberUpdate(draft: ApplicationDraft, membershipNo: strin
     },
     spouses: draft.family.isMarried ? draft.family.spouses : [],
     children: draft.family.hasChildren ? draft.family.children : [],
-    emergencyContacts: draft.family.emergencyName
-      ? [
-          {
-            name: draft.family.emergencyName,
-            phone: draft.family.emergencyPhone,
-            email: draft.family.emergencyEmail,
-            isPrimary: true,
-          },
-        ]
-      : [],
+    emergencyContacts: (draft.family.emergencyContacts ?? [])
+      .filter((row) => row.name)
+      .map((row, index) => ({
+        name: row.name,
+        phone: row.phone,
+        email: row.email,
+        isPrimary: index === 0,
+      })),
     aviation: {
       isAffiliated: draft.aviation.isAffiliated,
       aviationRole: draft.aviation.aviationRole,
-      holdsLicense: draft.aviation.holdsLicense,
-      ownsAircraft: draft.aviation.ownsAircraft,
-      licenses: draft.aviation.holdsLicense
+      holdsLicense: draft.aviation.isAffiliated && Boolean(draft.aviation.licenseNumber),
+      ownsAircraft: draft.aviation.isAffiliated && Boolean(draft.aviation.aircraftRegistration),
+      licenses:
+        draft.aviation.isAffiliated && draft.aviation.licenseNumber
         ? [
             {
               licenseType: draft.aviation.licenseType,
@@ -154,7 +158,8 @@ export function draftToMemberUpdate(draft: ApplicationDraft, membershipNo: strin
             },
           ]
         : [],
-      aircraft: draft.aviation.ownsAircraft
+      aircraft:
+        draft.aviation.isAffiliated && draft.aviation.aircraftRegistration
         ? [
             {
               aircraftType: draft.aviation.aircraftType,

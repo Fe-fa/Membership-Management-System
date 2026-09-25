@@ -219,7 +219,12 @@ export function ApplicationWizard() {
         <StepAviation value={draft.aviation} errors={errors} onChange={patch("aviation")} />
       )}
       {step === "membership" && (
-        <StepMembership value={draft.membership} errors={errors} onChange={patch("membership")} />
+        <StepMembership
+          value={draft.membership}
+          errors={errors}
+          onChange={patch("membership")}
+          dateOfBirth={draft.personal.dateOfBirth}
+        />
       )}
       {step === "supporters" && (
         <StepSupporters

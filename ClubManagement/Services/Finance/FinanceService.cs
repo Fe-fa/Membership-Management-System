@@ -257,6 +257,9 @@ public class PaymentSetupDto
     public ReceiptDisplayDto Receipt { get; set; } = new();
     public List<PaymentMethodBlockDto> Methods { get; set; } = new();
     public List<ExtraParameterDto> ExtraParameters { get; set; } = new();
+
+    /// <summary>"DAILY" or "MONTHLY" — controls how the first-year annual subscription is prorated.</summary>
+    public string ProrationMode { get; set; } = "DAILY";
 }
 public record PaymentListFilter(
     long? AccountId = null,
@@ -775,6 +778,11 @@ END
 ", cancellationToken);
     }
 
+    private static ProrationMode ParseProrationMode(string? code) =>
+        string.Equals(code?.Trim(), "MONTHLY", StringComparison.OrdinalIgnoreCase)
+            ? ProrationMode.Monthly
+            : ProrationMode.Daily; // safe default, matches prior (day-based) behavior
+
     public async Task<FeeQuoteDto> QuoteAsync(long membershipTypeId, DateOnly dateOfBirth, DateOnly asOf, CancellationToken cancellationToken)
     {
         var type = await _db.MembershipTypes.AsNoTracking().FirstAsync(x => x.MembershipTypeId == membershipTypeId, cancellationToken);
@@ -784,9 +792,12 @@ END
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new InvalidOperationException("No fee schedule is configured for this membership type.");
 
+        var setup = await GetInvoiceSetupAsync(cancellationToken);
+        var mode = ParseProrationMode(setup.ProrationMode);
+
         var age = MembershipFeeCalculator.CompletedYears(dateOfBirth, asOf);
         var joining = age < 30 ? schedule.JoiningFeeUnder30 : schedule.JoiningFee;
-        var annual = MembershipFeeCalculator.ProrateAnnual(schedule.AnnualSubscription, asOf);
+        var annual = MembershipFeeCalculator.ProrateAnnual(schedule.AnnualSubscription, asOf, mode);
         return new FeeQuoteDto(
             type.MembershipTypeId,
             type.Name,
@@ -819,6 +830,9 @@ END
                 inquiry.AsOf,
                 cancellationToken);
 
+        var setup = await GetInvoiceSetupAsync(cancellationToken);
+        var mode = ParseProrationMode(setup.ProrationMode);
+
         return MembershipFeeCalculator.Calculate(new MembershipFeeFacts(
             type.MembershipTypeId,
             type.Name,
@@ -828,7 +842,8 @@ END
             inquiry.AsOf,
             inquiry.IsChildOfMember,
             parentStatus,
-            parentYears));
+            parentYears,
+            mode));
     }
 
     private async Task<(string? StatusCode, int? ContinuousYears)> ResolveParentStandingAsync(
@@ -1118,151 +1133,151 @@ END
                 ReferenceNote = slice.ReferenceNote
             };
 
-        var feeCodeForBind = await _db.FeeTypes.AsNoTracking()
-            .Where(f => f.FeeTypeId == sliceRequest.FeeTypeId)
-            .Select(f => f.Code)
-            .FirstOrDefaultAsync(cancellationToken);
-        long? boundSubscriptionId = null;
-        if (IsAnnualFee(feeCodeForBind) && sliceRequest.AccountId is long bindAccountId)
-        {
-            var bindYear = sliceRequest.SubscriptionYear ?? sliceRequest.PaymentDate.Year;
-            boundSubscriptionId = await _db.Subscriptions.AsNoTracking()
-                .Where(s =>
-                    s.AccountId == bindAccountId
-                    && s.SubscriptionYear <= bindYear
-                    && !s.WaivedFlag
-                    && s.AmountPaid < s.AmountDue)
-                .OrderBy(s => s.SubscriptionYear)
-                .Select(s => (long?)s.SubscriptionId)
+            var feeCodeForBind = await _db.FeeTypes.AsNoTracking()
+                .Where(f => f.FeeTypeId == sliceRequest.FeeTypeId)
+                .Select(f => f.Code)
                 .FirstOrDefaultAsync(cancellationToken);
-            boundSubscriptionId ??= await _db.Subscriptions.AsNoTracking()
-                .Where(s => s.AccountId == bindAccountId && s.SubscriptionYear == bindYear)
-                .Select(s => (long?)s.SubscriptionId)
-                .FirstOrDefaultAsync(cancellationToken);
-        }
-
-        var tx = new MTransaction
-        {
-            AccountId = sliceRequest.AccountId,
-            ProfileId = profileId,
-            SubscriptionId = boundSubscriptionId,
-            FeeTypeId = sliceRequest.FeeTypeId,
-            PaymentMethodId = sliceRequest.PaymentMethodId,
-            PaymentStatusId = recordedStatus.PaymentStatusId,
-            Amount = sliceRequest.Amount,
-            PaymentDate = sliceRequest.PaymentDate,
-            ChequeNo = sliceRequest.ChequeNo,
-            ChequeBankName = isCheque ? sliceRequest.ChequeBankName?.Trim() : null,
-            ChequeBankCode = isCheque ? sliceRequest.ChequeBankCode?.Trim() : null,
-            ChequeDate = isCheque ? sliceRequest.ChequeDate : null,
-            ChequeDocumentId = chequeDocumentId,
-            MpesaCode = sliceRequest.MpesaCode,
-            ReferenceNote = sliceRequest.ReferenceNote,
-            CreatedAt = DateTime.UtcNow,
-            CreatedByUserId = actorUserId
-        };
-        _db.Transactions.Add(tx);
-        await _db.SaveChangesAsync(cancellationToken);
-
-        string? receiptNo = null;
-        var rowStatus = recordedStatus;
-        var isPaidNow = string.Equals(recordedStatus.Code, "PAID", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(recordedStatus.Code, "WAIVED", StringComparison.OrdinalIgnoreCase);
-        if (isPaidNow)
-        {
-            if (sliceRequest.AccountId is long paidAccountId)
+            long? boundSubscriptionId = null;
+            if (IsAnnualFee(feeCodeForBind) && sliceRequest.AccountId is long bindAccountId)
             {
-                var feeCode = await _db.FeeTypes.AsNoTracking()
-                    .Where(f => f.FeeTypeId == sliceRequest.FeeTypeId)
-                    .Select(f => f.Code)
+                var bindYear = sliceRequest.SubscriptionYear ?? sliceRequest.PaymentDate.Year;
+                boundSubscriptionId = await _db.Subscriptions.AsNoTracking()
+                    .Where(s =>
+                        s.AccountId == bindAccountId
+                        && s.SubscriptionYear <= bindYear
+                        && !s.WaivedFlag
+                        && s.AmountPaid < s.AmountDue)
+                    .OrderBy(s => s.SubscriptionYear)
+                    .Select(s => (long?)s.SubscriptionId)
                     .FirstOrDefaultAsync(cancellationToken);
-                if (IsAnnualFee(feeCode))
-                    await ReconcileAccountDuesAsync(paidAccountId, cancellationToken);
-                else
-                    await TryRestoreActiveMembershipAsync(paidAccountId, actorUserId, cancellationToken);
+                boundSubscriptionId ??= await _db.Subscriptions.AsNoTracking()
+                    .Where(s => s.AccountId == bindAccountId && s.SubscriptionYear == bindYear)
+                    .Select(s => (long?)s.SubscriptionId)
+                    .FirstOrDefaultAsync(cancellationToken);
             }
 
-            var obligation = await TryGetFeeObligationAsync(
+            var tx = new MTransaction
+            {
+                AccountId = sliceRequest.AccountId,
+                ProfileId = profileId,
+                SubscriptionId = boundSubscriptionId,
+                FeeTypeId = sliceRequest.FeeTypeId,
+                PaymentMethodId = sliceRequest.PaymentMethodId,
+                PaymentStatusId = recordedStatus.PaymentStatusId,
+                Amount = sliceRequest.Amount,
+                PaymentDate = sliceRequest.PaymentDate,
+                ChequeNo = sliceRequest.ChequeNo,
+                ChequeBankName = isCheque ? sliceRequest.ChequeBankName?.Trim() : null,
+                ChequeBankCode = isCheque ? sliceRequest.ChequeBankCode?.Trim() : null,
+                ChequeDate = isCheque ? sliceRequest.ChequeDate : null,
+                ChequeDocumentId = chequeDocumentId,
+                MpesaCode = sliceRequest.MpesaCode,
+                ReferenceNote = sliceRequest.ReferenceNote,
+                CreatedAt = DateTime.UtcNow,
+                CreatedByUserId = actorUserId
+            };
+            _db.Transactions.Add(tx);
+            await _db.SaveChangesAsync(cancellationToken);
+
+            string? receiptNo = null;
+            var rowStatus = recordedStatus;
+            var isPaidNow = string.Equals(recordedStatus.Code, "PAID", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(recordedStatus.Code, "WAIVED", StringComparison.OrdinalIgnoreCase);
+            if (isPaidNow)
+            {
+                if (sliceRequest.AccountId is long paidAccountId)
+                {
+                    var feeCode = await _db.FeeTypes.AsNoTracking()
+                        .Where(f => f.FeeTypeId == sliceRequest.FeeTypeId)
+                        .Select(f => f.Code)
+                        .FirstOrDefaultAsync(cancellationToken);
+                    if (IsAnnualFee(feeCode))
+                        await ReconcileAccountDuesAsync(paidAccountId, cancellationToken);
+                    else
+                        await TryRestoreActiveMembershipAsync(paidAccountId, actorUserId, cancellationToken);
+                }
+
+                var obligation = await TryGetFeeObligationAsync(
+                    sliceRequest.AccountId,
+                    profileId,
+                    sliceRequest.FeeTypeId,
+                    sliceRequest.SubscriptionYear,
+                    null,
+                    cancellationToken,
+                    sliceRequest.ApplicationId);
+                await FinalizeRecognizedStatusAsync(tx, obligation?.RemainingCap ?? 0, actorUserId, cancellationToken);
+                rowStatus = tx.PaymentStatus ?? recordedStatus;
+                isPaidNow = RecognizesPayment(rowStatus.Code);
+            }
+
+            if (isPaidNow)
+            {
+                receiptNo = $"RCT-{tx.TransactionId:D6}";
+                var receipt = new MReceiptMaster
+                {
+                    TransactionId = tx.TransactionId,
+                    ReceiptNumber = receiptNo,
+                    Amount = sliceRequest.Amount,
+                    IssuedDate = sliceRequest.PaymentDate,
+                    IssuedByUserId = actorUserId,
+                    ChequeDocumentId = chequeDocumentId,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedByUserId = actorUserId
+                };
+                _db.Receipts.Add(receipt);
+                await _db.SaveChangesAsync(cancellationToken);
+                tx.ReceiptId = receipt.ReceiptId;
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+
+            _db.AuditLogs.Add(new AuditLog
+            {
+                TableName = "MTransaction",
+                RecordId = tx.TransactionId,
+                Action = "INSERT",
+                NewValues = $"profile={profileId}; method={method.Code}; status={rowStatus.Code}; amount={sliceRequest.Amount}",
+                ChangedByUserId = actorUserId,
+                ChangedAt = DateTime.UtcNow
+            });
+            await _db.SaveChangesAsync(cancellationToken);
+
+            var feeMeta = await _db.FeeTypes.AsNoTracking()
+                .Where(f => f.FeeTypeId == sliceRequest.FeeTypeId)
+                .Select(f => new { f.Name, f.Code })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            var row = new PaymentRowDto(
+                tx.TransactionId,
+                receiptNo,
+                null,
+                method.Name,
+                rowStatus.Name,
+                tx.Amount,
+                tx.PaymentDate,
+                tx.MpesaCode,
+                tx.ChequeNo,
+                feeMeta?.Name,
+                tx.ReferenceNote,
+                tx.ChequeBankName,
+                tx.ChequeBankCode,
+                tx.ChequeDate,
+                chequeFileName,
+                chequeFileUrl,
+                method.Code,
+                null,
+                rowStatus.Code,
+                feeMeta?.Code,
+                sliceRequest.ApplicationId,
+                null,
+                tx.CreatedAt,
+                profileId);
+            var mapped = await AttachObligationAsync(
+                row,
                 sliceRequest.AccountId,
                 profileId,
                 sliceRequest.FeeTypeId,
                 sliceRequest.SubscriptionYear,
-                null,
-                cancellationToken,
-                sliceRequest.ApplicationId);
-            await FinalizeRecognizedStatusAsync(tx, obligation?.RemainingCap ?? 0, actorUserId, cancellationToken);
-            rowStatus = tx.PaymentStatus ?? recordedStatus;
-            isPaidNow = RecognizesPayment(rowStatus.Code);
-        }
-
-        if (isPaidNow)
-        {
-            receiptNo = $"RCT-{tx.TransactionId:D6}";
-            var receipt = new MReceiptMaster
-            {
-                TransactionId = tx.TransactionId,
-                ReceiptNumber = receiptNo,
-                Amount = sliceRequest.Amount,
-                IssuedDate = sliceRequest.PaymentDate,
-                IssuedByUserId = actorUserId,
-                ChequeDocumentId = chequeDocumentId,
-                CreatedAt = DateTime.UtcNow,
-                CreatedByUserId = actorUserId
-            };
-            _db.Receipts.Add(receipt);
-            await _db.SaveChangesAsync(cancellationToken);
-            tx.ReceiptId = receipt.ReceiptId;
-            await _db.SaveChangesAsync(cancellationToken);
-        }
-
-        _db.AuditLogs.Add(new AuditLog
-        {
-            TableName = "MTransaction",
-            RecordId = tx.TransactionId,
-            Action = "INSERT",
-            NewValues = $"profile={profileId}; method={method.Code}; status={rowStatus.Code}; amount={sliceRequest.Amount}",
-            ChangedByUserId = actorUserId,
-            ChangedAt = DateTime.UtcNow
-        });
-        await _db.SaveChangesAsync(cancellationToken);
-
-        var feeMeta = await _db.FeeTypes.AsNoTracking()
-            .Where(f => f.FeeTypeId == sliceRequest.FeeTypeId)
-            .Select(f => new { f.Name, f.Code })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        var row = new PaymentRowDto(
-            tx.TransactionId,
-            receiptNo,
-            null,
-            method.Name,
-            rowStatus.Name,
-            tx.Amount,
-            tx.PaymentDate,
-            tx.MpesaCode,
-            tx.ChequeNo,
-            feeMeta?.Name,
-            tx.ReferenceNote,
-            tx.ChequeBankName,
-            tx.ChequeBankCode,
-            tx.ChequeDate,
-            chequeFileName,
-            chequeFileUrl,
-            method.Code,
-            null,
-            rowStatus.Code,
-            feeMeta?.Code,
-            sliceRequest.ApplicationId,
-            null,
-            tx.CreatedAt,
-            profileId);
-        var mapped = await AttachObligationAsync(
-            row,
-            sliceRequest.AccountId,
-            profileId,
-            sliceRequest.FeeTypeId,
-            sliceRequest.SubscriptionYear,
-            cancellationToken);
+                cancellationToken);
             if (firstRow is null)
                 firstRow = mapped;
         }

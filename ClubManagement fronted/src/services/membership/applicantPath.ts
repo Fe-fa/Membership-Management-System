@@ -44,12 +44,16 @@ export function applyApplicantPath(draft: ApplicationDraft): ApplicationDraft {
       : draft.personal,
     applicationPath: {
       category: "CHILD_OF_MEMBER",
-      parentAccountId: path.parentAccountId,
-      parentProfileId: path.parentProfileId,
-      parentMembershipNo: path.parentMembershipNo,
-      parentName: path.parentName,
-      parentContinuousYears: path.parentContinuousYears,
-      entranceFeeWaiverEligible: path.entranceFeeWaiverEligible,
+      ...(path.parentAccountId !== undefined && { parentAccountId: path.parentAccountId }),
+      ...(path.parentProfileId !== undefined && { parentProfileId: path.parentProfileId }),
+      ...(path.parentMembershipNo !== undefined && { parentMembershipNo: path.parentMembershipNo }),
+      ...(path.parentName !== undefined && { parentName: path.parentName }),
+      ...(path.parentContinuousYears !== undefined && {
+        parentContinuousYears: path.parentContinuousYears,
+      }),
+      ...(path.entranceFeeWaiverEligible !== undefined && {
+        entranceFeeWaiverEligible: path.entranceFeeWaiverEligible,
+      }),
     },
     supporters: alreadyChosen
       ? draft.supporters
@@ -61,7 +65,7 @@ export function applyApplicantPath(draft: ApplicationDraft): ApplicationDraft {
             name: path.parentName ?? "",
             phone: path.parentPhone ?? "",
             email: path.parentEmail ?? "",
-            yearOfJoining: path.yearOfJoining ?? undefined,
+            ...(path.yearOfJoining != null && { yearOfJoining: path.yearOfJoining }),
           },
         },
   };

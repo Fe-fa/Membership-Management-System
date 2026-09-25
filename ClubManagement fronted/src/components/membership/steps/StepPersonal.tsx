@@ -1,11 +1,8 @@
 ﻿import { memo, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { TriangleAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { FileField, Grid, SectionTitle, SelectField, TextField } from "../fields";
-import type { ClubSetupDesignation } from "@/services/admin/clubSetup";
-import { apiRequest } from "@/services/membership/api";
 import { useLookup } from "@/services/membership/lookups";
 import type { ApplicationDraft } from "@/services/membership/schema";
 import type { ErrorMap } from "@/services/membership/useApplication";
@@ -14,10 +11,6 @@ type Value = ApplicationDraft["personal"];
 
 type LookupQuery = ReturnType<typeof useLookup>;
 
-/**
- * SelectField fed by a lookup query, with per-lookup loading and error/retry
- * states. Options render in the order the server emitted them (sort_order, name).
- */
 function LookupSelect({
   label,
   required,
@@ -102,16 +95,11 @@ export const StepPersonal = memo(function StepPersonal({
   const genders = useLookup("genders");
   const bloodGroups = useLookup("blood-groups");
   const countries = useLookup("countries");
-  const designations = useQuery({
-    queryKey: ["apply-designations"],
-    queryFn: () => apiRequest<ClubSetupDesignation[]>("/api/apply/designations"),
-    staleTime: 5 * 60_000,
-  });
 
   return (
     <div className="space-y-8">
       <section className="space-y-4">
-        <SectionTitle note="As it appears on your ID or passport.">Applicant name</SectionTitle>
+        <SectionTitle>Applicant name</SectionTitle>
         <Grid>
           <TextField
             label="First name"
@@ -295,16 +283,46 @@ export const StepPersonal = memo(function StepPersonal({
             onChange={set("company")}
             error={errors["company"]}
           />
-          <SelectField
+          <TextField
             label="Designation"
             value={value.role ?? ""}
             onChange={set("role")}
             error={errors["role"]}
-            options={(designations.data ?? []).map((row) => ({
-              code: row.designationCode,
-              name: row.description,
-            }))}
-            placeholder={designations.isLoading ? "Loading…" : "Select designation"}
+            placeholder="e.g. Store Keeping"
+          />
+        </Grid>
+      </section>
+
+      <section className="space-y-4">
+        <SectionTitle >Next of kin</SectionTitle>
+        <Grid>
+          <TextField
+            label="Full name"
+            required
+            value={value.nextOfKinName ?? ""}
+            onChange={set("nextOfKinName")}
+            error={errors["nextOfKinName"]}
+          />
+          <TextField
+            label="Relationship"
+            required
+            value={value.nextOfKinRelationship ?? ""}
+            onChange={set("nextOfKinRelationship")}
+            error={errors["nextOfKinRelationship"]}
+            placeholder="e.g. Spouse, Parent, Sibling"
+          />
+          <TextField
+            label="Phone no."
+            value={value.nextOfKinPhone ?? ""}
+            onChange={set("nextOfKinPhone")}
+            error={errors["nextOfKinPhone"]}
+          />
+          <TextField
+            label="Email"
+            type="email"
+            value={value.nextOfKinEmail ?? ""}
+            onChange={set("nextOfKinEmail")}
+            error={errors["nextOfKinEmail"]}
           />
         </Grid>
       </section>
@@ -329,7 +347,6 @@ export const StepPersonal = memo(function StepPersonal({
               value={value.photo}
               onChange={(file) => onChange({ photo: file })}
               error={errors["photo"]}
-              hint="JPG, PNG or WEBP up to 8 MB."
             />
           )}
           <FileField
@@ -340,7 +357,6 @@ export const StepPersonal = memo(function StepPersonal({
             value={value.cv}
             onChange={(file) => onChange({ cv: file })}
             error={errors["cv"]}
-            hint="PDF or Word document up to 8 MB."
           />
           <FileField
             label="ID / Passport copy"
@@ -350,7 +366,6 @@ export const StepPersonal = memo(function StepPersonal({
             value={value.idPassport}
             onChange={(file) => onChange({ idPassport: file })}
             error={errors["idPassport"]}
-            hint="PDF or image of your national ID or passport."
           />
           {hidePaymentUploads ? null : (
             <>
@@ -361,7 +376,6 @@ export const StepPersonal = memo(function StepPersonal({
                 value={value.annualCheque ?? null}
                 onChange={(file) => onChange({ annualCheque: file })}
                 error={errors["annualCheque"]}
-                hint="Cheque image, PDF or Word for the annual subscription fee."
               />
               <FileField
                 label="Joining fee"
@@ -370,7 +384,6 @@ export const StepPersonal = memo(function StepPersonal({
                 value={value.joiningCheque ?? null}
                 onChange={(file) => onChange({ joiningCheque: file })}
                 error={errors["joiningCheque"]}
-                hint="Cheque image, PDF or Word for the joining / entrance fee."
               />
             </>
           )}

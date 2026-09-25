@@ -180,8 +180,6 @@ export function useApplication() {
     try {
       return await submitMutation.mutateAsync({ draft, completedSteps: completed });
     } catch (err) {
-      // submitMutation.onError already set submitError for the wizard toast;
-      // rethrow is not needed because the wizard reads submitError directly.
       return null;
     }
   }, [completed, draft, goTo, sectionStatus, submitMutation]);

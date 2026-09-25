@@ -64,7 +64,7 @@ export const TextField = memo(function TextField({
     <FieldShell
       label={label}
       error={error}
-      hint={hint ?? (isDate ? "Kenya date — DD/MM/YYYY (Africa/Nairobi)" : undefined)}
+      // hint={hint ?? (isDate ? "Kenya date — DD/MM/YYYY (Africa/Nairobi)" : undefined)}
       required={required}
       htmlFor={id}
       className={containerClassName}
@@ -180,7 +180,6 @@ export const SignatureField = memo(function SignatureField({
       error={error}
       required
       htmlFor={id}
-      hint="Type your full name — this counts as your electronic signature."
     >
       <Input
         id={id}

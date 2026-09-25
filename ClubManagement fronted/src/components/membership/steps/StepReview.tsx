@@ -3,7 +3,7 @@ import { CircleAlert, CircleCheck, Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ageOn, type ApplicationDraft } from "@/services/membership/schema";
-import { formatKenyaDate } from "@/utils/kenyaDate";
+import { formatKenyaDate, formatKenyaDateShort } from "@/utils/kenyaDate";
 import { STEPS, type StepId } from "@/services/membership/steps";
 
 type Row = { label: string; value: string };
@@ -86,10 +86,16 @@ export const StepReview = memo(function StepReview({
 
     const supporter = (key: "proposer" | "seconder"): Row[] => {
       const s = draft.supporters[key] as Record<string, unknown>;
+      const joinedDate = String(s["joinedDate"] ?? "");
+      const memberSince = joinedDate
+        ? formatKenyaDateShort(joinedDate)
+        : s["yearOfJoining"]
+          ? String(s["yearOfJoining"])
+          : "—";
       return [
         { label: "Selected member", value: dash(s["name"]) },
         { label: "Membership number", value: dash(s["membershipNo"]) },
-        { label: "Member since", value: dash(s["yearOfJoining"]) },
+        { label: "Member since", value: memberSince },
         { label: "Endorsement", value: "Pending completion on the member dashboard" },
       ];
     };
@@ -121,6 +127,11 @@ export const StepReview = memo(function StepReview({
           {
             label: "Occupation",
             value: `${dash(p.occupation)} · ${dash(p.company)} · ${dash(p.role)}`,
+          },
+          { label: "Next of kin", value: dash(p.nextOfKinName) },
+          {
+            label: "Next of kin details",
+            value: `${dash(p.nextOfKinRelationship)} · ${dash(p.nextOfKinPhone)} · ${dash(p.nextOfKinEmail)}`,
           },
           { label: "Blood group / gender", value: `${dash(p.bloodGroup)} · ${dash(p.gender)}` },
           { label: "Photo", value: dash(p.photo?.fileName) },
@@ -156,31 +167,31 @@ export const StepReview = memo(function StepReview({
                 },
               ]
             : []),
-          { label: "Emergency contact", value: dash(f.emergencyName) },
-          {
-            label: "Emergency contact details",
-            value: `${dash(f.emergencyPhone)} · ${dash(f.emergencyEmail)}`,
-          },
+          { label: "Emergency contacts", value: String((f.emergencyContacts ?? []).length || 0) },
+          ...((f.emergencyContacts ?? []).length > 0
+            ? (f.emergencyContacts ?? []).map((contact, i) => ({
+                label:
+                  (f.emergencyContacts?.length ?? 0) > 1
+                    ? `Emergency contact ${i + 1}`
+                    : "Emergency contact",
+                value: `${dash(contact.name)} · ${dash(contact.phone)} · ${dash(contact.email)}`,
+              }))
+            : [
+                { label: "Emergency contact", value: "—" },
+              ]),
         ],
       },
       {
         step: "aviation" as StepId,
         rows: [
           { label: "Affiliated with aviation", value: yn(a.isAffiliated) },
-          ...(a.isAffiliated ? [{ label: "Role", value: dash(a.aviationRole) }] : []),
-          { label: "Holds pilot's licence", value: yn(a.holdsLicense) },
-          ...(a.holdsLicense
+          ...(a.isAffiliated
             ? [
                 {
                   label: "Licence",
                   value: `${dash(a.licenseType)} · ${dash(a.licenseNumber)} · ${dash(a.licenseIssuer)}`,
                 },
                 { label: "Licence copy", value: dash(a.licenseFile?.fileName) },
-              ]
-            : []),
-          { label: "Owns / co-owns aircraft", value: yn(a.ownsAircraft) },
-          ...(a.ownsAircraft
-            ? [
                 {
                   label: "Aircraft",
                   value: `${dash(a.aircraftType)} · ${dash(a.aircraftRegistration)}`,

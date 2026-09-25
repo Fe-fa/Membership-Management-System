@@ -1,8 +1,3 @@
-/**
- * Club member register lookups used by the proposer / seconder step.
- * Lookup is by membership number (unique). Names are not used for search
- * because they can collide.
- */
 import { API_BASE, apiRequest } from "./api";
 import { MIN_SUPPORTER_YEARS } from "./schema";
 
@@ -14,6 +9,7 @@ export type MemberSummary = {
   phone: string;
   membershipType: string;
   yearOfJoining: number;
+  joinedDate?: string | null;
   isActive: boolean;
   inGoodStanding: boolean;
   eligible?: boolean;
@@ -30,60 +26,33 @@ export type EligibleMember = MemberSummary & {
 const DEMO_REGISTER: MemberSummary[] = [
   {
     profileId: "1041",
-    membershipNo: "ACEA/F/1041",
+    membershipNo: "AC-0001",
     fullName: "Capt. Miriam Wanjiku",
     email: "m.wanjiku@example.co.ke",
     phone: "+254 722 100 220",
     membershipType: "Full",
     yearOfJoining: 2009,
+    joinedDate: "2009-03-15",
     isActive: true,
     inGoodStanding: true,
   },
   {
     profileId: "1088",
-    membershipNo: "ACEA/F/1088",
+    membershipNo: "AC-0002",
     fullName: "Eng. Peter Oduor",
     email: "p.oduor@example.co.ke",
     phone: "+254 733 441 908",
     membershipType: "Full",
     yearOfJoining: 2014,
+    joinedDate: "2014-07-01",
     isActive: true,
-    inGoodStanding: true,
-  },
-  {
-    profileId: "1120",
-    membershipNo: "ACEA/C/1120",
-    fullName: "Ms. Amina Hassan",
-    email: "a.hassan@example.co.ke",
-    phone: "+254 711 880 441",
-    membershipType: "Country",
-    yearOfJoining: 2012,
-    isActive: true,
-    inGoodStanding: true,
-  },
-  {
-    profileId: "1203",
-    membershipNo: "ACEA/F/1203",
-    fullName: "Dr. Grace Mumbi",
-    email: "g.mumbi@example.co.ke",
-    phone: "+254 701 223 991",
-    membershipType: "Full",
-    yearOfJoining: 2011,
-    isActive: true,
-    inGoodStanding: false,
-  },
-  {
-    profileId: "1455",
-    membershipNo: "ACEA/C/1455",
-    fullName: "Mr. Samuel Kiptoo",
-    email: "s.kiptoo@example.co.ke",
-    phone: "+254 715 662 004",
-    membershipType: "Country",
-    isActive: false,
-    yearOfJoining: 2001,
     inGoodStanding: true,
   },
 ];
+
+function normalizeMembershipNo(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, "");
+}
 
 export function decorate(member: MemberSummary): EligibleMember {
   const tenureYears =
@@ -107,7 +76,7 @@ export function decorate(member: MemberSummary): EligibleMember {
   return { ...member, tenureYears, eligible: ineligibleReason === null, ineligibleReason };
 }
 
-
+/** Exact membership-number lookup for proposer / seconder. */
 export async function searchEligibleMembers(
   search: string,
   applicationId?: number | string | null,
@@ -119,29 +88,21 @@ export async function searchEligibleMembers(
     const params = new URLSearchParams({
       search: term,
       minYears: String(MIN_SUPPORTER_YEARS),
+      exact: "true",
     });
     const id = Number(applicationId);
     if (Number.isFinite(id) && id > 0) params.set("applicationId", String(id));
     const members = await apiRequest<MemberSummary[]>(
       `/api/members/eligible-supporters?${params.toString()}`,
     );
+    const needle = normalizeMembershipNo(term);
     return members
       .map(decorate)
-      .sort((a, b) => {
-        const aExact = a.membershipNo.toLowerCase() === term.toLowerCase() ? 0 : 1;
-        const bExact = b.membershipNo.toLowerCase() === term.toLowerCase() ? 0 : 1;
-        if (aExact !== bExact) return aExact - bExact;
-        if (a.eligible !== b.eligible) return a.eligible ? -1 : 1;
-        return a.membershipNo.localeCompare(b.membershipNo);
-      });
+      .filter((member) => normalizeMembershipNo(member.membershipNo) === needle);
   }
 
-  const needle = term.toLowerCase();
-  return DEMO_REGISTER.map(decorate)
-    .filter((m) => m.membershipNo.toLowerCase().includes(needle))
-    .sort((a, b) => {
-      const aExact = a.membershipNo.toLowerCase() === needle ? 0 : 1;
-      const bExact = b.membershipNo.toLowerCase() === needle ? 0 : 1;
-      return aExact - bExact || a.membershipNo.localeCompare(b.membershipNo);
-    });
+  const needle = normalizeMembershipNo(term);
+  return DEMO_REGISTER.map(decorate).filter(
+    (m) => normalizeMembershipNo(m.membershipNo) === needle,
+  );
 }

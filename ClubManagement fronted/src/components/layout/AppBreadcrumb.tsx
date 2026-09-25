@@ -228,7 +228,7 @@ export function crumbsForLocation(
     rest.push({ label: "Finance", to: "/finance" }, { label: "Desk" });
   } else if (pathname.startsWith("/reception")) {
     rest.push(
-      { label: "Guest visits", to: "/reception", search: { section: "dashboard" } },
+      { label: "Guest visits", to: "/reception", search: { section: "visit" } },
       { label: String(search.section ?? "") === "dashboard" ? "Dashboard" : "Visits" },
     );
   } else if (pathname.startsWith("/settings/rbac")) {

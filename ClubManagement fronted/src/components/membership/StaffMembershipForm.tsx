@@ -187,6 +187,7 @@ export function StaffMembershipForm({
           value={draft.membership}
           errors={errors}
           onChange={patch("membership")}
+          dateOfBirth={draft.personal.dateOfBirth}
           existingMemberMode={variant === "existingMember"}
           {...(onMembershipNoChange
             ? { membershipNo: membershipNo ?? "", onMembershipNoChange }

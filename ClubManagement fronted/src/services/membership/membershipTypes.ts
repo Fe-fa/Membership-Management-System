@@ -1,7 +1,11 @@
 import { apiRequest, API_BASE } from "./api";
 import { MEMBERSHIP_TYPES } from "./schema";
 
-export type MembershipTypeOption = { code: string; name: string };
+export type MembershipTypeOption = {
+  code: string;
+  name: string;
+  membershipTypeId?: number;
+};
 
 /** Applicant election types only (paper form: Full / Country / Overseas). */
 const APPLICANT_TYPE_CODES = new Set(
@@ -16,18 +20,17 @@ const fallbackTypes: MembershipTypeOption[] = MEMBERSHIP_TYPES.map((code) => ({
 function normalizeApplicantType(row: MembershipTypeOption): MembershipTypeOption | null {
   const key = row.code.trim().toLowerCase();
   const nameKey = row.name.trim().toLowerCase();
-  // Accept "Country" / "County" typos from data as Country.
   if (key === "county" || nameKey === "county") {
-    return { code: "Country", name: "Country" };
+    return { code: "Country", name: "Country", membershipTypeId: row.membershipTypeId };
   }
   if (key === "oversea" || nameKey === "oversea") {
-    return { code: "Overseas", name: "Overseas" };
+    return { code: "Overseas", name: "Overseas", membershipTypeId: row.membershipTypeId };
   }
   const match = MEMBERSHIP_TYPES.find(
     (code) => code.toLowerCase() === key || code.toLowerCase() === nameKey,
   );
   if (!match) return null;
-  return { code: match, name: match };
+  return { code: match, name: match, membershipTypeId: row.membershipTypeId };
 }
 
 /** Reads the membership-type catalogue maintained by the C# / EF backend. */
@@ -50,7 +53,18 @@ export async function fetchMembershipTypes(options?: {
       const name = String(
         value["name"] ?? value["Name"] ?? value["description"] ?? value["Description"] ?? code,
       ).trim();
-      return code ? { code, name: name || code } : null;
+      const membershipTypeId = Number(
+        value["membershipTypeId"] ?? value["MembershipTypeId"] ?? value["id"] ?? value["Id"] ?? 0,
+      );
+      return code
+        ? {
+            code,
+            name: name || code,
+            membershipTypeId: Number.isFinite(membershipTypeId) && membershipTypeId > 0
+              ? membershipTypeId
+              : undefined,
+          }
+        : null;
     })
     .filter((row): row is MembershipTypeOption => row !== null);
 

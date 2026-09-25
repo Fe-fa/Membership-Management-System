@@ -3,8 +3,6 @@ import type { ReactNode } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/utils/cn";
-
-/** Full-viewport bootstrap spinner (auth hydrate / route gate). */
 export function AppBootSpinner({ label = "Loading…" }: { label?: string }) {
   return (
     <div
@@ -18,19 +16,14 @@ export function AppBootSpinner({ label = "Loading…" }: { label?: string }) {
     </div>
   );
 }
-
-/**
- * Reserves a steady content region while data loads so the page chrome
- * (title, tabs, filters) does not jump when rows arrive.
- */
 export function PageLoadingPanel({
   label = "Loading…",
   className,
   minHeightClassName = "min-h-[22rem]",
 }: {
-  label?: string;
-  className?: string;
-  minHeightClassName?: string;
+  label?: string | undefined;
+  className?: string | undefined;
+  minHeightClassName?: string | undefined;
 }) {
   return (
     <div

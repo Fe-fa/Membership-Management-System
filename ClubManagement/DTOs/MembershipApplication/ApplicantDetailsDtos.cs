@@ -37,6 +37,19 @@ public class FamilyDetailsDto
     public string? EmergencyName { get; set; }
     public string? EmergencyPhone { get; set; }
     public string? EmergencyEmail { get; set; }
+    public List<EmergencyContactInputDto> EmergencyContacts { get; set; } = new();
+    public string? NextOfKinName { get; set; }
+    public string? NextOfKinRelationship { get; set; }
+    public string? NextOfKinPhone { get; set; }
+    public string? NextOfKinEmail { get; set; }
+}
+
+public class EmergencyContactInputDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Phone { get; set; }
+    public string? Email { get; set; }
+    public string? Relationship { get; set; }
 }
 
 public class SpouseDto

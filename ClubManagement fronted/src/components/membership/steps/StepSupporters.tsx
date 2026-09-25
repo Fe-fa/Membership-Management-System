@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Check, Loader2, Search, ShieldCheck, X } from "lucide-react";
 
 import { searchEligibleMembers, type EligibleMember } from "@/services/membership/members";
-import { MIN_SUPPORTER_YEARS, type ApplicationDraft } from "@/services/membership/schema";
+import { formatKenyaDateShort } from "@/utils/kenyaDate";
+import type { ApplicationDraft } from "@/services/membership/schema";
 import type { ErrorMap } from "@/services/membership/useApplication";
 
 type Value = ApplicationDraft["supporters"];
@@ -22,7 +23,7 @@ function MemberPicker({
   role: Role;
   value: SupporterDraft;
   excludeProfileId?: string | undefined;
-  applicationId?: string | number | null;
+  applicationId?: string | number | null | undefined;
   error?: string | undefined;
   onSelect: (member: EligibleMember) => void;
   onClear: () => void;
@@ -31,12 +32,18 @@ function MemberPicker({
   const selectedId = String(value["memberProfileId"] ?? "");
   const term = search.trim();
   const { data: members = [], isFetching } = useQuery({
-    queryKey: ["members", "eligible", "membershipNo", term, applicationId ?? "none"],
+    queryKey: ["members", "eligible", "exact", term, applicationId ?? "none"],
     queryFn: () => searchEligibleMembers(term, applicationId),
-    enabled: !selectedId && term.length >= 2,
+    enabled: !selectedId && term.length >= 3,
     staleTime: 60_000,
   });
   const visible = members.filter((member) => member.profileId !== excludeProfileId);
+  const memberSince = String(value["joinedDate"] ?? "");
+  const memberSinceLabel = memberSince
+    ? formatKenyaDateShort(memberSince)
+    : value["yearOfJoining"]
+      ? String(value["yearOfJoining"])
+      : "";
 
   if (selectedId)
     return (
@@ -47,13 +54,9 @@ function MemberPicker({
             <div>
               <p className="font-medium text-foreground">{String(value["membershipNo"] ?? "")}</p>
               <p className="text-muted-foreground">{String(value["name"] ?? "")}</p>
-              {/* <p className="text-muted-foreground">
-                Member since {String(value["yearOfJoining"] ?? "")}
-              </p> */}
-              {/* <p className="mt-1 text-muted-foreground">
-                Eligible club member with at least {MIN_SUPPORTER_YEARS} years of continuous
-                membership.
-              </p> */}
+              {memberSinceLabel ? (
+                <p className="text-muted-foreground">Member since {memberSinceLabel}</p>
+              ) : null}
             </div>
           </div>
           <button
@@ -86,13 +89,13 @@ function MemberPicker({
           <Loader2 className="absolute top-1/2 right-3 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
         )}
       </div>
-      {term.length > 0 && term.length < 2 ? (
-        <p className="text-xs text-muted-foreground">Type at least 2 characters of the membership number.</p>
+      {term.length > 0 && term.length < 3 ? (
+        <p className="text-xs text-muted-foreground">Enter the full membership number.</p>
       ) : null}
       <ul className="max-h-64 divide-y divide-border overflow-auto rounded-md border border-border">
-        {term.length < 2 ? (
+        {term.length < 3 ? (
           <li className="p-3 text-sm text-muted-foreground">
-            Search by membership number only.
+            Search by the exact membership number only.
           </li>
         ) : !visible.length && !isFetching ? (
           <li className="p-3 text-sm text-muted-foreground">
@@ -101,6 +104,11 @@ function MemberPicker({
         ) : (
           visible.map((member) => {
             const canSelect = member.eligible;
+            const since = member.joinedDate
+              ? formatKenyaDateShort(member.joinedDate)
+              : member.yearOfJoining
+                ? String(member.yearOfJoining)
+                : "";
             return (
               <li key={member.profileId}>
                 <button
@@ -118,7 +126,8 @@ function MemberPicker({
                   <span>
                     <span className="block font-medium text-foreground">{member.membershipNo}</span>
                     <span className="block text-muted-foreground">
-                      {member.fullName} Â· {member.membershipType} Â· {member.tenureYears} years
+                      {member.fullName} · {member.membershipType}
+                      {since ? ` · since ${since}` : ""}
                     </span>
                     {!canSelect && member.ineligibleReason ? (
                       <span className="mt-1 flex items-start gap-1 text-xs text-destructive">
@@ -155,7 +164,7 @@ function SupporterSelector({
   value: SupporterDraft;
   error?: string | undefined;
   excludeProfileId?: string | undefined;
-  applicationId?: string | number | null;
+  applicationId?: string | number | null | undefined;
   onChange: (patch: Partial<SupporterDraft>) => void;
 }) {
   const label = role === "proposer" ? "Proposer" : "Seconder";
@@ -164,7 +173,7 @@ function SupporterSelector({
       <div>
         <h3 className="text-lg">{label}</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Find the member by their unique membership number.
+          Enter the member&apos;s full membership number to find that person only.
         </p>
       </div>
       <MemberPicker
@@ -181,6 +190,7 @@ function SupporterSelector({
             email: member.email,
             phone: member.phone,
             yearOfJoining: String(member.yearOfJoining),
+            joinedDate: member.joinedDate ?? "",
           })
         }
         onClear={() =>
@@ -191,6 +201,7 @@ function SupporterSelector({
             email: "",
             phone: "",
             yearOfJoining: "",
+            joinedDate: "",
           })
         }
       />
@@ -213,10 +224,6 @@ export const StepSupporters = memo(function StepSupporters({
   const seconder = value.seconder as SupporterDraft;
   return (
     <div className="space-y-6">
-      <p className="rounded-lg border border-border bg-secondary/60 p-4 text-sm text-muted-foreground">
-        Select two different existing club members by membership number. Membership numbers are
-        unique; names are not used for search because members can share the same name.
-      </p>
       <SupporterSelector
         role="proposer"
         value={proposer}

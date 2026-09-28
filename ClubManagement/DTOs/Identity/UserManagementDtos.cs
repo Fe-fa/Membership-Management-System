@@ -98,6 +98,11 @@ public class SetPasswordByTokenRequest
     public string Password { get; set; } = string.Empty;
 }
 
+public class ForgotPasswordRequest
+{
+    public string Email { get; set; } = string.Empty;
+}
+
 public class RoleOptionDto
 {
     public long Id { get; set; }

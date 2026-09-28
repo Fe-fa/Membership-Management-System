@@ -19,10 +19,12 @@ public partial class FinanceService
         CancellationToken cancellationToken,
         string? audience = null)
     {
-        var all = FilterQueue(await JoiningQueueAsync(DateTime.UtcNow.Year, cancellationToken), search, membershipType);
+        var year = DateTime.UtcNow.Year;
+        var all = FilterQueue(await JoiningQueueAsync(year, cancellationToken), search, membershipType);
         var kind = (audience ?? "").Trim().ToUpperInvariant();
         if (kind is "MEMBER" or "APPLICANT")
             all = all.Where(r => string.Equals(r.Audience, kind, StringComparison.OrdinalIgnoreCase)).ToList();
+        all = await MaskDuesUntilInvoicedAsync(all, "JOINING", year, cancellationToken);
         all = all
             .OrderByDescending(r => r.ArrearsAmount)
             .ThenBy(r => r.PartyName)
@@ -30,8 +32,27 @@ public partial class FinanceService
         return Paging.FromList(all, paging);
     }
 
-    internal async Task<int> CountJoiningOutstandingAsync(CancellationToken cancellationToken) =>
-        (await JoiningQueueAsync(DateTime.UtcNow.Year, cancellationToken)).Count;
+    internal async Task<int> CountJoiningOutstandingAsync(CancellationToken cancellationToken)
+    {
+        var year = DateTime.UtcNow.Year;
+        var rows = await MaskDuesUntilInvoicedAsync(await JoiningQueueAsync(year, cancellationToken), "JOINING", year, cancellationToken);
+        return rows.Count(r => r.ArrearsAmount > 0.01m);
+    }
+
+    private async Task<List<BillingQueueRowDto>> MaskDuesUntilInvoicedAsync(
+        List<BillingQueueRowDto> rows,
+        string feeType,
+        int year,
+        CancellationToken cancellationToken)
+    {
+        var active = await ActiveBillingKeysAsync("INVOICE", feeType, year, cancellationToken);
+        return rows.Select(row =>
+        {
+            var invoiced = active.ContainsKey(PartyKey(row.AccountId, row.ApplicationId, row.ChargeId))
+                || !string.IsNullOrWhiteSpace(row.InvoiceNo);
+            return invoiced ? row : row with { AmountDue = 0, ArrearsAmount = 0 };
+        }).ToList();
+    }
 
     public async Task<PagedResult<BillingQueueRowDto>> ListBillingQueueAsync(
         string feeType,
@@ -249,6 +270,35 @@ public partial class FinanceService
         doc.ReviewNotes = request.Notes.Trim();
         await _db.SaveChangesAsync(cancellationToken);
         return (await GetBillingDocumentAsync(billingDocumentId, cancellationToken))!;
+    }
+
+    public async Task<BillingBulkApproveResultDto> BulkApproveBillingDocumentsAsync(
+        IReadOnlyList<long> billingDocumentIds,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var ids = (billingDocumentIds ?? Array.Empty<long>()).Distinct().ToList();
+        var errors = new List<BillingBulkApproveErrorDto>();
+        var approved = 0;
+
+        foreach (var id in ids)
+        {
+            try
+            {
+                await ApproveBillingDocumentAsync(id, new BillingDecisionRequest(), actorUserId, cancellationToken);
+                approved++;
+            }
+            catch (InvalidOperationException ex)
+            {
+                var docNo = await _db.BillingDocuments.AsNoTracking()
+                    .Where(d => d.BillingDocumentId == id)
+                    .Select(d => d.DocumentNo)
+                    .FirstOrDefaultAsync(cancellationToken);
+                errors.Add(new BillingBulkApproveErrorDto(id, docNo, ex.Message));
+            }
+        }
+
+        return new BillingBulkApproveResultDto(ids.Count, approved, errors.Count, errors);
     }
 
     private async Task<List<BillingQueueRowDto>> BuildBillingQueueAsync(
@@ -1078,6 +1128,7 @@ public partial class FinanceService
     {
         var year = filter.Year ?? DateTime.UtcNow.Year;
         var queue = await ApplicantAnnualQueueRowsAsync(year, filter.MembershipType, filter.Search, cancellationToken);
+        queue = await MaskDuesUntilInvoicedAsync(queue, "ANNUAL", year, cancellationToken);
         if (filter.ArrearsOnly)
             queue = queue.Where(r => r.ArrearsAmount > 0.01m).ToList();
         return queue.Select(r => new SubscriptionRowDto(

@@ -99,7 +99,7 @@ public record ReceptionVisitDto(
     string? Status = null,
     bool HasSignature = false,
     string? Signature = null);
-public record GuestEligibilityRequest(string? GuestName, string? Phone, string? VisitSlipCode);
+public record GuestEligibilityRequest(string? GuestName, string? Phone, string? VisitSlipCode, string? Email = null);
 public record ParentApplicantRequest(
     string? ApplicantFullName,
     string? Email,
@@ -162,7 +162,7 @@ public interface IGuestService
 
 public class GuestService : IGuestService
 {
-    public const int RequiredVisitsForRegistration = 3;
+    public const int RequiredVisitsForRegistration = 1;
 
     private readonly ApplicationModuleDbContext _db;
     private readonly IClubPolicyService _policy;
@@ -402,8 +402,8 @@ END", cancellationToken);
             throw new InvalidOperationException("Select the host member from the membership record. A new member is not created here.");
 
         var email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim();
-        if (email is not null && !email.Contains('@'))
-            throw new InvalidOperationException("Enter a valid guest email address.");
+        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
+            throw new InvalidOperationException("Enter a unique guest email address.");
 
         var signature = (request.Signature ?? "").Trim();
         if (signature.Length < 2)
@@ -429,14 +429,15 @@ END", cancellationToken);
         var existing = await FindGuestsAsync(fullName, request.Phone, null, cancellationToken);
         var guest = existing.FirstOrDefault(g =>
             NamesMatch(g.GuestName, fullName)
-            && (string.IsNullOrWhiteSpace(email)
-                || string.IsNullOrWhiteSpace(g.Email)
+            && (string.IsNullOrWhiteSpace(g.Email)
                 || string.Equals(g.Email, email, StringComparison.OrdinalIgnoreCase)));
+
+        await EnsureReceptionEmailIsUniqueAsync(email, guest?.GuestId, guest?.GuestProfileId, cancellationToken);
 
         if (guest is not null)
         {
             RejectIfBarred(guest);
-            if (string.IsNullOrWhiteSpace(guest.Email) && email is not null)
+            if (string.IsNullOrWhiteSpace(guest.Email))
                 guest.Email = email;
             if (string.IsNullOrWhiteSpace(guest.Phone) && !string.IsNullOrWhiteSpace(request.Phone))
                 guest.Phone = request.Phone.Trim();
@@ -646,9 +647,29 @@ END", cancellationToken);
     {
         const string none =
             "We have no record of your visits. Please visit the Aero Club of East Africa and ask reception to introduce and log you as a guest of an existing member before registering an account.";
-        var matches = await FindGuestsAsync(request.GuestName, request.Phone, request.VisitSlipCode, cancellationToken);
+        List<MGuest> matches;
+        if (!string.IsNullOrWhiteSpace(request.Email))
+        {
+            var emailKey = request.Email.Trim().ToLowerInvariant();
+            matches = await _db.Guests
+                .Include(g => g.GuestStatus)
+                .Include(g => g.IntroducedBy)
+                .Include(g => g.MVisits)
+                .Where(g => g.IsActive && g.Email != null && g.Email.ToLower() == emailKey)
+                .ToListAsync(cancellationToken);
+            if (matches.Count == 0)
+                return new GuestEligibilityDto(false, false, false, 0, RequiredVisitsForRegistration, null, null,
+                    "No club visit is recorded for this email. Ask reception to log your visit before you register.", null);
+        }
+        else
+            matches = await FindGuestsAsync(request.GuestName, request.Phone, request.VisitSlipCode, cancellationToken);
         if (matches.Count == 0)
             return new GuestEligibilityDto(false, false, false, 0, RequiredVisitsForRegistration, null, null, none, null);
+        if (matches.Count > 1 && !string.IsNullOrWhiteSpace(request.Email))
+            return new GuestEligibilityDto(
+                true, true, false, 0, RequiredVisitsForRegistration, null, null,
+                "More than one guest is registered with that email. Ask reception to correct the visit record.",
+                null);
         if (matches.Count > 1 && string.IsNullOrWhiteSpace(request.VisitSlipCode))
         {
             return new GuestEligibilityDto(
@@ -964,6 +985,29 @@ END", cancellationToken);
             .Select(token => token.Trim().ToLowerInvariant())
             .Where(token => token.Length > 1 && !titles.Contains(token))
             .ToList();
+    }
+
+    private async Task EnsureReceptionEmailIsUniqueAsync(
+        string email,
+        long? sameGuestId,
+        long? sameProfileId,
+        CancellationToken cancellationToken)
+    {
+        var key = email.Trim().ToLowerInvariant();
+        var takenByGuest = await _db.Guests.IgnoreQueryFilters().AnyAsync(g =>
+            g.Email != null
+            && g.Email.Trim().ToLower() == key
+            && (sameGuestId == null || g.GuestId != sameGuestId), cancellationToken);
+        if (takenByGuest)
+            throw new InvalidOperationException("That email is already used by another guest. Reception email addresses must be unique.");
+
+        var takenByAccount = await _db.Profiles.IgnoreQueryFilters().AnyAsync(p =>
+            !p.IsDeleted
+            && ((p.Email != null && p.Email.Trim().ToLower() == key)
+                || (p.AltEmail != null && p.AltEmail.Trim().ToLower() == key))
+            && (sameProfileId == null || p.ProfileId != sameProfileId), cancellationToken);
+        if (takenByAccount)
+            throw new InvalidOperationException("That email is already used by an account. Reception email addresses must be unique.");
     }
 
     private async Task<MGuest> CreateGuestCoreAsync(string guestName, long introducedByProfileId, string? phone, long? actorUserId, CancellationToken cancellationToken)

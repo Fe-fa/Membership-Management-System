@@ -41,6 +41,7 @@ public interface IApplicationService
     Task<ApplicationDetailDto?> ChangeStatusAsync(long applicationId, ChangeApplicationStatusRequest request, CancellationToken cancellationToken = default);
     Task<ApplicationDetailDto?> RejectAndHandBackAsync(long applicationId, long? actorUserId, string reason, CancellationToken cancellationToken = default);
     Task<ApplicationDetailDto?> AdvanceStageAsync(long applicationId, long? actorUserId, string? reason, CancellationToken cancellationToken = default);
+    Task<ApplicationDetailDto?> MarkManagerPendingAsync(long applicationId, long? actorUserId, string? note, CancellationToken cancellationToken = default);
     Task<ApplicationDetailDto?> StartReviewAsync(long applicationId, long? actorUserId, string? reason, CancellationToken cancellationToken = default);
     Task<ApplicationDocumentDto?> AddDocumentAsync(long applicationId, CreateApplicationDocumentRequest request, CancellationToken cancellationToken = default);
     Task<ApplicationDocumentDto?> VerifyDocumentAsync(long applicationId, long applicationDocumentId, VerifyApplicationDocumentRequest request, CancellationToken cancellationToken = default);
@@ -291,6 +292,8 @@ public class ApplicationService : IApplicationService
             EndorsementsCompleted = sponsor.CompletedCount,
             EndorsementsRequired = sponsor.RequiredCount,
             LastRejectionReason = LatestRejectionReason(x),
+            ManagerStagePending = x.ManagerStagePending,
+            ManagerStagePendingNote = x.ManagerStagePendingNote,
         };
     }
 
@@ -323,7 +326,7 @@ public class ApplicationService : IApplicationService
         }
         if (code is "Committee" or "CommitteeReview")
             return "Approved — pending signatures";
-        if (ballotOpen || code is "Waitlist" or "ElectionReview" or "TemporaryMember")
+        if (ballotOpen || code is "Waitlist" or "ElectionReview" or "TemporaryMember" or "Screening")
             return "Ballot in progress";
         return null;
     }
@@ -743,6 +746,7 @@ public class ApplicationService : IApplicationService
         entity.CurrentHandlerUserId = plan.NewCurrentHandlerId;
         entity.UpdatedByUserId = actorUserId;
         entity.UpdatedAt = DateTime.UtcNow;
+        entity.ManagerStagePending = false;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         await AddStatusHistoryInternalAsync(
@@ -797,6 +801,7 @@ public class ApplicationService : IApplicationService
         if (string.Equals(nextCode, "Interview", StringComparison.OrdinalIgnoreCase))
             await _managerStage.EnsureAuthorizeToInterviewAsync(applicationId, cancellationToken);
 
+        entity.ManagerStagePending = false;
         var moved = await TransitionToCodeAsync(
             entity,
             nextCode,
@@ -815,6 +820,42 @@ public class ApplicationService : IApplicationService
         if (string.Equals(nextCode, "Endorsement", StringComparison.OrdinalIgnoreCase))
             await _endorsementInvites.NotifyNamedEndorsersAsync(applicationId, cancellationToken);
         return moved;
+    }
+
+    public async Task<ApplicationDetailDto?> MarkManagerPendingAsync(
+        long applicationId,
+        long? actorUserId,
+        string? note,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await _dbContext.Applications
+            .Include(x => x.Status)
+            .FirstOrDefaultAsync(x => x.ApplicationId == applicationId, cancellationToken);
+        if (entity is null) return null;
+
+        var current = NormalizeStatusCode(entity.Status?.Code);
+        if (current is "Approved" or "Rejected" or "Withdrawn" or "NotElected")
+            throw new InvalidOperationException("A closed application cannot be marked pending.");
+
+        var comment = (note ?? "").Trim();
+        if (comment.Length > 500) comment = comment[..500];
+        entity.ManagerStagePending = true;
+        entity.ManagerStagePendingNote = string.IsNullOrWhiteSpace(comment) ? null : comment;
+        entity.ManagerStagePendingAt = DateTime.UtcNow;
+        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedByUserId = actorUserId;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        await AddStatusHistoryInternalAsync(
+            applicationId,
+            entity.ApplicationStatusId,
+            entity.ApplicationStatusId,
+            actorUserId,
+            string.IsNullOrWhiteSpace(comment) ? "Held pending at manager review." : comment,
+            cancellationToken,
+            "PENDING");
+
+        var updated = await LoadApplicationAsync(applicationId, cancellationToken);
+        return updated is null ? null : Map(updated);
     }
 
     private static bool IsStageAAuthorizeReason(string? reason)
@@ -1664,6 +1705,7 @@ public class ApplicationService : IApplicationService
             "INTERVIEW" => "Interview",
             "INTERVIEWREVIEW" or "INTERVIEW_REVIEW" => "InterviewReview",
             "TEMPORARY_MEMBER" or "TEMPORARYMEMBER" => "TemporaryMember",
+            "SCREENING" => "Screening",
             "WAITLIST" or "WAITLISTED" or "ELECTION" => "Waitlist",
             "ELECTIONREVIEW" or "ELECTION_REVIEW" => "ElectionReview",
             "COMMITTEE" => "Committee",

@@ -2,9 +2,9 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { PasswordField } from "@/components/auth/PasswordField";
 import { ClubLogo } from "@/components/brand/ClubLogo";
 import { Button } from "@/components/ui/button";
-import { persistSession, type AuthResponse } from "@/lib/auth";
 import { TENANT_CODE } from "@/config/env";
 import { applyCompanyId, applyTenantCode, persistApplyCompany, type ApplyCompanyContext } from "@/services/applyCompany";
 import { saveApplicantPath } from "@/services/membership/applicantPath";
@@ -45,6 +45,13 @@ type ParentEligibility = {
 
 const inputClass = "mt-1 w-full rounded-md border border-input bg-background px-3 py-2";
 
+const passwordRules = [
+  { label: "At least 8 characters", test: (password: string) => password.length >= 8 },
+  { label: "Contains uppercase", test: (password: string) => /[A-Z]/.test(password) },
+  { label: "Contains number", test: (password: string) => /\d/.test(password) },
+  { label: "Contains special character", test: (password: string) => /[^A-Za-z0-9]/.test(password) },
+];
+
 export function RegisterPage({ company }: { company?: ApplyCompanyContext }) {
   const navigate = useNavigate();
   const tenantCode = company?.companyCode || applyTenantCode() || TENANT_CODE;
@@ -53,8 +60,7 @@ export function RegisterPage({ company }: { company?: ApplyCompanyContext }) {
     if (company) persistApplyCompany(company);
   }, [company]);
   const [category, setCategory] = useState<Category>("STANDARD");
-  const [step, setStep] = useState<"lookup" | "account">("lookup");
-  const [lookup, setLookup] = useState({ guestName: "", phone: "", visitSlipCode: "" });
+  const [step, setStep] = useState<"lookup" | "account">("account");
   const [child, setChild] = useState({
     fullName: "",
     email: "",
@@ -70,48 +76,28 @@ export function RegisterPage({ company }: { company?: ApplyCompanyContext }) {
     email: "",
     mobile: "",
     password: "",
+    confirmPassword: "",
     idPassportNo: "",
   });
   const [busy, setBusy] = useState(false);
 
   function chooseCategory(next: Category) {
     setCategory(next);
-    setStep("lookup");
+    setStep(next === "CHILD_OF_MEMBER" ? "lookup" : "account");
     setEligibility(null);
     setParent(null);
   }
 
-  async function checkVisits(event: React.FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/guests/eligibility`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Tenant-Code": tenantCode },
-        body: JSON.stringify({
-          guestName: lookup.guestName.trim() || null,
-          phone: lookup.phone.trim() || null,
-          visitSlipCode: lookup.visitSlipCode.trim() || null,
-        }),
-      });
-      const data = (await res.json().catch(() => ({}))) as Eligibility & { message?: string };
-      if (!res.ok) throw new Error(data.message || "Could not check visits.");
-      setEligibility(data);
-      if (data.canRegister && data.guestId) {
-        const parts = lookup.guestName.trim().split(/\s+/);
-        setForm((current) => ({
-          ...current,
-          firstName: current.firstName || parts[0] || "",
-          lastName: current.lastName || parts.slice(1).join(" ") || "",
-          mobile: current.mobile || lookup.phone,
-        }));
-        setStep("account");
-      }
-    } catch (err) {
-      toast.error(extractErrorMessage(err));
-    } finally {
-      setBusy(false);
-    }
+  async function checkEmailVisits(email: string) {
+    const res = await fetch(`${API_BASE}/api/guests/eligibility`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Tenant-Code": tenantCode },
+      body: JSON.stringify({ email: email.trim() }),
+    });
+    const data = (await res.json().catch(() => ({}))) as Eligibility & { message?: string };
+    if (!res.ok) throw new Error(data.message || "Could not check visits.");
+    setEligibility(data);
+    return data;
   }
 
   async function verifyParent(event: React.FormEvent) {
@@ -165,17 +151,35 @@ export function RegisterPage({ company }: { company?: ApplyCompanyContext }) {
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (category === "STANDARD" && !eligibility?.guestId) return;
     if (category === "CHILD_OF_MEMBER" && !parent?.canContinue) return;
+    if (passwordRules.some((rule) => !rule.test(form.password))) {
+      toast.error("Password must meet all strength requirements.");
+      return;
+    }
+    if (form.password !== form.confirmPassword) {
+      toast.error("Passwords do not match.");
+      return;
+    }
     setBusy(true);
     try {
+      let guestId: number | null = null;
+      let visitSlipCode: string | null = null;
+      if (category === "STANDARD") {
+        const visit = await checkEmailVisits(form.email);
+        if (!visit.canRegister || !visit.guestId) {
+          toast.error(visit.message || "This email has no club visit on file.");
+          return;
+        }
+        guestId = visit.guestId;
+        visitSlipCode = visit.visitSlipCode ?? null;
+      }
       const res = await fetch(`${API_BASE}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Tenant-Code": tenantCode },
         body: JSON.stringify({
           ...form,
-          guestId: category === "STANDARD" ? eligibility?.guestId : null,
-          visitSlipCode: eligibility?.visitSlipCode ?? (lookup.visitSlipCode.trim() || null),
+          guestId,
+          visitSlipCode,
           applicationCategory: category,
           parentAccountId: parent?.parentAccountId ?? null,
           parentMembershipNo: parent?.parentMembershipNo ?? null,
@@ -183,11 +187,11 @@ export function RegisterPage({ company }: { company?: ApplyCompanyContext }) {
           companyId,
         }),
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({ message: "Registration failed" }))).message);
-      const data = (await res.json()) as AuthResponse;
-      persistSession(data);
-      toast.success("Account created. Continue your application.");
-      await navigate({ to: "/application" });
+      const data = (await res.json().catch(() => ({}))) as { message?: string; debugCode?: string | null };
+      if (!res.ok) throw new Error(data.message || "Registration failed");
+      if (data.debugCode) sessionStorage.setItem("acea-verify-code", data.debugCode);
+      toast.success("Account created. Enter the code sent to your email.");
+      await navigate({ to: "/verify-email", search: { email: form.email.trim() } });
     } catch (err) {
       toast.error(extractErrorMessage(err));
     } finally {
@@ -208,58 +212,22 @@ export function RegisterPage({ company }: { company?: ApplyCompanyContext }) {
           </p>
         </div>
 
-        {step === "lookup" ? (
-          <>
-<div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Application category">
-  <CategoryButton
-    active={category === "STANDARD"}
-    title="Standard applicant"
-    onClick={() => chooseCategory("STANDARD")}
-  />
-  <CategoryButton
-    active={category === "CHILD_OF_MEMBER"}
-    title="Member's child"
-    onClick={() => chooseCategory("CHILD_OF_MEMBER")}
-  />
-</div>
+        <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Application category">
+          <CategoryButton
+            active={category === "STANDARD"}
+            title="Standard applicant"
+            detail="I have visited before"
+            onClick={() => chooseCategory("STANDARD")}
+          />
+          <CategoryButton
+            active={category === "CHILD_OF_MEMBER"}
+            title="Member's child"
+            detail="I am a member's dependent"
+            onClick={() => chooseCategory("CHILD_OF_MEMBER")}
+          />
+        </div>
 
-            {category === "STANDARD" ? (
-              <form onSubmit={checkVisits} className="space-y-4">
-                <label className="block text-sm">
-                 Full name 
-                  <input
-                    className={inputClass}
-                    value={lookup.guestName}
-                    onChange={(e) => setLookup({ ...lookup, guestName: e.target.value })}
-                    placeholder="as on your visit record"
-                  />
-                </label>
-                <label className="block text-sm">
-                  Phone
-                  <input
-                    type="tel"
-                    className={inputClass}
-                    value={lookup.phone}
-                    onChange={(e) => setLookup({ ...lookup, phone: e.target.value })}
-                  />
-                </label>
-                <label className="block text-sm">
-                  Application no
-                  <input
-                    className={inputClass}
-                    value={lookup.visitSlipCode}
-                    onChange={(e) => setLookup({ ...lookup, visitSlipCode: e.target.value })}
-                    placeholder="Printed by reception"
-                  />
-                </label>
-                {eligibility && !eligibility.canRegister ? (
-                  <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">{eligibility.message}</p>
-                ) : null}
-                <Button type="submit" className="w-full" disabled={busy}>
-                  {busy ? "Checking visits…" : "Check my visits"}
-                </Button>
-              </form>
-            ) : (
+        {step === "lookup" && category === "CHILD_OF_MEMBER" ? (
               <form onSubmit={verifyParent} className="space-y-4">
                 <label className="block text-sm">
                   Full name
@@ -316,13 +284,11 @@ export function RegisterPage({ company }: { company?: ApplyCompanyContext }) {
                   {busy ? "Verifying…" : "Verify & continue"}
                 </Button>
               </form>
-            )}
-          </>
         ) : (
           <form onSubmit={onSubmit} className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              {category === "CHILD_OF_MEMBER" ? parent?.message : eligibility?.message}
-            </p>
+            {category === "CHILD_OF_MEMBER" && parent?.message ? (
+              <p className="text-sm text-muted-foreground">{parent.message}</p>
+            ) : null}
             <label className="block text-sm">
               ID / Passport number
               <input
@@ -357,10 +323,27 @@ export function RegisterPage({ company }: { company?: ApplyCompanyContext }) {
                 type="email"
                 className={inputClass}
                 value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                onChange={(e) => {
+                  setForm({ ...form, email: e.target.value });
+                  setEligibility(null);
+                }}
+                onBlur={(event) => {
+                  const email = event.target.value.trim();
+                  if (category === "STANDARD" && email.includes("@")) {
+                    void checkEmailVisits(email).catch((err) => toast.error(extractErrorMessage(err)));
+                  }
+                }}
                 autoComplete="email"
               />
+              {category === "STANDARD" ? (
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  This email is checked against the visit reception recorded.
+                </span>
+              ) : null}
             </label>
+            {category === "STANDARD" && eligibility && !eligibility.canRegister ? (
+              <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">{eligibility.message}</p>
+            ) : null}
             <label className="block text-sm">
               Mobile
               <input
@@ -372,9 +355,8 @@ export function RegisterPage({ company }: { company?: ApplyCompanyContext }) {
             </label>
             <label className="block text-sm">
               Password
-              <input
+              <PasswordField
                 required
-                type="password"
                 minLength={8}
                 className={inputClass}
                 value={form.password}
@@ -382,16 +364,34 @@ export function RegisterPage({ company }: { company?: ApplyCompanyContext }) {
                 autoComplete="new-password"
               />
             </label>
+            <ul className="space-y-1 text-xs">
+              {passwordRules.map((rule) => (
+                <li key={rule.label} className={rule.test(form.password) ? "text-emerald-700" : "text-muted-foreground"}>
+                  {rule.test(form.password) ? "✓" : "•"} {rule.label}
+                </li>
+              ))}
+            </ul>
+            <label className="block text-sm">
+              Confirm password
+              <PasswordField
+                required
+                className={inputClass}
+                value={form.confirmPassword}
+                onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
+                autoComplete="new-password"
+              />
+            </label>
+            <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              A 6-digit verification code will be sent to {form.email || "your email"} before you can sign in.
+            </p>
             <Button type="submit" className="w-full" disabled={busy}>
               {busy ? "Creating…" : "Create account"}
             </Button>
-            <button
-              type="button"
-              className="text-sm text-primary underline"
-              onClick={() => setStep("lookup")}
-            >
-              {category === "CHILD_OF_MEMBER" ? "Verify a different parent" : "Check a different guest record"}
-            </button>
+            {category === "CHILD_OF_MEMBER" ? (
+              <button type="button" className="text-sm text-primary underline" onClick={() => setStep("lookup")}>
+                Verify a different parent
+              </button>
+            ) : null}
           </form>
         )}
 

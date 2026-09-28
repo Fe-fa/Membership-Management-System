@@ -84,6 +84,7 @@ public partial class ApplicationModuleDbContext : DbContext
     public DbSet<MReceiptMaster> Receipts => Set<MReceiptMaster>();
     public DbSet<ReversalEntry> ReversalEntries => Set<ReversalEntry>();
     public DbSet<MembershipInvoice> MembershipInvoices => Set<MembershipInvoice>();
+    public DbSet<InvoiceCreditNote> InvoiceCreditNotes => Set<InvoiceCreditNote>();
     public DbSet<BillingDocument> BillingDocuments => Set<BillingDocument>();
     public DbSet<MembershipTransition> MembershipTransitions => Set<MembershipTransition>();
     public DbSet<FeeWaiver> FeeWaivers => Set<FeeWaiver>();
@@ -117,6 +118,7 @@ public partial class ApplicationModuleDbContext : DbContext
     public DbSet<Complaint> Complaints => Set<Complaint>();
     public DbSet<SupportTicket> SupportTickets => Set<SupportTicket>();
     public DbSet<SupportTicketMessage> SupportTicketMessages => Set<SupportTicketMessage>();
+    public DbSet<ClubEvent> ClubEvents => Set<ClubEvent>();
     public DbSet<CreditFacility> CreditFacilities => Set<CreditFacility>();
     public DbSet<DataSharingConsent> DataSharingConsents => Set<DataSharingConsent>();
     public DbSet<MemberGuarantorship> MemberGuarantorships => Set<MemberGuarantorship>();

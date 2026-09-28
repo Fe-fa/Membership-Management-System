@@ -1,13 +1,13 @@
 import { useMemo, useState } from "react";
-import { Link } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Filter, Loader2, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { PageFrame, PageHeader } from "@/components/layout/PageFrame";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { saveInvoiceSetup, useInvoiceSetup } from "@/services/finance/invoiceSetup";
 import { extractErrorMessage } from "@/services/membership/api";
@@ -21,6 +21,8 @@ import {
   emptyMethod,
   emptyParameter,
   mergePaymentSetup,
+  REPORT_COLUMN_GROUPS,
+  REPORT_COLUMNS,
   type ExtraParameter,
   type PaymentMethodBlock,
   type PaymentSetup,
@@ -88,7 +90,13 @@ export function PaymentSetupPage() {
   const saved = useInvoiceSetup();
   const [draft, setDraft] = useState<PaymentSetup | null>(null);
   const [tab, setTab] = useState("invoice");
+  const [columnQuery, setColumnQuery] = useState("");
+  const [showColumnSearch, setShowColumnSearch] = useState(false);
+  const [methodQuery, setMethodQuery] = useState("");
+  const [editingMethodId, setEditingMethodId] = useState<string | null>(null);
   const setup = draft ?? saved.data ?? DEFAULT_PAYMENT_SETUP;
+  const columnNeedle = columnQuery.trim().toLowerCase();
+  const allColumnsOn = REPORT_COLUMNS.every((column) => setup.reportColumns.includes(column.id));
 
   const invoicePreview = useMemo(
     () => buildInvoiceHtml(sampleInvoice(brand, mergePaymentSetup(setup))),
@@ -104,7 +112,7 @@ export function PaymentSetupPage() {
     onSuccess: (next) => {
       setDraft(mergePaymentSetup(next));
       void queryClient.invalidateQueries({ queryKey: ["invoice-setup"] });
-      toast.success("Payment setup saved. Invoices and receipts will use these details.");
+      toast.success("Setup saved. Invoices, receipts, and reports will use these details.");
     },
     onError: (err) => toast.error(extractErrorMessage(err)),
   });
@@ -128,104 +136,176 @@ export function PaymentSetupPage() {
   return (
     <PageFrame width="lg">
       <PageHeader
-        title=""
-        description="Configure invoice and receipt layouts, choose which payment methods appear, and add extra fields for this club."
+        title="Setup"
+        description="Club identity, invoice and receipt layouts, payment methods, and the columns used on reports, Excel, and print."
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" asChild>
-              <Link to="/finance/invoices">Back to invoices</Link>
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowColumnSearch((open) => !open)}
+            >
+              <Filter className="size-4" />
+              Filter
             </Button>
             <Button type="button" disabled={save.isPending} onClick={() => save.mutate()}>
               {save.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-              Save payment setup
+              Save setup
             </Button>
-          </div>
+          </>
         }
       />
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold">Club identity (from system)</h2>
-        <div className="mt-3 flex flex-wrap items-center gap-4">
-          {brand.clubLogo ? <img src={clubLogoUrl(brand.clubLogo)} alt="" className="h-12 w-auto" /> : null}
-          <dl className="grid gap-1 text-sm">
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-muted-foreground">Company name</dt>
-              <dd className="font-medium">{brand.clubName}</dd>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">Report columns</h2>
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={allColumnsOn}
+                onCheckedChange={(value) => {
+                  if (value === true) {
+                    patch({ reportColumns: REPORT_COLUMNS.map((column) => column.id) });
+                    return;
+                  }
+                  patch({ reportColumns: [REPORT_COLUMNS[0].id] });
+                }}
+              />
+              Select all
+            </label>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            The same choice is used on the finance desk, the revenue report, invoices, applications, and the member register.
+          </p>
+          {showColumnSearch ? (
+            <div className="relative mt-3">
+              <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+              <Input
+                value={columnQuery}
+                onChange={(e) => setColumnQuery(e.target.value)}
+                placeholder="Filter columns"
+                className="bg-white pl-8"
+                aria-label="Filter report columns"
+              />
             </div>
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-muted-foreground">Postal address</dt>
-              <dd>{tenant.data?.addressLine?.trim() || "P.O. Box 40813 - 00100, Nairobi"}</dd>
+          ) : null}
+          <div className="mt-4 space-y-4">
+            {REPORT_COLUMN_GROUPS.map((group) => {
+              const columns = group.columns.filter((column) =>
+                column.label.toLowerCase().includes(columnNeedle),
+              );
+              if (columns.length === 0) return null;
+              return (
+                <div key={group.title}>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.title}</p>
+                  <div className="mt-1 grid gap-x-6 sm:grid-cols-2">
+                    {columns.map((column) => (
+                      <SwitchRow
+                        key={column.id}
+                        label={column.label}
+                        checked={setup.reportColumns.includes(column.id)}
+                        onChange={(checked) => {
+                          const next = checked
+                            ? [...setup.reportColumns, column.id]
+                            : setup.reportColumns.filter((id) => id !== column.id);
+                          patch({ reportColumns: next.length > 0 ? next : [column.id] });
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="text-sm font-semibold">Invoice settings</h2>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            {brand.clubLogo ? <img src={clubLogoUrl(brand.clubLogo)} alt="" className="h-10 w-auto" /> : null}
+            <dl className="min-w-0 text-sm">
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-muted-foreground">Club identity (from system)</dt>
+                <dd className="font-medium">{brand.clubName}</dd>
+              </div>
+              <dd className="text-muted-foreground">
+                {tenant.data?.addressLine?.trim() || "P.O. Box 40813 - 00100, Nairobi"}
+              </dd>
+            </dl>
+          </div>
+          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+            <div className="space-y-1">
+              <SwitchRow
+                label="PIN number"
+                checked={setup.invoice.showPin}
+                onChange={(showPin) => patch({ invoice: { ...setup.invoice, showPin } })}
+              />
+              <SwitchRow
+                label="Due date"
+                checked={setup.invoice.showDueDate}
+                onChange={(showDueDate) => patch({ invoice: { ...setup.invoice, showDueDate } })}
+              />
+              <SwitchRow
+                label="Credits column"
+                checked={setup.invoice.showCredits}
+                onChange={(showCredits) => patch({ invoice: { ...setup.invoice, showCredits } })}
+              />
             </div>
-          </dl>
-        </div>
-      </section>
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <p className="border-b border-slate-200 px-3 py-2 text-xs font-medium text-muted-foreground">Invoice preview</p>
+              <iframe
+                title="Invoice setup preview"
+                srcDoc={invoicePreview}
+                className="h-52 w-full border-0"
+              />
+            </div>
+          </div>
+        </section>
 
-      <Tabs value={tab} onValueChange={setTab} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="invoice">Invoice setup</TabsTrigger>
-          <TabsTrigger value="receipt">Receipt setup</TabsTrigger>
-        </TabsList>
-
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
-          <div className="space-y-4">
-            <TabsContent value="invoice" className="mt-0 space-y-4">
-              <DisplayCard title="Show on invoice">
-                <Toggle
-                  label="PIN number"
-                  checked={setup.invoice.showPin}
-                  onChange={(showPin) => patch({ invoice: { ...setup.invoice, showPin } })}
-                />
-                <Toggle
-                  label="Due date"
-                  checked={setup.invoice.showDueDate}
-                  onChange={(showDueDate) => patch({ invoice: { ...setup.invoice, showDueDate } })}
-                />
-                <Toggle
-                  label="Credits column"
-                  checked={setup.invoice.showCredits}
-                  onChange={(showCredits) => patch({ invoice: { ...setup.invoice, showCredits } })}
-                />
-              </DisplayCard>
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <Tabs value={tab} onValueChange={setTab}>
+            <TabsList>
+              <TabsTrigger value="invoice">Invoice setup</TabsTrigger>
+              <TabsTrigger value="receipt">Receipt settings</TabsTrigger>
+            </TabsList>
+            <TabsContent value="invoice" className="mt-4 space-y-4">
               <ProrationModeCard
                 value={setup.prorationMode}
                 onChange={(prorationMode) => patch({ prorationMode })}
               />
               <SharedFields setup={setup} patch={patch} />
             </TabsContent>
-
-            <TabsContent value="receipt" className="mt-0 space-y-4">
-              <DisplayCard title="Show on receipt">
-                <Toggle
+            <TabsContent value="receipt" className="mt-4 space-y-4">
+              <div className="grid gap-1 sm:grid-cols-2">
+                <SwitchRow
                   label="PIN number"
                   checked={setup.receipt.showPin}
                   onChange={(showPin) => patch({ receipt: { ...setup.receipt, showPin } })}
                 />
-                <Toggle
+                <SwitchRow
                   label="Website"
                   checked={setup.receipt.showWebsite}
                   onChange={(showWebsite) => patch({ receipt: { ...setup.receipt, showWebsite } })}
                 />
-                <Toggle
+                <SwitchRow
                   label="Amount in words"
                   checked={setup.receipt.showAmountInWords}
                   onChange={(showAmountInWords) => patch({ receipt: { ...setup.receipt, showAmountInWords } })}
                 />
-                <Toggle
+                <SwitchRow
                   label="Signature lines"
                   checked={setup.receipt.showSignatures}
                   onChange={(showSignatures) => patch({ receipt: { ...setup.receipt, showSignatures } })}
                 />
-              </DisplayCard>
+              </div>
+              <div className="overflow-hidden rounded-lg border border-slate-200">
+                <p className="border-b border-slate-200 px-3 py-2 text-xs font-medium text-muted-foreground">Receipt preview</p>
+                <iframe title="Receipt setup preview" srcDoc={receiptPreview} className="h-52 w-full border-0" />
+              </div>
               <SharedFields setup={setup} patch={patch} />
             </TabsContent>
-
-            <PaymentMethodsCard
-              methods={setup.methods}
-              kind={tab === "receipt" ? "receipt" : "invoice"}
-              onChange={(methods) => patch({ methods })}
-              onPatch={patchMethod}
-            />
-
+          </Tabs>
+          <div className="mt-4">
             <ExtraParametersCard
               items={setup.extraParameters}
               kind={tab === "receipt" ? "receipt" : "invoice"}
@@ -233,19 +313,20 @@ export function PaymentSetupPage() {
               onPatch={patchParameter}
             />
           </div>
+        </section>
 
-          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold">{tab === "receipt" ? "Receipt preview" : "Invoice preview"}</h2>
-            <div className="invoice-preview-frame mt-3 min-h-[28rem] overflow-auto rounded-xl border border-border bg-white">
-              <iframe
-                title={tab === "receipt" ? "Receipt setup preview" : "Invoice setup preview"}
-                srcDoc={tab === "receipt" ? receiptPreview : invoicePreview}
-                className="min-h-[40rem] w-full border-0"
-              />
-            </div>
-          </section>
-        </div>
-      </Tabs>
+        <PaymentMethodsCard
+          methods={setup.methods}
+          query={methodQuery}
+          onQuery={setMethodQuery}
+          editingId={editingMethodId}
+          onEdit={setEditingMethodId}
+          saving={save.isPending}
+          onSave={() => save.mutate()}
+          onChange={(methods) => patch({ methods })}
+          onPatch={patchMethod}
+        />
+      </div>
     </PageFrame>
   );
 }
@@ -258,13 +339,13 @@ function SharedFields({
   patch: (update: Partial<PaymentSetup>) => void;
 }) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div>
       <h2 className="text-sm font-semibold">Shared details</h2>
-      <div className="mt-3 grid gap-3">
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <Field label="PIN" value={setup.pin} onChange={(pin) => patch({ pin })} />
         <Field label="Website" value={setup.website} onChange={(website) => patch({ website })} />
         <Field label="Payable note" value={setup.payableNote} onChange={(payableNote) => patch({ payableNote })} />
-        <label className="grid gap-1 text-sm">
+        <label className="grid gap-1 text-sm sm:col-span-2">
           <span className="text-muted-foreground">Extra note</span>
           <textarea
             className="min-h-[4.5rem] rounded-md border border-input bg-white px-3 py-2 text-sm"
@@ -273,119 +354,216 @@ function SharedFields({
           />
         </label>
       </div>
-    </section>
+    </div>
   );
+}
+
+function fieldValue(method: PaymentMethodBlock, labels: string[]) {
+  const wanted = labels.map((label) => label.toLowerCase());
+  return method.fields.find((item) => wanted.includes(item.label.trim().toLowerCase()))?.value ?? "";
 }
 
 function PaymentMethodsCard({
   methods,
-  kind,
+  query,
+  onQuery,
+  editingId,
+  onEdit,
+  saving,
+  onSave,
   onChange,
   onPatch,
 }: {
   methods: PaymentMethodBlock[];
-  kind: "invoice" | "receipt";
+  query: string;
+  onQuery: (next: string) => void;
+  editingId: string | null;
+  onEdit: (id: string | null) => void;
+  saving: boolean;
+  onSave: () => void;
   onChange: (next: PaymentMethodBlock[]) => void;
   onPatch: (id: string, update: Partial<PaymentMethodBlock>) => void;
 }) {
+  const needle = query.trim().toLowerCase();
+  const rows = methods.filter((method) => {
+    if (!needle) return true;
+    const blob = [method.title, ...method.fields.map((field) => `${field.label} ${field.value}`)].join(" ").toLowerCase();
+    return blob.includes(needle);
+  });
+  const editing = methods.find((method) => method.id === editingId) ?? null;
+
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">Payment methods</h2>
-        <Button type="button" variant="outline" size="sm" onClick={() => onChange([...methods, emptyMethod()])}>
-          <Plus className="size-4" />
-          Add method
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => onSave()} disabled={saving}>
+            {saving ? <Loader2 className="size-4 animate-spin" /> : null}
+            Save setup
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const next = emptyMethod();
+              onChange([...methods, next]);
+              onEdit(next.id);
+            }}
+          >
+            <Plus className="size-4" />
+            Add method
+          </Button>
+        </div>
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        Tick Invoice and/or Receipt to print this method. Add or remove the lines under each method.
+        Turn a method on for invoices, receipts, or both. Edit a row to change its lines.
       </p>
-      <div className="mt-3 space-y-3">
-        {methods.map((method) => {
-          const shown = kind === "invoice" ? method.showOnInvoice : method.showOnReceipt;
-          return (
-            <div key={method.id} className={cn("rounded-lg border p-3", shown ? "border-primary/40 bg-primary/5" : "border-slate-200")}>
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1 space-y-2">
-                  <Input
-                    className="h-8 bg-white"
-                    value={method.title}
-                    onChange={(e) => onPatch(method.id, { title: e.target.value })}
-                  />
-                  <div className="flex flex-wrap gap-3 text-xs">
-                    <label className="flex items-center gap-1.5">
-                      <Checkbox
-                        checked={method.showOnInvoice}
-                        onCheckedChange={(value) => onPatch(method.id, { showOnInvoice: value === true })}
-                      />
-                      Invoice
-                    </label>
-                    <label className="flex items-center gap-1.5">
-                      <Checkbox
-                        checked={method.showOnReceipt}
-                        onCheckedChange={(value) => onPatch(method.id, { showOnReceipt: value === true })}
-                      />
-                      Receipt
-                    </label>
-                  </div>
-                </div>
+      <div className="relative mt-3">
+        <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(e) => onQuery(e.target.value)}
+          placeholder="Search payment methods"
+          className="bg-white pl-8"
+          aria-label="Filter payment methods"
+        />
+      </div>
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[36rem] text-left text-sm">
+          <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th className="px-2 py-2 font-medium">Method</th>
+              <th className="px-2 py-2 font-medium">Account name</th>
+              <th className="px-2 py-2 font-medium">Account no.</th>
+              <th className="px-2 py-2 font-medium">Branch</th>
+              <th className="px-2 py-2 font-medium">Invoice</th>
+              <th className="px-2 py-2 font-medium">Receipt</th>
+              <th className="px-2 py-2 font-medium">
+                <span className="sr-only">Actions</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-2 py-6 text-muted-foreground">
+                  No payment methods match this search.
+                </td>
+              </tr>
+            ) : (
+              rows.map((method) => (
+                <tr key={method.id} className="border-b border-slate-100">
+                  <td className="px-2 py-2 font-medium">{method.title || "Untitled"}</td>
+                  <td className="px-2 py-2">{fieldValue(method, ["Account name", "Payable to"]) || "—"}</td>
+                  <td className="px-2 py-2">{fieldValue(method, ["KES account", "Paybill no.", "USD account"]) || "—"}</td>
+                  <td className="px-2 py-2">{fieldValue(method, ["Branch"]) || "—"}</td>
+                  <td className="px-2 py-2">
+                    <Switch
+                      checked={method.showOnInvoice}
+                      onCheckedChange={(showOnInvoice) => onPatch(method.id, { showOnInvoice })}
+                      aria-label={`${method.title} on invoice`}
+                    />
+                  </td>
+                  <td className="px-2 py-2">
+                    <Switch
+                      checked={method.showOnReceipt}
+                      onCheckedChange={(showOnReceipt) => onPatch(method.id, { showOnReceipt })}
+                      aria-label={`${method.title} on receipt`}
+                    />
+                  </td>
+                  <td className="px-2 py-2">
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-8"
+                        aria-label={`Edit ${method.title}`}
+                        onClick={() => onEdit(editingId === method.id ? null : method.id)}
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-8"
+                        aria-label={`Remove ${method.title}`}
+                        onClick={() => {
+                          if (editingId === method.id) onEdit(null);
+                          onChange(methods.filter((item) => item.id !== method.id));
+                        }}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      {editing ? (
+        <div className="mt-3 rounded-lg border border-slate-200 p-3">
+          <label className="grid gap-1 text-sm">
+            <span className="text-muted-foreground">Method name</span>
+            <Input
+              className="bg-white"
+              value={editing.title}
+              onChange={(e) => onPatch(editing.id, { title: e.target.value })}
+            />
+          </label>
+          <div className="mt-3 space-y-2">
+            {editing.fields.map((item, index) => (
+              <div key={item.id} className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                <Input
+                  className="h-8 bg-white"
+                  value={item.label}
+                  placeholder="Label"
+                  onChange={(e) => {
+                    const fields = editing.fields.map((field, fieldIndex) =>
+                      fieldIndex === index ? { ...field, label: e.target.value } : field,
+                    );
+                    onPatch(editing.id, { fields });
+                  }}
+                />
+                <Input
+                  className="h-8 bg-white"
+                  value={item.value}
+                  placeholder="Value"
+                  onChange={(e) => {
+                    const fields = editing.fields.map((field, fieldIndex) =>
+                      fieldIndex === index ? { ...field, value: e.target.value } : field,
+                    );
+                    onPatch(editing.id, { fields });
+                  }}
+                />
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
                   className="size-8"
-                  onClick={() => onChange(methods.filter((item) => item.id !== method.id))}
-                  aria-label={`Remove ${method.title}`}
+                  onClick={() => onPatch(editing.id, { fields: editing.fields.filter((field) => field.id !== item.id) })}
+                  aria-label="Remove field"
                 >
-                  <Trash2 className="size-4" />
+                  <Trash2 className="size-3.5" />
                 </Button>
               </div>
-              <div className="mt-3 space-y-2">
-                {method.fields.map((item, index) => (
-                  <div key={item.id} className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                    <Input
-                      className="h-8 bg-white"
-                      value={item.label}
-                      placeholder="Label"
-                      onChange={(e) => {
-                        const fields = method.fields.map((field, fieldIndex) =>
-                          fieldIndex === index ? { ...field, label: e.target.value } : field,
-                        );
-                        onPatch(method.id, { fields });
-                      }}
-                    />
-                    <Input
-                      className="h-8 bg-white"
-                      value={item.value}
-                      placeholder="Value"
-                      onChange={(e) => {
-                        const fields = method.fields.map((field, fieldIndex) =>
-                          fieldIndex === index ? { ...field, value: e.target.value } : field,
-                        );
-                        onPatch(method.id, { fields });
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="size-8"
-                      onClick={() => onPatch(method.id, { fields: method.fields.filter((field) => field.id !== item.id) })}
-                      aria-label="Remove field"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </div>
-                ))}
-                <Button type="button" variant="outline" size="sm" onClick={() => onPatch(method.id, { fields: [...method.fields, emptyField()] })}>
-                  <Plus className="size-3.5" />
-                  Add field
-                </Button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onPatch(editing.id, { fields: [...editing.fields, emptyField()] })}
+            >
+              <Plus className="size-3.5" />
+              Add field
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -402,7 +580,7 @@ function ExtraParametersCard({
   onPatch: (id: string, update: Partial<ExtraParameter>) => void;
 }) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="border-t border-slate-200 pt-4">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">Other parameters</h2>
         <Button type="button" variant="outline" size="sm" onClick={() => onChange([...items, emptyParameter()])}>
@@ -466,7 +644,7 @@ function ExtraParametersCard({
           })}
         </div>
       )}
-    </section>
+    </div>
   );
 }
 export function prorationBreakdown(mode: ProrationMode, fullAnnual: number, today = new Date()) {
@@ -488,26 +666,19 @@ export function prorationBreakdown(mode: ProrationMode, fullAnnual: number, toda
   return { full, mode, daysInYear, remainingDays, remainingMonths, payable, isProrated: payable < full };
 }
 
-function money(n: number) {
-  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
 function ProrationModeCard({
   value,
   onChange,
-  sampleAnnual = 39500,
 }: {
   value: ProrationMode;
   onChange: (next: ProrationMode) => void;
-  sampleAnnual?: number;
 }) {
   const options: { mode: ProrationMode; label: string }[] = [
     { mode: "DAILY", label: "Daily" },
     { mode: "MONTHLY", label: "Monthly" },
   ];
-  const b = prorationBreakdown(value, sampleAnnual);
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div>
       <h2 className="text-sm font-semibold">Fee proration</h2>
       <div className="mt-3 flex gap-2">
         {options.map(({ mode, label }) => {
@@ -530,20 +701,11 @@ function ProrationModeCard({
           );
         })}
       </div>
-    </section>
+    </div>
   );
 }
 
-function DisplayCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <h2 className="text-sm font-semibold">{title}</h2>
-      <div className="mt-3 grid gap-2">{children}</div>
-    </section>
-  );
-}
-
-function Toggle({
+function SwitchRow({
   label,
   checked,
   onChange,
@@ -553,10 +715,13 @@ function Toggle({
   onChange: (next: boolean) => void;
 }) {
   return (
-    <label className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm">
-      <Checkbox checked={checked} onCheckedChange={(value) => onChange(value === true)} />
-      {label}
-    </label>
+    <div className="flex items-center justify-between gap-3 py-1.5">
+      <label className="flex min-w-0 items-center gap-2 text-sm">
+        <Checkbox checked={checked} onCheckedChange={(value) => onChange(value === true)} />
+        <span className="truncate">{label}</span>
+      </label>
+      <Switch checked={checked} onCheckedChange={onChange} aria-label={label} />
+    </div>
   );
 }
 

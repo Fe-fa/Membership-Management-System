@@ -61,7 +61,10 @@ import {
   downloadExcelCsv,
   printHtmlReport,
   rowsToTableHtml,
+  selectExportColumns,
 } from "@/utils/financeExport";
+import { useInvoiceSetup } from "@/services/finance/invoiceSetup";
+import { mergePaymentSetup } from "@/utils/invoiceSetup";
 import { formatKes } from "@/utils/format";
 import { cn } from "@/utils/cn";
 
@@ -226,36 +229,36 @@ function proofLabel(row: PaymentRow) {
 }
 
 const PAYMENT_EXPORT_COLS = [
-  { header: "Date", value: (r: PaymentRow) => formatStamp(r.submittedAt || r.paymentDate) },
-  { header: "Payer", value: (r: PaymentRow) => payerLabel(r) },
-  { header: "Membership type", value: (r: PaymentRow) => (r.membershipNo ? r.membershipType || r.membershipTypeCode || "" : "") },
-  { header: "Fee type", value: (r: PaymentRow) => r.feeType || r.feeTypeCode || "" },
-  { header: "Method", value: (r: PaymentRow) => r.method || r.methodCode || "" },
-  { header: "Reference", value: (r: PaymentRow) => proofLabel(r) },
-  { header: "Receipt", value: (r: PaymentRow) => r.receiptNumber || "" },
-  { header: "Amount (Ksh)", value: (r: PaymentRow) => r.amount },
-  { header: "Status", value: (r: PaymentRow) => r.status || r.statusCode || "" },
+  { id: "date", header: "Date", value: (r: PaymentRow) => formatStamp(r.submittedAt || r.paymentDate) },
+  { id: "name", header: "Payer", value: (r: PaymentRow) => payerLabel(r) },
+  { id: "membershipType", header: "Membership type", value: (r: PaymentRow) => (r.membershipNo ? r.membershipType || r.membershipTypeCode || "" : "") },
+  { id: "fee", header: "Fee type", value: (r: PaymentRow) => r.feeType || r.feeTypeCode || "" },
+  { id: "method", header: "Method", value: (r: PaymentRow) => r.method || r.methodCode || "" },
+  { id: "reference", header: "Reference", value: (r: PaymentRow) => proofLabel(r) },
+  { id: "receipt", header: "Receipt", value: (r: PaymentRow) => r.receiptNumber || "" },
+  { id: "amount", header: "Amount (Ksh)", value: (r: PaymentRow) => r.amount },
+  { id: "status", header: "Status", value: (r: PaymentRow) => r.status || r.statusCode || "" },
 ];
 
 const JOINING_EXPORT_COLS = [
-  { header: "Name", value: (r: JoiningRow) => r.partyName },
-  { header: "No.", value: (r: JoiningRow) => r.displayNo },
-  { header: "Kind", value: (r: JoiningRow) => (r.audience === "APPLICANT" ? "Applicant" : "Member") },
-  { header: "Membership type", value: (r: JoiningRow) => r.membershipType || r.membershipTypeCode || "" },
-  { header: "Due (Ksh)", value: (r: JoiningRow) => r.amountDue },
-  { header: "Paid (Ksh)", value: (r: JoiningRow) => r.amountPaid },
-  { header: "Arrears (Ksh)", value: (r: JoiningRow) => r.arrearsAmount },
+  { id: "name", header: "Name", value: (r: JoiningRow) => r.partyName },
+  { id: "membershipNo", header: "No.", value: (r: JoiningRow) => r.displayNo },
+  { id: "kind", header: "Kind", value: (r: JoiningRow) => (r.audience === "APPLICANT" ? "Applicant" : "Member") },
+  { id: "membershipType", header: "Membership type", value: (r: JoiningRow) => r.membershipType || r.membershipTypeCode || "" },
+  { id: "due", header: "Due (Ksh)", value: (r: JoiningRow) => r.amountDue },
+  { id: "paid", header: "Paid (Ksh)", value: (r: JoiningRow) => r.amountPaid },
+  { id: "arrears", header: "Arrears (Ksh)", value: (r: JoiningRow) => r.arrearsAmount },
 ];
 
 const ARREARS_EXPORT_COLS = [
-  { header: "Membership no.", value: (r: SubRow) => r.membershipNo },
-  { header: "Member", value: (r: SubRow) => r.memberName },
-  { header: "Membership type", value: (r: SubRow) => r.membershipType || r.membershipTypeCode || "" },
-  { header: "Year", value: (r: SubRow) => r.year },
-  { header: "Due (Ksh)", value: (r: SubRow) => r.amountDue },
-  { header: "Paid (Ksh)", value: (r: SubRow) => r.amountPaid },
-  { header: "Arrears (Ksh)", value: (r: SubRow) => r.arrearsAmount },
-  { header: "Status", value: (r: SubRow) => r.status },
+  { id: "membershipNo", header: "Membership no.", value: (r: SubRow) => r.membershipNo },
+  { id: "member", header: "Member", value: (r: SubRow) => r.memberName },
+  { id: "membershipType", header: "Membership type", value: (r: SubRow) => r.membershipType || r.membershipTypeCode || "" },
+  { id: "year", header: "Year", value: (r: SubRow) => r.year },
+  { id: "due", header: "Due (Ksh)", value: (r: SubRow) => r.amountDue },
+  { id: "paid", header: "Paid (Ksh)", value: (r: SubRow) => r.amountPaid },
+  { id: "arrears", header: "Arrears (Ksh)", value: (r: SubRow) => r.arrearsAmount },
+  { id: "status", header: "Status", value: (r: SubRow) => r.status },
 ];
 
 function setRecordEntry<T>(
@@ -291,6 +294,9 @@ function setRecordPage<T>(
 
 export function FinancePage() {
   const currentYear = new Date().getFullYear();
+  const paymentSetup = useInvoiceSetup();
+  const reportColumns = mergePaymentSetup(paymentSetup.data).reportColumns;
+  const showCol = (id: string) => reportColumns.includes(id);
   const queryClient = useQueryClient();
   const user = readUser();
   const canRunPosting = hasAnyRole(user, ["GENERAL_MANAGER", "CHAIRMAN", "ADMIN"]);
@@ -604,7 +610,7 @@ export function FinancePage() {
       toast.error("Nothing to print.");
       return;
     }
-    const ok = printHtmlReport(title, rowsToTableHtml(PAYMENT_EXPORT_COLS, rows));
+    const ok = printHtmlReport(title, rowsToTableHtml(selectExportColumns(PAYMENT_EXPORT_COLS, reportColumns), rows));
     if (!ok) toast.error("Could not open the print dialog. Try again.");
   }
 
@@ -613,7 +619,7 @@ export function FinancePage() {
       toast.error("Nothing to print.");
       return;
     }
-    const ok = printHtmlReport(title, rowsToTableHtml(JOINING_EXPORT_COLS, rows));
+    const ok = printHtmlReport(title, rowsToTableHtml(selectExportColumns(JOINING_EXPORT_COLS, reportColumns), rows));
     if (!ok) toast.error("Could not open the print dialog. Try again.");
   }
 
@@ -635,7 +641,7 @@ export function FinancePage() {
       toast.error("Nothing to print.");
       return;
     }
-    const ok = printHtmlReport(title, rowsToTableHtml(ARREARS_EXPORT_COLS, rows));
+    const ok = printHtmlReport(title, rowsToTableHtml(selectExportColumns(ARREARS_EXPORT_COLS, reportColumns), rows));
     if (!ok) toast.error("Could not open the print dialog. Try again.");
   }
 
@@ -669,7 +675,7 @@ export function FinancePage() {
           toast.error("No arrears rows to export.");
           return;
         }
-        downloadExcelCsv(`finance-arrears-${yearNum}.csv`, ARREARS_EXPORT_COLS, rows);
+        downloadExcelCsv(`finance-arrears-${yearNum}.csv`, selectExportColumns(ARREARS_EXPORT_COLS, reportColumns), rows);
         toast.success(`Downloaded ${rows.length} arrears row(s).`);
         return;
       }
@@ -679,7 +685,7 @@ export function FinancePage() {
           toast.error("No joining-fee rows to export.");
           return;
         }
-        downloadExcelCsv("finance-joining-fees.csv", JOINING_EXPORT_COLS, rows);
+        downloadExcelCsv("finance-joining-fees.csv", selectExportColumns(JOINING_EXPORT_COLS, reportColumns), rows);
         toast.success(`Downloaded ${rows.length} joining-fee row(s).`);
         return;
       }
@@ -688,7 +694,7 @@ export function FinancePage() {
         toast.error("No payments to export.");
         return;
       }
-      downloadExcelCsv(`finance-${desk}-${yearNum}.csv`, PAYMENT_EXPORT_COLS, rows);
+      downloadExcelCsv(`finance-${desk}-${yearNum}.csv`, selectExportColumns(PAYMENT_EXPORT_COLS, reportColumns), rows);
       toast.success(`Downloaded ${rows.length} payment row(s).`);
     } catch (err) {
       toast.error(extractErrorMessage(err));
@@ -723,7 +729,7 @@ export function FinancePage() {
     <PageFrame width="lg" className="space-y-5 bg-[#F8FAFC] p-4 sm:p-5 -mx-4 sm:-mx-6 lg:-mx-8 sm:px-6 lg:px-8">
       <PageHeader
         title=""
-        description="Verify payments, issue official membership receipts, and track arrears."
+        description="Verify payments, issue official membership receipts, and track arrears. The club carries balances forward, so unpaid or overpaid amounts roll into the next period. Invoices can be reversed by issuing a credit note."
         actions={
           canRunPosting ? (
             <Button
@@ -934,6 +940,7 @@ export function FinancePage() {
           ) : (
             <>
               <PendingClearanceTable
+                showCol={showCol}
                 rows={pendingRows}
                 busyId={busyId}
                 busy={busy}
@@ -979,6 +986,7 @@ export function FinancePage() {
           ) : (
             <>
               <SettledTable
+                showCol={showCol}
                 rows={settledPageData.items}
                 busyId={busyId}
                 selectedIds={selectedPaymentIds}
@@ -1059,28 +1067,36 @@ export function FinancePage() {
                 <table className="w-full min-w-[860px] text-sm">
                   <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
-                      <th className="p-2">Member</th>
-                      <th className="p-2">Membership type</th>
-                      <th className="p-2">Due</th>
-                      <th className="p-2">Paid</th>
-                      <th className="p-2">Arrears</th>
-                      <th className="p-2">Status</th>
+                      {showCol("member") || showCol("membershipNo") ? <th className="p-2">Member</th> : null}
+                      {showCol("membershipType") ? <th className="p-2">Membership type</th> : null}
+                      {showCol("due") ? <th className="p-2">Due</th> : null}
+                      {showCol("paid") ? <th className="p-2">Paid</th> : null}
+                      {showCol("arrears") ? <th className="p-2">Arrears</th> : null}
+                      {showCol("status") ? <th className="p-2">Status</th> : null}
                       <th className="p-2 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {subPageData.items.map((row) => (
                       <tr key={row.subscriptionId} className="border-t border-border">
-                        <td className="p-2">
-                          {row.membershipNo} · {row.memberName}
-                        </td>
-                        <td className="p-2">{row.membershipNo ? (row.membershipType || row.membershipTypeCode || "—") : "—"}</td>
-                        <td className="p-2">{formatKes(row.amountDue)}</td>
-                        <td className="p-2">{formatKes(row.amountPaid)}</td>
-                        <td className={cn("p-2", row.arrearsAmount > 0 ? "font-medium text-amber-800" : "")}>
-                          {formatKes(row.arrearsAmount)}
-                        </td>
-                        <td className="p-2">{row.accountStatus || row.status}</td>
+                        {showCol("member") || showCol("membershipNo") ? (
+                          <td className="p-2">
+                            {[showCol("membershipNo") ? row.membershipNo : "", showCol("member") ? row.memberName : ""]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </td>
+                        ) : null}
+                        {showCol("membershipType") ? (
+                          <td className="p-2">{row.membershipNo ? (row.membershipType || row.membershipTypeCode || "—") : "—"}</td>
+                        ) : null}
+                        {showCol("due") ? <td className="p-2">{formatKes(row.amountDue)}</td> : null}
+                        {showCol("paid") ? <td className="p-2">{formatKes(row.amountPaid)}</td> : null}
+                        {showCol("arrears") ? (
+                          <td className={cn("p-2", row.arrearsAmount > 0 ? "font-medium text-amber-800" : "")}>
+                            {formatKes(row.arrearsAmount)}
+                          </td>
+                        ) : null}
+                        {showCol("status") ? <td className="p-2">{row.accountStatus || row.status}</td> : null}
                         <td className="p-2 text-right">
                           <Button
                             type="button"
@@ -1138,28 +1154,34 @@ export function FinancePage() {
                 <table className="w-full min-w-[860px] text-sm">
                   <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
-                      <th className="p-2">Name</th>
-                      <th className="p-2">No.</th>
-                      <th className="p-2">Kind</th>
-                      <th className="p-2">Membership type</th>
-                      <th className="p-2">Due</th>
-                      <th className="p-2">Paid</th>
-                      <th className="p-2">Arrears</th>
+                      {showCol("name") ? <th className="p-2">Name</th> : null}
+                      {showCol("membershipNo") ? <th className="p-2">No.</th> : null}
+                      {showCol("kind") ? <th className="p-2">Kind</th> : null}
+                      {showCol("membershipType") ? <th className="p-2">Membership type</th> : null}
+                      {showCol("due") ? <th className="p-2">Due</th> : null}
+                      {showCol("paid") ? <th className="p-2">Paid</th> : null}
+                      {showCol("arrears") ? <th className="p-2">Arrears</th> : null}
                       <th className="p-2 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {joiningPageData.items.map((row) => (
                       <tr key={row.rowKey} className="border-t border-border">
-                        <td className="p-2 font-medium">{row.partyName}</td>
-                        <td className="p-2">{row.displayNo || "—"}</td>
-                        <td className="p-2">{row.audience === "APPLICANT" ? "Applicant" : "Member"}</td>
-                        <td className="p-2">{row.membershipType || row.membershipTypeCode || "—"}</td>
-                        <td className="p-2">{formatKes(row.amountDue)}</td>
-                        <td className="p-2">{formatKes(row.amountPaid)}</td>
-                        <td className={cn("p-2", row.arrearsAmount > 0 ? "font-medium text-amber-800" : "")}>
-                          {formatKes(row.arrearsAmount)}
-                        </td>
+                        {showCol("name") ? <td className="p-2 font-medium">{row.partyName}</td> : null}
+                        {showCol("membershipNo") ? <td className="p-2">{row.displayNo || "—"}</td> : null}
+                        {showCol("kind") ? (
+                          <td className="p-2">{row.audience === "APPLICANT" ? "Applicant" : "Member"}</td>
+                        ) : null}
+                        {showCol("membershipType") ? (
+                          <td className="p-2">{row.membershipType || row.membershipTypeCode || "—"}</td>
+                        ) : null}
+                        {showCol("due") ? <td className="p-2">{formatKes(row.amountDue)}</td> : null}
+                        {showCol("paid") ? <td className="p-2">{formatKes(row.amountPaid)}</td> : null}
+                        {showCol("arrears") ? (
+                          <td className={cn("p-2", row.arrearsAmount > 0 ? "font-medium text-amber-800" : "")}>
+                            {formatKes(row.arrearsAmount)}
+                          </td>
+                        ) : null}
                         <td className="p-2 text-right">
                           <Button
                             type="button"
@@ -1224,7 +1246,7 @@ export function FinancePage() {
             <AlertDialogDescription>
               {renewalStep === 2
                 ? `Last check: generate ${yearNum} annual subscriptions now? This is the second confirmation.`
-                : `This posts ${yearNum} subscription dues for every active member. Unpaid members stay on the register; Finance cannot undo this from the desk without a later reversal. Continue only if the fee schedule is correct.`}
+                : `This posts ${yearNum} subscription dues for every active member. The club carries balances forward, so unpaid or overpaid amounts roll into the next period. Unpaid members stay on the register; Finance cannot undo this from the desk without a later reversal. Continue only if the fee schedule is correct.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1370,7 +1392,7 @@ export function FinancePage() {
             <AlertDialogTitle>Reverse payment?</AlertDialogTitle>
             <AlertDialogDescription>
               {reverseRow
-                ? `This voids the receipt for ${formatKes(reverseRow.amount)} (${reverseRow.feeType || reverseRow.feeTypeCode || "fee"}) for ${payerLabel(reverseRow)}, reopens the unpaid invoice, zeros revenue, and reapplies arrears. Money is not returned. It stays on Settled as Reversed.`
+                ? `Invoices can be reversed by issuing a credit note. This issues a credit note for ${formatKes(reverseRow.amount)} (${reverseRow.feeType || reverseRow.feeTypeCode || "fee"}) for ${payerLabel(reverseRow)}. It stays on Settled as Reversed.`
                 : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1491,6 +1513,7 @@ function IconAction({
 }
 
 function PendingClearanceTable({
+  showCol,
   rows,
   busyId,
   busy,
@@ -1502,6 +1525,7 @@ function PendingClearanceTable({
   onViewProof,
   onPrint,
 }: {
+  showCol: (id: string) => boolean;
   rows: PaymentRow[];
   busyId: number | null;
   busy: boolean;
@@ -1527,13 +1551,13 @@ function PendingClearanceTable({
                 onChange={(e) => onToggleSelectAll(e.target.checked)}
               />
             </th>
-            <th className="p-2">Date submitted</th>
-            <th className="p-2">Payer details</th>
-            <th className="p-2">Membership type</th>
-            <th className="p-2">Fee type</th>
-            <th className="p-2">Payment method</th>
-            <th className="p-2">Proof</th>
-            <th className="p-2">Amount (Ksh)</th>
+            {showCol("date") ? <th className="p-2">Date submitted</th> : null}
+            {showCol("name") ? <th className="p-2">Payer details</th> : null}
+            {showCol("membershipType") ? <th className="p-2">Membership type</th> : null}
+            {showCol("fee") ? <th className="p-2">Fee type</th> : null}
+            {showCol("method") ? <th className="p-2">Payment method</th> : null}
+            {showCol("reference") ? <th className="p-2">Proof</th> : null}
+            {showCol("amount") ? <th className="p-2">Amount (Ksh)</th> : null}
             <th className="p-2 text-right">Action</th>
           </tr>
         </thead>
@@ -1548,20 +1572,24 @@ function PendingClearanceTable({
                   onChange={(e) => onToggleSelect(row.transactionId, e.target.checked)}
                 />
               </td>
-              <td className="p-2">{formatStamp(row.submittedAt || row.paymentDate)}</td>
-              <td className="p-2">{payerLabel(row)}</td>
-              <td className="p-2">{row.membershipNo ? (row.membershipType || row.membershipTypeCode || "—") : "—"}</td>
-              <td className="p-2">{row.feeType || row.feeTypeCode || "—"}</td>
-              <td className="p-2">{row.method || row.methodCode || "—"}</td>
-              <td className="p-2">
-                <PaymentProofBadge
-                  url={row.chequeFileUrl ?? null}
-                  fileName={row.chequeFileName ?? null}
-                  fallback={proofLabel(row)}
-                  onView={() => onViewProof(row)}
-                />
-              </td>
-              <td className="p-2">{formatKes(row.amount)}</td>
+              {showCol("date") ? <td className="p-2">{formatStamp(row.submittedAt || row.paymentDate)}</td> : null}
+              {showCol("name") ? <td className="p-2">{payerLabel(row)}</td> : null}
+              {showCol("membershipType") ? (
+                <td className="p-2">{row.membershipNo ? (row.membershipType || row.membershipTypeCode || "—") : "—"}</td>
+              ) : null}
+              {showCol("fee") ? <td className="p-2">{row.feeType || row.feeTypeCode || "—"}</td> : null}
+              {showCol("method") ? <td className="p-2">{row.method || row.methodCode || "—"}</td> : null}
+              {showCol("reference") ? (
+                <td className="p-2">
+                  <PaymentProofBadge
+                    url={row.chequeFileUrl ?? null}
+                    fileName={row.chequeFileName ?? null}
+                    fallback={proofLabel(row)}
+                    onView={() => onViewProof(row)}
+                  />
+                </td>
+              ) : null}
+              {showCol("amount") ? <td className="p-2">{formatKes(row.amount)}</td> : null}
               <td className="p-2 text-right">
                 <div className="flex flex-row items-center justify-end gap-1">
                   <IconAction
@@ -1591,6 +1619,7 @@ function PendingClearanceTable({
 }
 
 function SettledTable({
+  showCol,
   rows,
   busyId,
   selectedIds,
@@ -1604,6 +1633,7 @@ function SettledTable({
   canAdjustLedger,
   onPrint,
 }: {
+  showCol: (id: string) => boolean;
   rows: PaymentRow[];
   busyId: number | null;
   selectedIds: number[];
@@ -1631,15 +1661,15 @@ function SettledTable({
                 onChange={(e) => onToggleSelectAll(e.target.checked)}
               />
             </th>
-            <th className="p-2">Date</th>
-            <th className="p-2">Payer</th>
-            <th className="p-2">Membership type</th>
-            <th className="p-2">Method</th>
-            <th className="p-2">Fee</th>
-            <th className="p-2">Receipt</th>
-            <th className="p-2">Amount</th>
-            <th className="p-2">Proof</th>
-            <th className="p-2">Status</th>
+            {showCol("date") ? <th className="p-2">Date</th> : null}
+            {showCol("name") ? <th className="p-2">Payer</th> : null}
+            {showCol("membershipType") ? <th className="p-2">Membership type</th> : null}
+            {showCol("method") ? <th className="p-2">Method</th> : null}
+            {showCol("fee") ? <th className="p-2">Fee</th> : null}
+            {showCol("receipt") ? <th className="p-2">Receipt</th> : null}
+            {showCol("amount") ? <th className="p-2">Amount</th> : null}
+            {showCol("reference") ? <th className="p-2">Proof</th> : null}
+            {showCol("status") ? <th className="p-2">Status</th> : null}
             <th className="p-2 text-right">Action</th>
           </tr>
         </thead>
@@ -1662,21 +1692,26 @@ function SettledTable({
                     onChange={(e) => onToggleSelect(row.transactionId, e.target.checked)}
                   />
                 </td>
-                <td className="p-2">{formatDay(row.paymentDate)}</td>
-                <td className="p-2">{payerLabel(row)}</td>
-                <td className="p-2">{row.membershipNo ? (row.membershipType || row.membershipTypeCode || "—") : "—"}</td>
-                <td className="p-2">{row.method || "—"}</td>
-                <td className="p-2">{row.feeType || row.feeTypeCode || "—"}</td>
-                <td className="p-2 font-medium">{row.receiptNumber || "—"}</td>
-                <td className="p-2">{formatKes(row.amount)}</td>
-                <td className="p-2">
-                  <PaymentProofBadge
-                    url={row.chequeFileUrl ?? null}
-                    fileName={row.chequeFileName ?? null}
-                    fallback={proofLabel(row)}
-                    onView={() => onViewProof(row)}
-                  />
-                </td>
+                {showCol("date") ? <td className="p-2">{formatDay(row.paymentDate)}</td> : null}
+                {showCol("name") ? <td className="p-2">{payerLabel(row)}</td> : null}
+                {showCol("membershipType") ? (
+                  <td className="p-2">{row.membershipNo ? (row.membershipType || row.membershipTypeCode || "—") : "—"}</td>
+                ) : null}
+                {showCol("method") ? <td className="p-2">{row.method || "—"}</td> : null}
+                {showCol("fee") ? <td className="p-2">{row.feeType || row.feeTypeCode || "—"}</td> : null}
+                {showCol("receipt") ? <td className="p-2 font-medium">{row.receiptNumber || "—"}</td> : null}
+                {showCol("amount") ? <td className="p-2">{formatKes(row.amount)}</td> : null}
+                {showCol("reference") ? (
+                  <td className="p-2">
+                    <PaymentProofBadge
+                      url={row.chequeFileUrl ?? null}
+                      fileName={row.chequeFileName ?? null}
+                      fallback={proofLabel(row)}
+                      onView={() => onViewProof(row)}
+                    />
+                  </td>
+                ) : null}
+                {showCol("status") ? (
                 <td className="p-2">
                   <span
                     className={cn(
@@ -1697,6 +1732,7 @@ function SettledTable({
                     {row.status ?? row.statusCode ?? "—"}
                   </span>
                 </td>
+                ) : null}
                 <td className="p-2 text-right">
                   <div className="flex flex-row items-center justify-end gap-1">
                     {viewReceipt ? (

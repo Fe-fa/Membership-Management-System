@@ -257,6 +257,62 @@ public class FinanceController : ControllerBase
     }
 
     [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpGet("invoices/issued")]
+    public async Task<ActionResult<PagedResult<IssuedInvoiceRowDto>>> IssuedInvoices(
+        [FromQuery] PagedRequest paging,
+        [FromQuery] int? year,
+        [FromQuery] string? search,
+        [FromQuery] string? membershipType,
+        CancellationToken cancellationToken) =>
+        Ok(await _finance.ListIssuedInvoicesAsync(
+            new SubscriptionListFilter(year, search, MembershipType: membershipType),
+            paging,
+            cancellationToken));
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpGet("invoices/credit-notes")]
+    public async Task<ActionResult<PagedResult<InvoiceCreditNoteRowDto>>> InvoiceCreditNotes(
+        [FromQuery] PagedRequest paging,
+        [FromQuery] int? year,
+        [FromQuery] string? search,
+        [FromQuery] string? membershipType,
+        CancellationToken cancellationToken) =>
+        Ok(await _finance.ListInvoiceCreditNotesAsync(
+            new SubscriptionListFilter(year, search, MembershipType: membershipType),
+            paging,
+            cancellationToken));
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpGet("invoices/issued/{invoiceId:long}")]
+    public async Task<ActionResult<IssuedInvoiceDetailDto>> IssuedInvoice(long invoiceId, CancellationToken cancellationToken)
+    {
+        try { return Ok(await _finance.GetIssuedInvoiceAsync(invoiceId, cancellationToken)); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpPut("invoices/issued/{invoiceId:long}")]
+    public async Task<ActionResult<IssuedInvoiceDetailDto>> UpdateIssuedInvoice(
+        long invoiceId,
+        [FromBody] UpdateIssuedInvoiceRequest request,
+        CancellationToken cancellationToken)
+    {
+        try { return Ok(await _finance.UpdateIssuedInvoiceAsync(invoiceId, request, User.UserId(), cancellationToken)); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpPost("invoices/issued/{invoiceId:long}/credit-note")]
+    public async Task<ActionResult<IssuedInvoiceDetailDto>> IssueInvoiceCreditNote(
+        long invoiceId,
+        [FromBody] IssueInvoiceCreditNoteRequest request,
+        CancellationToken cancellationToken)
+    {
+        try { return Ok(await _finance.IssueInvoiceCreditNoteAsync(invoiceId, request, User.UserId(), cancellationToken)); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
     [HttpGet("invoices/{accountId:long}")]
     public async Task<ActionResult<InvoiceDocumentDto>> GetInvoice(
         long accountId,
@@ -509,6 +565,18 @@ public class FinanceController : ControllerBase
         [FromQuery] string? search,
         CancellationToken cancellationToken) =>
         Ok(await _finance.ListBillingApprovalsAsync(kind, status, feeType, search, paging, cancellationToken));
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER")]
+    [HttpPost("billing/bulk-approve")]
+    public async Task<ActionResult<BillingBulkApproveResultDto>> BulkApproveBilling(
+        [FromBody] BillingBulkApproveRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request?.BillingDocumentIds is not { Count: > 0 })
+            return BadRequest(new { message = "Select at least one document to approve." });
+
+        return Ok(await _finance.BulkApproveBillingDocumentsAsync(request.BillingDocumentIds, User.UserId(), cancellationToken));
+    }
 
     [Authorize(Roles = "ADMIN,GENERAL_MANAGER")]
     [HttpGet("billing/pending-count")]

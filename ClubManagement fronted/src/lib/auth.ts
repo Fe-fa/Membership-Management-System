@@ -1,3 +1,4 @@
+import { activeClubCode } from "@/services/activeClub";
 import { applyTenantCode } from "@/services/applyCompany";
 import { TENANT_CODE } from "@/config/env";
 
@@ -29,6 +30,7 @@ export type AuthResponse = {
 
 /** Staff / admin roles that use the admin portal by default. */
 export const STAFF_ROLES = [
+  "SUPER_ADMIN",
   "ADMIN",
   "GENERAL_MANAGER",
   "CHAIRMAN",
@@ -39,6 +41,7 @@ export const STAFF_ROLES = [
 
 /** Roles that can switch between admin / member / applicant dashboards. */
 export const DASHBOARD_SWITCH_ROLES = [
+  "SUPER_ADMIN",
   "ADMIN",
   "GENERAL_MANAGER",
   "CHAIRMAN",
@@ -125,8 +128,14 @@ export function clearSession() {
 
 export function authHeaders(): Record<string, string> {
   const token = readToken();
-  const headers: Record<string, string> = { "X-Tenant-Code": applyTenantCode() || TENANT_CODE };
+  const headers: Record<string, string> = {};
   if (token) headers.Authorization = `Bearer ${token}`;
+  if (isSuperAdmin(readUser())) {
+    const club = activeClubCode();
+    if (club) headers["X-Tenant-Code"] = club;
+    return headers;
+  }
+  headers["X-Tenant-Code"] = applyTenantCode() || TENANT_CODE;
   return headers;
 }
 
@@ -156,10 +165,15 @@ function roleCodesFromAccessToken(): string[] | null {
   }
 }
 
+export function isSuperAdmin(user: AuthUser | null) {
+  return roleCodesOf(user).includes("SUPER_ADMIN");
+}
+
 export function hasAnyRole(user: AuthUser | null, roles: string[]) {
   if (!user) return false;
-  const wanted = roles.map((role) => role.toUpperCase());
   const normalized = roleCodesOf(user);
+  if (normalized.includes("SUPER_ADMIN")) return true;
+  const wanted = roles.map((role) => role.toUpperCase());
   return wanted.some((role) => normalized.includes(role));
 }
 
@@ -179,10 +193,10 @@ export function canViewFinanceStatements(user: AuthUser | null) {
 
 /** Issued-statement delete (and ledger credit/debit on this desk): Admin role only. */
 export function canDeleteFinanceStatements(user: AuthUser | null) {
-  const fromProfile = roleCodesOf(user).includes("ADMIN");
+  const codes = roleCodesOf(user);
   const tokenRoles = roleCodesFromAccessToken();
-  if (tokenRoles && tokenRoles.length > 0) return tokenRoles.includes("ADMIN");
-  return fromProfile;
+  const source = tokenRoles && tokenRoles.length > 0 ? tokenRoles : codes;
+  return source.includes("ADMIN") || source.includes("SUPER_ADMIN");
 }
 
 export function isStaff(user: AuthUser | null) {
@@ -210,7 +224,9 @@ function classifyPath(pathname: string): "public" | "admin" | "member" | "applic
     pathname === "/login" ||
     pathname === "/register" ||
     pathname.startsWith("/apply/") ||
-    pathname === "/set-password"
+    pathname === "/set-password" ||
+    pathname === "/verify-email" ||
+    pathname === "/forgot-password"
   ) {
     return "public";
   }
@@ -259,7 +275,9 @@ function classifyPath(pathname: string): "public" | "admin" | "member" | "applic
     pathname === "/committee-ballot" ||
     pathname.startsWith("/committee-ballot/") ||
     pathname === "/endorsements" ||
-    pathname.startsWith("/endorsements/")
+    pathname.startsWith("/endorsements/") ||
+    pathname === "/events" ||
+    pathname.startsWith("/events/")
   ) {
     return "member";
   }
@@ -271,6 +289,9 @@ export function canVisitPath(user: AuthUser | null, pathname: string): boolean {
   const kind = classifyPath(pathname);
   if (kind === "public") return true;
   if (!user) return pathname === "/";
+  if (pathname === "/club-setup" || pathname.startsWith("/club-setup/")) {
+    return isSuperAdmin(user);
+  }
   if (pathname === "/finance/approvals" || pathname.startsWith("/finance/approvals/")) {
     return canApproveBillingDocuments(user);
   }
@@ -282,7 +303,9 @@ export function canVisitPath(user: AuthUser | null, pathname: string): boolean {
     pathname === "/election" ||
     pathname.startsWith("/election/") ||
     pathname === "/committee-ballot" ||
-    pathname.startsWith("/committee-ballot/")
+    pathname.startsWith("/committee-ballot/") ||
+    pathname === "/events" ||
+    pathname.startsWith("/events/")
   ) {
     return isStaff(user) || isClubMember(user);
   }

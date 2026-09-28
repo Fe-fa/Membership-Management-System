@@ -43,7 +43,7 @@ import { formatKes } from "@/utils/format";
 import { cn } from "@/utils/cn";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-type Audience = "" | "MEMBER" | "APPLICANT";
+type Audience = "MEMBER" | "ACCOMMODATION" | "CORKAGE" | "CUSTOM";
 
 type PartyRow = {
   rowKey: string;
@@ -105,6 +105,13 @@ function canAdjustLine(line: StatementLine) {
   return s === "PAID" || s === "WAIVED" || s === "PARTIALLY_PAID" || s === "SETTLED";
 }
 
+function audienceLabel(audience: string) {
+  if (audience === "ACCOMMODATION") return "Accommodation";
+  if (audience === "CORKAGE") return "Corkage";
+  if (audience === "CUSTOM") return "Custom charges";
+  return "Member";
+}
+
 function statementKindLabel(line: StatementLine) {
   const kind = statementLineKind(line);
   if (kind === "PAYMENT") return "Money in";
@@ -134,7 +141,7 @@ export function FinanceStatementsPage() {
   const canAdjust = canDeleteFinanceStatements(user);
   const currentYear = new Date().getFullYear();
 
-  const [audience, setAudience] = useState<Audience>("");
+  const [audience, setAudience] = useState<Audience>("MEMBER");
   const [year, setYear] = useState(String(currentYear));
   const [month, setMonth] = useState("");
   const [category, setCategory] = useState("");
@@ -181,11 +188,7 @@ export function FinanceStatementsPage() {
     enabled: Boolean(viewRow),
     queryFn: () => {
       if (!viewRow) throw new Error("No party selected.");
-      if (viewRow.audience === "APPLICANT" && viewRow.applicationId)
-        return apiRequest<StatementDoc>(
-          `/api/finance/statements/applicant/${viewRow.applicationId}?from=${from}&to=${to}`,
-        );
-      if (!viewRow.accountId) throw new Error("Member account was not found.");
+      if (!viewRow.accountId) throw new Error("This charge is not linked to a membership account.");
       return apiRequest<StatementDoc>(`/api/finance/statements/${viewRow.accountId}?from=${from}&to=${to}`);
     },
   });
@@ -275,12 +278,8 @@ export function FinanceStatementsPage() {
   }
 
   async function loadOfficial(row: PartyRow) {
-    const doc =
-      row.audience === "APPLICANT" && row.applicationId
-        ? await apiRequest<StatementDoc>(
-            `/api/finance/statements/applicant/${row.applicationId}?from=${from}&to=${to}`,
-          )
-        : await apiRequest<StatementDoc>(`/api/finance/statements/${row.accountId}?from=${from}&to=${to}`);
+    if (!row.accountId) throw new Error("This charge is not linked to a membership account.");
+    const doc = await apiRequest<StatementDoc>(`/api/finance/statements/${row.accountId}?from=${from}&to=${to}`);
     return buildStatementHtml({
       ...doc,
       ...brand,
@@ -352,15 +351,17 @@ export function FinanceStatementsPage() {
     <PageFrame width="lg" className="space-y-5">
       <div className="flex flex-wrap gap-2">
         {([
-          { id: "" as Audience, label: "All" },
-          { id: "MEMBER" as Audience, label: "Members" },
-          { id: "APPLICANT" as Audience, label: "Applicants" },
+          { id: "MEMBER" as Audience, label: "Members", category: "" },
+          { id: "ACCOMMODATION" as Audience, label: "Accommodation", category: "ACCOMMODATION" },
+          { id: "CUSTOM" as Audience, label: "Custom charges", category: "CUSTOM" },
+          { id: "CORKAGE" as Audience, label: "Corkage", category: "CORKAGE" },
         ]).map((tab) => (
           <button
-            key={tab.id || "all"}
+            key={tab.id}
             type="button"
             onClick={() => {
               setAudience(tab.id);
+              setCategory(tab.category);
               setPage(1);
               setSelected({});
             }}
@@ -460,7 +461,7 @@ export function FinanceStatementsPage() {
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="text-sm text-muted-foreground">
-              {pageData.totalCount} {audience === "APPLICANT" ? "applicants" : audience === "MEMBER" ? "members" : "accounts"} · {from} to {to}
+              {pageData.totalCount} {audience === "MEMBER" ? "members" : "accounts"} · {from} to {to}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -560,7 +561,7 @@ export function FinanceStatementsPage() {
                       </td>
                       <td className="py-2.5 pr-3 font-medium">{row.partyName}</td>
                       <td className="py-2.5 pr-3">{row.displayNo || "—"}</td>
-                      <td className="py-2.5 pr-3">{row.audience === "APPLICANT" ? "Applicant" : "Member"}</td>
+                      <td className="py-2.5 pr-3">{audienceLabel(row.audience)}</td>
                       <td className="py-2.5 pr-3">{row.membershipType || "—"}</td>
                       <td className="py-2.5 pr-3 text-right tabular-nums">{formatKes(row.amountPaid)}</td>
                       <td className={cn("py-2.5 pr-3 text-right tabular-nums", row.balance > 0 ? "font-medium text-amber-800" : "")}>
@@ -637,7 +638,7 @@ export function FinanceStatementsPage() {
               <iframe title="Statement preview" className="h-full min-h-[22rem] w-full rounded-xl border border-border bg-white" srcDoc={previewHtml} />
               <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
                 <p className="text-sm text-muted-foreground">
-                  {viewRow?.audience === "APPLICANT" ? "Applicant" : "Member"} · {viewRow?.displayNo || "—"}
+                  {audienceLabel(viewRow?.audience || "MEMBER")} · {viewRow?.displayNo || "—"}
                   <br />
                   Closing {formatKes(statement.data?.closingBalance ?? 0)}
                 </p>

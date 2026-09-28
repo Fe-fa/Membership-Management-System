@@ -270,8 +270,8 @@ END
             ?? throw new InvalidOperationException("Application was not found.");
 
         var code = Normalize(app.Status?.Code);
-        if (code is not ("TemporaryMember" or "Waitlist" or "ElectionReview" or "Committee"))
-            throw new InvalidOperationException("Only screened temporary members awaiting ballot can be attached.");
+        if (code is not ("TemporaryMember" or "Screening" or "Waitlist" or "ElectionReview" or "Committee"))
+            throw new InvalidOperationException("Only applicants in screening, or awaiting election, can be attached.");
 
         var item = new CommitteeBallotItem
         {
@@ -283,7 +283,7 @@ END
         };
         _db.CommitteeBallotItems.Add(item);
 
-        if (code == "TemporaryMember")
+        if (code is "TemporaryMember" or "Screening")
         {
             var wait = await FindStatusAsync("Waitlist", cancellationToken)
                        ?? await FindStatusAsync("WAITLIST", cancellationToken);
@@ -557,6 +557,8 @@ END
             .Include(a => a.Status)
             .Where(a => a.Status.Code == "TEMPORARY_MEMBER"
                         || a.Status.Code == "TemporaryMember"
+                        || a.Status.Code == "SCREENING"
+                        || a.Status.Code == "Screening"
                         || a.Status.Code == "Waitlist"
                         || a.Status.Code == "WAITLIST"
                         || a.Status.Code == "ElectionReview")
@@ -992,6 +994,7 @@ END
         return statusCode.Trim().ToUpperInvariant() switch
         {
             "TEMPORARY_MEMBER" or "TEMPORARYMEMBER" => "TemporaryMember",
+            "SCREENING" => "Screening",
             "WAITLIST" or "WAITLISTED" => "Waitlist",
             "ELECTIONREVIEW" or "ELECTION_REVIEW" => "ElectionReview",
             "NOTELECTED" or "NOT_ELECTED" => "NotElected",

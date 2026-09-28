@@ -283,7 +283,10 @@ public class MemberDashboardService : IMemberDashboardService
             detail = "Joining fee invoice is unpaid.";
         }
 
-        var clubCredit = Math.Max(0, joining.Paid - joining.Due) + Math.Max(0, amountPaid - amountDue);
+        var awaitingRefund = await _db.InvoiceCreditNotes.AsNoTracking()
+            .Where(c => c.AccountId == account.AccountId)
+            .SumAsync(c => (decimal?)c.AwaitingRefundAmount, cancellationToken) ?? 0m;
+        var clubCredit = Math.Max(0, joining.Paid - joining.Due) + Math.Max(0, amountPaid - amountDue) + awaitingRefund;
         var upcomingYear = (int?)null;
         decimal upcomingDue = 0, upcomingPaid = 0, upcomingOutstanding = 0;
         if (pays && !isLifeExempt)
@@ -1321,14 +1324,14 @@ public class MemberDashboardService : IMemberDashboardService
     {
         if (string.IsNullOrWhiteSpace(status)) return false;
         return status is "Interview" or "InterviewReview" or "Waitlist" or "ElectionReview"
-            or "TemporaryMember" or "Committee" or "CommitteeReview" or "Approved" or "NotElected" or "Rejected";
+            or "TemporaryMember" or "Screening" or "Committee" or "CommitteeReview" or "Approved" or "NotElected" or "Rejected";
     }
 
     private static bool StatusPastInterview(string? status)
     {
         if (string.IsNullOrWhiteSpace(status)) return false;
         return status is "InterviewReview" or "Waitlist" or "ElectionReview"
-            or "TemporaryMember" or "Committee" or "CommitteeReview" or "Approved" or "NotElected" or "Rejected";
+            or "TemporaryMember" or "Screening" or "Committee" or "CommitteeReview" or "Approved" or "NotElected" or "Rejected";
     }
 
     private static bool StatusElectionFinished(string? status)

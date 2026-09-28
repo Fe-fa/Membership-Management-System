@@ -1,0 +1,46 @@
+﻿-- Baseline schema for dbo.MProfile. This file is not executed by the application.
+IF OBJECT_ID(N'dbo.MProfile', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[MProfile] (
+        [profile_id] bigint IDENTITY(1,1) NOT NULL,
+        [account_type_id] bigint NULL,
+        [membership_no] nvarchar(50) NULL,
+        [title] nvarchar(30) NULL,
+        [first_name] nvarchar(100) NOT NULL,
+        [middle_name] nvarchar(100) NULL,
+        [last_name] nvarchar(100) NOT NULL,
+        [gender_id] bigint NULL,
+        [marital_status_id] bigint NULL,
+        [blood_group_id] bigint NULL,
+        [date_of_birth] date NULL,
+        [place_of_birth] nvarchar(150) NULL,
+        [nationality_id] bigint NULL,
+        [country_of_residence_id] bigint NULL,
+        [id_passport_no] nvarchar(10) NULL,
+        [occupation] nvarchar(150) NULL,
+        [company] nvarchar(150) NULL,
+        [role] nvarchar(150) NULL,
+        [postal_address] nvarchar(255) NULL,
+        [city] nvarchar(100) NULL,
+        [state_country] nvarchar(100) NULL,
+        [postal_code] nvarchar(10) NULL,
+        [country_id] bigint NULL,
+        [email] nvarchar(150) NULL,
+        [alt_email] nvarchar(150) NULL,
+        [tel_intl_prefix] nvarchar(5) NULL,
+        [mobile] nvarchar(15) NULL,
+        [tel_other] nvarchar(30) NULL,
+        [photo_url] nvarchar(500) NULL,
+        [data_consent_given] bit NOT NULL CONSTRAINT [DF__MProfile__data_c__7849DB76] DEFAULT ((0)),
+        [privacy_policy_accepted_at] datetime2(7) NULL,
+        [is_active] bit NOT NULL CONSTRAINT [DF__MProfile__is_act__793DFFAF] DEFAULT ((1)),
+        [is_deleted] bit NOT NULL CONSTRAINT [DF__MProfile__is_del__7A3223E8] DEFAULT ((0)),
+        [created_at] datetime2(7) NOT NULL CONSTRAINT [DF__MProfile__create__7B264821] DEFAULT (sysutcdatetime()),
+        [created_by_user_id] bigint NULL,
+        [updated_by_user_id] bigint NULL,
+        [updated_at] datetime2(7) NULL,
+        [tenant_id] bigint NOT NULL,
+        CONSTRAINT [PK_MProfile] PRIMARY KEY ([profile_id])
+    );
+END
+GO

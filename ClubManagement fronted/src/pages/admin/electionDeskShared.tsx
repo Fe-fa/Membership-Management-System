@@ -225,7 +225,7 @@ export function ElectionDeskLayout({ children }: { children?: ReactNode }) {
     <TooltipProvider delayDuration={200}>
       <PageFrame width="lg">
         <PageBackLink to="/admin" label="Back to admin dashboard" />
-        <PageHeader title="AGM/EGM Election" />
+        {/* <PageHeader title="AGM Election" /> */}
         {children ?? <Outlet />}
       </PageFrame>
     </TooltipProvider>

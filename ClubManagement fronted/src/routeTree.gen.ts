@@ -21,8 +21,10 @@ import { Route as CustomChargesRouteImport } from './routes/custom-charges'
 import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as ElectionRouteImport } from './routes/election'
 import { Route as EndorsementsRouteImport } from './routes/endorsements'
+import { Route as EventsRouteImport } from './routes/events'
 import { Route as ExistingMembersRouteImport } from './routes/existing-members'
 import { Route as FinanceRouteImport } from './routes/finance'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as GovernanceRouteImport } from './routes/governance'
 import { Route as GuestsRouteImport } from './routes/guests'
 import { Route as LoginRouteImport } from './routes/login'
@@ -37,6 +39,7 @@ import { Route as SetPasswordRouteImport } from './routes/set-password'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SupportRouteImport } from './routes/support'
 import { Route as UserManagementRouteImport } from './routes/user-management'
+import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as ApplyCompanySlugRouteImport } from './routes/apply.$companySlug'
 import { Route as ClubSetupIndexRouteImport } from './routes/club-setup.index'
 import { Route as ClubSetupCompaniesRouteImport } from './routes/club-setup.companies'
@@ -82,6 +85,7 @@ import { Route as SettingsClubRouteImport } from './routes/settings.club'
 import { Route as SettingsLookupsRouteImport } from './routes/settings.lookups'
 import { Route as SettingsPrivacyRouteImport } from './routes/settings.privacy'
 import { Route as SettingsRbacRouteImport } from './routes/settings.rbac'
+import { Route as SettingsSetupRouteImport } from './routes/settings.setup'
 import { Route as SupportIndexRouteImport } from './routes/support.index'
 import { Route as SupportNewRouteImport } from './routes/support.new'
 import { Route as SupportTicketsRouteImport } from './routes/support.tickets'
@@ -91,6 +95,7 @@ import { Route as ExistingMembersPrivilegesIndexRouteImport } from './routes/exi
 import { Route as ExistingMembersPrivilegesTypeIdRouteImport } from './routes/existing-members.privileges.$typeId'
 import { Route as ExistingMembersPrivilegesNewRouteImport } from './routes/existing-members.privileges.new'
 import { Route as FinanceInvoicesIndexRouteImport } from './routes/finance.invoices.index'
+import { Route as FinanceInvoicesIssuedRouteImport } from './routes/finance.invoices.issued'
 import { Route as FinanceInvoicesSetupRouteImport } from './routes/finance.invoices.setup'
 import { Route as FinanceNonMembershipAccommodationRouteImport } from './routes/finance.non-membership.accommodation'
 import { Route as FinanceNonMembershipCorkageRouteImport } from './routes/finance.non-membership.corkage'
@@ -162,6 +167,11 @@ const EndorsementsRoute = EndorsementsRouteImport.update({
   path: '/endorsements',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EventsRoute = EventsRouteImport.update({
+  id: '/events',
+  path: '/events',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ExistingMembersRoute = ExistingMembersRouteImport.update({
   id: '/existing-members',
   path: '/existing-members',
@@ -170,6 +180,11 @@ const ExistingMembersRoute = ExistingMembersRouteImport.update({
 const FinanceRoute = FinanceRouteImport.update({
   id: '/finance',
   path: '/finance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GovernanceRoute = GovernanceRouteImport.update({
@@ -240,6 +255,11 @@ const SupportRoute = SupportRouteImport.update({
 const UserManagementRoute = UserManagementRouteImport.update({
   id: '/user-management',
   path: '/user-management',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerifyEmailRoute = VerifyEmailRouteImport.update({
+  id: '/verify-email',
+  path: '/verify-email',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApplyCompanySlugRoute = ApplyCompanySlugRouteImport.update({
@@ -474,6 +494,11 @@ const SettingsRbacRoute = SettingsRbacRouteImport.update({
   path: '/rbac',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsSetupRoute = SettingsSetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SupportIndexRoute = SupportIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -521,6 +546,11 @@ const ExistingMembersPrivilegesNewRoute =
 const FinanceInvoicesIndexRoute = FinanceInvoicesIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => FinanceInvoicesRoute,
+} as any)
+const FinanceInvoicesIssuedRoute = FinanceInvoicesIssuedRouteImport.update({
+  id: '/issued',
+  path: '/issued',
   getParentRoute: () => FinanceInvoicesRoute,
 } as any)
 const FinanceInvoicesSetupRoute = FinanceInvoicesSetupRouteImport.update({
@@ -596,8 +626,10 @@ export interface FileRoutesByFullPath {
   '/documents': typeof DocumentsRoute
   '/election': typeof ElectionRouteWithChildren
   '/endorsements': typeof EndorsementsRoute
+  '/events': typeof EventsRoute
   '/existing-members': typeof ExistingMembersRouteWithChildren
   '/finance': typeof FinanceRouteWithChildren
+  '/forgot-password': typeof ForgotPasswordRoute
   '/governance': typeof GovernanceRoute
   '/guests': typeof GuestsRoute
   '/login': typeof LoginRoute
@@ -612,6 +644,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRouteWithChildren
   '/support': typeof SupportRouteWithChildren
   '/user-management': typeof UserManagementRouteWithChildren
+  '/verify-email': typeof VerifyEmailRoute
   '/apply/$companySlug': typeof ApplyCompanySlugRoute
   '/club-setup/companies': typeof ClubSetupCompaniesRoute
   '/club-setup/countries': typeof ClubSetupCountriesRoute
@@ -649,6 +682,7 @@ export interface FileRoutesByFullPath {
   '/settings/lookups': typeof SettingsLookupsRoute
   '/settings/privacy': typeof SettingsPrivacyRoute
   '/settings/rbac': typeof SettingsRbacRoute
+  '/settings/setup': typeof SettingsSetupRoute
   '/support/new': typeof SupportNewRoute
   '/support/tickets': typeof SupportTicketsRoute
   '/user-management/$userAccountId': typeof UserManagementUserAccountIdRoute
@@ -664,6 +698,7 @@ export interface FileRoutesByFullPath {
   '/user-management/': typeof UserManagementIndexRoute
   '/existing-members/privileges/$typeId': typeof ExistingMembersPrivilegesTypeIdRouteWithChildren
   '/existing-members/privileges/new': typeof ExistingMembersPrivilegesNewRoute
+  '/finance/invoices/issued': typeof FinanceInvoicesIssuedRoute
   '/finance/invoices/setup': typeof FinanceInvoicesSetupRoute
   '/finance/non-membership/accommodation': typeof FinanceNonMembershipAccommodationRoute
   '/finance/non-membership/corkage': typeof FinanceNonMembershipCorkageRoute
@@ -687,6 +722,8 @@ export interface FileRoutesByTo {
   '/custom-charges': typeof CustomChargesRoute
   '/documents': typeof DocumentsRoute
   '/endorsements': typeof EndorsementsRoute
+  '/events': typeof EventsRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/governance': typeof GovernanceRoute
   '/guests': typeof GuestsRoute
   '/login': typeof LoginRoute
@@ -696,6 +733,7 @@ export interface FileRoutesByTo {
   '/register': typeof RegisterRoute
   '/register-member': typeof RegisterMemberRoute
   '/set-password': typeof SetPasswordRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/apply/$companySlug': typeof ApplyCompanySlugRoute
   '/club-setup/companies': typeof ClubSetupCompaniesRoute
   '/club-setup/countries': typeof ClubSetupCountriesRoute
@@ -730,6 +768,7 @@ export interface FileRoutesByTo {
   '/settings/lookups': typeof SettingsLookupsRoute
   '/settings/privacy': typeof SettingsPrivacyRoute
   '/settings/rbac': typeof SettingsRbacRoute
+  '/settings/setup': typeof SettingsSetupRoute
   '/support/new': typeof SupportNewRoute
   '/support/tickets': typeof SupportTicketsRoute
   '/user-management/$userAccountId': typeof UserManagementUserAccountIdRoute
@@ -745,6 +784,7 @@ export interface FileRoutesByTo {
   '/user-management': typeof UserManagementIndexRoute
   '/existing-members/privileges/$typeId': typeof ExistingMembersPrivilegesTypeIdRouteWithChildren
   '/existing-members/privileges/new': typeof ExistingMembersPrivilegesNewRoute
+  '/finance/invoices/issued': typeof FinanceInvoicesIssuedRoute
   '/finance/invoices/setup': typeof FinanceInvoicesSetupRoute
   '/finance/non-membership/accommodation': typeof FinanceNonMembershipAccommodationRoute
   '/finance/non-membership/corkage': typeof FinanceNonMembershipCorkageRoute
@@ -772,8 +812,10 @@ export interface FileRoutesById {
   '/documents': typeof DocumentsRoute
   '/election': typeof ElectionRouteWithChildren
   '/endorsements': typeof EndorsementsRoute
+  '/events': typeof EventsRoute
   '/existing-members': typeof ExistingMembersRouteWithChildren
   '/finance': typeof FinanceRouteWithChildren
+  '/forgot-password': typeof ForgotPasswordRoute
   '/governance': typeof GovernanceRoute
   '/guests': typeof GuestsRoute
   '/login': typeof LoginRoute
@@ -788,6 +830,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRouteWithChildren
   '/support': typeof SupportRouteWithChildren
   '/user-management': typeof UserManagementRouteWithChildren
+  '/verify-email': typeof VerifyEmailRoute
   '/apply/$companySlug': typeof ApplyCompanySlugRoute
   '/club-setup/companies': typeof ClubSetupCompaniesRoute
   '/club-setup/countries': typeof ClubSetupCountriesRoute
@@ -825,6 +868,7 @@ export interface FileRoutesById {
   '/settings/lookups': typeof SettingsLookupsRoute
   '/settings/privacy': typeof SettingsPrivacyRoute
   '/settings/rbac': typeof SettingsRbacRoute
+  '/settings/setup': typeof SettingsSetupRoute
   '/support/new': typeof SupportNewRoute
   '/support/tickets': typeof SupportTicketsRoute
   '/user-management/$userAccountId': typeof UserManagementUserAccountIdRoute
@@ -840,6 +884,7 @@ export interface FileRoutesById {
   '/user-management/': typeof UserManagementIndexRoute
   '/existing-members/privileges/$typeId': typeof ExistingMembersPrivilegesTypeIdRouteWithChildren
   '/existing-members/privileges/new': typeof ExistingMembersPrivilegesNewRoute
+  '/finance/invoices/issued': typeof FinanceInvoicesIssuedRoute
   '/finance/invoices/setup': typeof FinanceInvoicesSetupRoute
   '/finance/non-membership/accommodation': typeof FinanceNonMembershipAccommodationRoute
   '/finance/non-membership/corkage': typeof FinanceNonMembershipCorkageRoute
@@ -868,8 +913,10 @@ export interface FileRouteTypes {
     | '/documents'
     | '/election'
     | '/endorsements'
+    | '/events'
     | '/existing-members'
     | '/finance'
+    | '/forgot-password'
     | '/governance'
     | '/guests'
     | '/login'
@@ -884,6 +931,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/support'
     | '/user-management'
+    | '/verify-email'
     | '/apply/$companySlug'
     | '/club-setup/companies'
     | '/club-setup/countries'
@@ -921,6 +969,7 @@ export interface FileRouteTypes {
     | '/settings/lookups'
     | '/settings/privacy'
     | '/settings/rbac'
+    | '/settings/setup'
     | '/support/new'
     | '/support/tickets'
     | '/user-management/$userAccountId'
@@ -936,6 +985,7 @@ export interface FileRouteTypes {
     | '/user-management/'
     | '/existing-members/privileges/$typeId'
     | '/existing-members/privileges/new'
+    | '/finance/invoices/issued'
     | '/finance/invoices/setup'
     | '/finance/non-membership/accommodation'
     | '/finance/non-membership/corkage'
@@ -959,6 +1009,8 @@ export interface FileRouteTypes {
     | '/custom-charges'
     | '/documents'
     | '/endorsements'
+    | '/events'
+    | '/forgot-password'
     | '/governance'
     | '/guests'
     | '/login'
@@ -968,6 +1020,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/register-member'
     | '/set-password'
+    | '/verify-email'
     | '/apply/$companySlug'
     | '/club-setup/companies'
     | '/club-setup/countries'
@@ -1002,6 +1055,7 @@ export interface FileRouteTypes {
     | '/settings/lookups'
     | '/settings/privacy'
     | '/settings/rbac'
+    | '/settings/setup'
     | '/support/new'
     | '/support/tickets'
     | '/user-management/$userAccountId'
@@ -1017,6 +1071,7 @@ export interface FileRouteTypes {
     | '/user-management'
     | '/existing-members/privileges/$typeId'
     | '/existing-members/privileges/new'
+    | '/finance/invoices/issued'
     | '/finance/invoices/setup'
     | '/finance/non-membership/accommodation'
     | '/finance/non-membership/corkage'
@@ -1043,8 +1098,10 @@ export interface FileRouteTypes {
     | '/documents'
     | '/election'
     | '/endorsements'
+    | '/events'
     | '/existing-members'
     | '/finance'
+    | '/forgot-password'
     | '/governance'
     | '/guests'
     | '/login'
@@ -1059,6 +1116,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/support'
     | '/user-management'
+    | '/verify-email'
     | '/apply/$companySlug'
     | '/club-setup/companies'
     | '/club-setup/countries'
@@ -1096,6 +1154,7 @@ export interface FileRouteTypes {
     | '/settings/lookups'
     | '/settings/privacy'
     | '/settings/rbac'
+    | '/settings/setup'
     | '/support/new'
     | '/support/tickets'
     | '/user-management/$userAccountId'
@@ -1111,6 +1170,7 @@ export interface FileRouteTypes {
     | '/user-management/'
     | '/existing-members/privileges/$typeId'
     | '/existing-members/privileges/new'
+    | '/finance/invoices/issued'
     | '/finance/invoices/setup'
     | '/finance/non-membership/accommodation'
     | '/finance/non-membership/corkage'
@@ -1138,8 +1198,10 @@ export interface RootRouteChildren {
   DocumentsRoute: typeof DocumentsRoute
   ElectionRoute: typeof ElectionRouteWithChildren
   EndorsementsRoute: typeof EndorsementsRoute
+  EventsRoute: typeof EventsRoute
   ExistingMembersRoute: typeof ExistingMembersRouteWithChildren
   FinanceRoute: typeof FinanceRouteWithChildren
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   GovernanceRoute: typeof GovernanceRoute
   GuestsRoute: typeof GuestsRoute
   LoginRoute: typeof LoginRoute
@@ -1154,6 +1216,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRouteWithChildren
   SupportRoute: typeof SupportRouteWithChildren
   UserManagementRoute: typeof UserManagementRouteWithChildren
+  VerifyEmailRoute: typeof VerifyEmailRoute
   ApplyCompanySlugRoute: typeof ApplyCompanySlugRoute
 }
 
@@ -1243,6 +1306,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EndorsementsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/events': {
+      id: '/events'
+      path: '/events'
+      fullPath: '/events'
+      preLoaderRoute: typeof EventsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/existing-members': {
       id: '/existing-members'
       path: '/existing-members'
@@ -1255,6 +1325,13 @@ declare module '@tanstack/react-router' {
       path: '/finance'
       fullPath: '/finance'
       preLoaderRoute: typeof FinanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/governance': {
@@ -1353,6 +1430,13 @@ declare module '@tanstack/react-router' {
       path: '/user-management'
       fullPath: '/user-management'
       preLoaderRoute: typeof UserManagementRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verify-email': {
+      id: '/verify-email'
+      path: '/verify-email'
+      fullPath: '/verify-email'
+      preLoaderRoute: typeof VerifyEmailRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/apply/$companySlug': {
@@ -1670,6 +1754,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRbacRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/setup': {
+      id: '/settings/setup'
+      path: '/setup'
+      fullPath: '/settings/setup'
+      preLoaderRoute: typeof SettingsSetupRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/support/': {
       id: '/support/'
       path: '/'
@@ -1731,6 +1822,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/finance/invoices/'
       preLoaderRoute: typeof FinanceInvoicesIndexRouteImport
+      parentRoute: typeof FinanceInvoicesRoute
+    }
+    '/finance/invoices/issued': {
+      id: '/finance/invoices/issued'
+      path: '/issued'
+      fullPath: '/finance/invoices/issued'
+      preLoaderRoute: typeof FinanceInvoicesIssuedRouteImport
       parentRoute: typeof FinanceInvoicesRoute
     }
     '/finance/invoices/setup': {
@@ -1929,11 +2027,13 @@ const ExistingMembersRouteWithChildren = ExistingMembersRoute._addFileChildren(
 )
 
 interface FinanceInvoicesRouteChildren {
+  FinanceInvoicesIssuedRoute: typeof FinanceInvoicesIssuedRoute
   FinanceInvoicesSetupRoute: typeof FinanceInvoicesSetupRoute
   FinanceInvoicesIndexRoute: typeof FinanceInvoicesIndexRoute
 }
 
 const FinanceInvoicesRouteChildren: FinanceInvoicesRouteChildren = {
+  FinanceInvoicesIssuedRoute: FinanceInvoicesIssuedRoute,
   FinanceInvoicesSetupRoute: FinanceInvoicesSetupRoute,
   FinanceInvoicesIndexRoute: FinanceInvoicesIndexRoute,
 }
@@ -2033,6 +2133,7 @@ interface SettingsRouteChildren {
   SettingsLookupsRoute: typeof SettingsLookupsRoute
   SettingsPrivacyRoute: typeof SettingsPrivacyRoute
   SettingsRbacRoute: typeof SettingsRbacRoute
+  SettingsSetupRoute: typeof SettingsSetupRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
 
@@ -2044,6 +2145,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsLookupsRoute: SettingsLookupsRoute,
   SettingsPrivacyRoute: SettingsPrivacyRoute,
   SettingsRbacRoute: SettingsRbacRoute,
+  SettingsSetupRoute: SettingsSetupRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 }
 
@@ -2093,8 +2195,10 @@ const rootRouteChildren: RootRouteChildren = {
   DocumentsRoute: DocumentsRoute,
   ElectionRoute: ElectionRouteWithChildren,
   EndorsementsRoute: EndorsementsRoute,
+  EventsRoute: EventsRoute,
   ExistingMembersRoute: ExistingMembersRouteWithChildren,
   FinanceRoute: FinanceRouteWithChildren,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   GovernanceRoute: GovernanceRoute,
   GuestsRoute: GuestsRoute,
   LoginRoute: LoginRoute,
@@ -2109,6 +2213,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRouteWithChildren,
   SupportRoute: SupportRouteWithChildren,
   UserManagementRoute: UserManagementRouteWithChildren,
+  VerifyEmailRoute: VerifyEmailRoute,
   ApplyCompanySlugRoute: ApplyCompanySlugRoute,
 }
 export const routeTree = rootRouteImport

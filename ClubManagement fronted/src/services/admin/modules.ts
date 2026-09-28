@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BedDouble,
+  Building2,
   ClipboardCheck,
   ClipboardList,
   ConciergeBell,
@@ -14,6 +15,36 @@ import {
 } from "lucide-react";
 
 export type AdminModuleTone = "amber" | "sky" | "violet" | "emerald" | "rose" | "slate";
+
+export const ADMIN_MODULE_CATEGORIES = [
+  "All",
+  "Membership",
+  "Finance",
+  "Governance",
+  "Club services",
+  "Setup",
+] as const;
+
+export type AdminModuleCategory = (typeof ADMIN_MODULE_CATEGORIES)[number];
+
+const MODULE_CATEGORY: Record<string, Exclude<AdminModuleCategory, "All">> = {
+  "guest-visits": "Membership",
+  "applicant-queue": "Membership",
+  "manage-records": "Membership",
+  "manager-queue": "Membership",
+  finance: "Finance",
+  "committee-manage": "Governance",
+  "agm-election": "Governance",
+  "committee-ballot": "Governance",
+  accommodation: "Club services",
+  support: "Club services",
+  "club-setup": "Setup",
+  setting: "Setup",
+};
+
+export function adminModuleCategory(moduleId: string): AdminModuleCategory {
+  return MODULE_CATEGORY[moduleId] ?? "All";
+}
 
 export type AdminModule = {
   id: string;
@@ -125,9 +156,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     roles: STAFF_OPS,
   },
   {
+    id: "club-setup",
+    title: "Club setup",
+    description: "Countries, companies, and designations.",
+    to: "/club-setup/companies",
+    icon: Building2,
+    tone: "slate",
+    roles: ["SUPER_ADMIN"],
+  },
+  {
     id: "setting",
     title: "Setting",
-    description: "RBAC, accounts, lookups, fee schedule & club preferences.",
+    description: "Setup, roles, accounts, lookups, fees & club preferences.",
     to: "/settings/rbac",
     icon: Settings,
     tone: "slate",

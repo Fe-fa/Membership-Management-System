@@ -1,7 +1,15 @@
 export type FinanceExportColumn<T> = {
+  id?: string;
   header: string;
   value: (row: T) => string | number | null | undefined;
 };
+
+export function selectExportColumns<T>(columns: FinanceExportColumn<T>[], enabled?: string[] | null) {
+  if (!enabled || enabled.length === 0) return columns;
+  const chosen = new Set(enabled);
+  const picked = columns.filter((column) => !column.id || chosen.has(column.id));
+  return picked.length > 0 ? picked : columns;
+}
 
 function escapeCsv(value: string | number | null | undefined) {
   const raw = value == null ? "" : String(value);

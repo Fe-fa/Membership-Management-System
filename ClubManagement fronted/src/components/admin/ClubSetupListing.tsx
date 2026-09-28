@@ -22,6 +22,7 @@ export type ClubSetupColumn<T> = {
 
 export function ClubSetupListing<T>({
   title,
+  note,
   rows,
   columns,
   searchText,
@@ -32,6 +33,7 @@ export function ClubSetupListing<T>({
   deleteDisabled,
 }: {
   title: string;
+  note?: string;
   rows: T[];
   columns: ClubSetupColumn<T>[];
   searchText: (row: T) => string;
@@ -61,7 +63,10 @@ export function ClubSetupListing<T>({
   return (
     <div className="rounded-xl bg-white px-5 py-4 shadow-sm ring-1 ring-slate-200/80">
       <div className="mb-5 flex items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold text-slate-800">{title}</h1>
+        <div>
+          <h1 className="text-lg font-semibold text-slate-800">{title}</h1>
+          {note ? <p className="mt-1 max-w-3xl text-sm text-slate-500">{note}</p> : null}
+        </div>
         <Button type="button" className="bg-sky-500 text-white hover:bg-sky-400" onClick={onCreate}>
           <Plus className="size-4" />
           Create New

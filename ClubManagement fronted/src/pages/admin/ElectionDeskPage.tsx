@@ -120,7 +120,7 @@ function DeskStatus({
   children,
 }: {
   desk: ReturnType<typeof useElectionDesk>["desk"];
-  current?: Desk;
+  current?: Desk | undefined;
   children: ReactNode;
 }) {
   if (desk.isLoading) {
@@ -365,7 +365,6 @@ export function MeetingNoticeDeskPage() {
     </div>
   );
 }
-
 export function OfficersBallotDeskPage() {
   const committee = useCurrentCommittee();
   const officers = committee.data?.members ?? [];
@@ -508,7 +507,6 @@ export function OfficersBallotDeskPage() {
               </div>
               <p className="text-sm text-muted-foreground">
                 Returning officer {current.conductorName ?? "not appointed"} · closes 48 hours before the meeting
-                (Article 65)
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <Button type="button" disabled={setWindow.isPending} onClick={() => setWindow.mutate(true)}>
@@ -574,9 +572,6 @@ export function LiveTallyDeskPage() {
                 Live tally &amp; results
                 <InfoTip text="Quorum is 20 Full, Life, Country or Overseas members. The Chairman's declaration is final and conclusive. Only approved proxies count." />
               </CardTitle>
-              <CardDescription>
-                Votes for and against each resolution. Temporary members have no vote.
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -713,12 +708,12 @@ export function LodgedProxiesDeskPage() {
   const proxies = current?.proxies ?? [];
 
   const reviewProxy = useMutation({
-    mutationFn: (payload: { proxyId: number; decision: "APPROVE" | "REJECT"; reason?: string }) =>
+    mutationFn: (payload: { proxyId: number; decision: "APPROVE" | "REJECT"; reason?: string | null }) =>
       apiRequest(`/api/elections/meetings/${meetingId}/proxies/${payload.proxyId}/review`, {
         method: "POST",
         body: JSON.stringify({
           decision: payload.decision,
-          reason: payload.reason || null,
+          reason: payload.reason?.trim() || null,
         }),
       }),
     onSuccess: (_d, payload) => {
@@ -739,9 +734,6 @@ export function LodgedProxiesDeskPage() {
               Lodged proxies
               <InfoTip text="A proxy must reach the Returning Officer at least 48 hours before the meeting, or 24 hours for a poll (Article 65). On-time instruments await Returning Officer review before they count toward quorum or the tally." />
             </CardTitle>
-            <CardDescription>
-              Review instruments before they count. Late lodgements skip review and never count.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             {proxies.length === 0 ? (
@@ -888,7 +880,7 @@ export function LodgedProxiesDeskPage() {
                 reviewProxy.mutate({
                   proxyId: rejectProxy.proxyId,
                   decision: "REJECT",
-                  reason: rejectReason.trim() || undefined,
+                  ...(rejectReason.trim() ? { reason: rejectReason.trim() } : {}),
                 });
               }}
             >

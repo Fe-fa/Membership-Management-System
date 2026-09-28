@@ -55,9 +55,10 @@ import {
   downloadExcelCsv,
   printHtmlReport,
   rowsToTableHtml,
+  selectExportColumns,
   type InvoiceDocument,
 } from "@/utils/financeExport";
-import type { InvoiceSetup } from "@/utils/invoiceSetup";
+import { mergePaymentSetup, type InvoiceSetup } from "@/utils/invoiceSetup";
 
 type FeeType = "JOINING" | "ANNUAL" | "ACCOMMODATION" | "CORKAGE" | "CUSTOM";
 type DocumentKind = "INVOICE" | "RECEIPT";
@@ -122,14 +123,14 @@ type CategorySummary = {
 const QUEUE_FETCH_SIZE = 5000;
 
 const ROSTER_EXPORT_COLS = [
-  { header: "Party", value: (row: RosterRow) => partyName(row) },
-  { header: "No.", value: (row: RosterRow) => partyNo(row) },
-  { header: "Audience", value: (row: RosterRow) => audienceLabel(row.audience) },
-  { header: "Category", value: (row: RosterRow) => categoryLabel(row) },
-  { header: "Email", value: (row: RosterRow) => row.email ?? "" },
-  { header: "Amount due", value: (row: RosterRow) => row.amountDue },
-  { header: "Arrears", value: (row: RosterRow) => row.arrearsAmount },
-  { header: "Document no.", value: (row: RosterRow) => row.invoiceNo ?? "" },
+  { id: "name", header: "Party", value: (row: RosterRow) => partyName(row) },
+  { id: "membershipNo", header: "No.", value: (row: RosterRow) => partyNo(row) },
+  { id: "kind", header: "Audience", value: (row: RosterRow) => audienceLabel(row.audience) },
+  { id: "category", header: "Category", value: (row: RosterRow) => categoryLabel(row) },
+  { id: "email", header: "Email", value: (row: RosterRow) => row.email ?? "" },
+  { id: "due", header: "Amount due", value: (row: RosterRow) => row.amountDue },
+  { id: "arrears", header: "Arrears", value: (row: RosterRow) => row.arrearsAmount },
+  { id: "documentNo", header: "Document no.", value: (row: RosterRow) => row.invoiceNo ?? "" },
 ];
 
 function partyName(row: QueueRow) {
@@ -241,6 +242,9 @@ export function InvoiceRunPage() {
   const queryClient = useQueryClient();
   const membershipTypes = useLookup("membership-types");
   const invoiceSetup = useInvoiceSetup();
+  const reportColumns = mergePaymentSetup(invoiceSetup.data).reportColumns;
+  const rosterColumns = selectExportColumns(ROSTER_EXPORT_COLS, reportColumns);
+  const showCol = (id: string) => reportColumns.includes(id);
   const [year, setYear] = useState(String(currentYear));
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
@@ -418,12 +422,12 @@ export function InvoiceRunPage() {
       }
       const label = `${kind === "waiting" ? "not submitted" : kind} ${feeLabel.toLowerCase()} invoices`;
       if (mode === "download") {
-        downloadExcelCsv(`invoices-${feeType}-${kind}-${yearNum}.csv`, ROSTER_EXPORT_COLS, exportRows);
+        downloadExcelCsv(`invoices-${feeType}-${kind}-${yearNum}.csv`, rosterColumns, exportRows);
         toast.success(`Downloaded ${exportRows.length} ${label}.`);
       } else {
         const ok = printHtmlReport(
           `${label} · ${yearNum}`,
-          rowsToTableHtml(ROSTER_EXPORT_COLS, exportRows),
+          rowsToTableHtml(rosterColumns, exportRows),
           "Aero Club billing",
         );
         if (!ok) toast.error("Could not open the print dialog. Try again.");
@@ -684,11 +688,11 @@ export function InvoiceRunPage() {
                           aria-label="Select all on this page"
                         />
                       </th>
-                      <th className="py-2 pr-3 font-medium">Name</th>
-                      <th className="py-2 pr-3 font-medium">No.</th>
-                      <th className="py-2 pr-3 font-medium">Type</th>
-                      <th className="py-2 pr-3 text-right font-medium">Amount due</th>
-                      <th className="py-2 text-right font-medium">Arrears</th>
+                      {showCol("name") ? <th className="py-2 pr-3 font-medium">Name</th> : null}
+                      {showCol("membershipNo") ? <th className="py-2 pr-3 font-medium">No.</th> : null}
+                      {showCol("category") ? <th className="py-2 pr-3 font-medium">Type</th> : null}
+                      {showCol("due") ? <th className="py-2 pr-3 text-right font-medium">Amount due</th> : null}
+                      {showCol("arrears") ? <th className="py-2 text-right font-medium">Arrears</th> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -711,21 +715,33 @@ export function InvoiceRunPage() {
                               aria-label={`Select ${partyName(row)}`}
                             />
                           </td>
-                          <td className="py-2.5 pr-3 align-top">
-                            <p className="font-medium text-slate-900">{partyName(row)}</p>
-                            <p className="text-xs text-muted-foreground">{audienceLabel(row.audience)}</p>
-                            {!hasEmail ? (
-                              <p className="text-xs text-amber-700">No email on file</p>
-                            ) : null}
-                          </td>
-                          <td className="py-2.5 pr-3 align-top font-medium">{partyNo(row)}</td>
-                          <td className="py-2.5 pr-3 align-top">{categoryLabel(row)}</td>
-                          <td className="py-2.5 pr-3 align-top text-right tabular-nums">
-                            {formatKes(row.amountDue)}
-                          </td>
-                          <td className="py-2.5 align-top text-right tabular-nums font-semibold text-slate-900">
-                            {formatKes(row.arrearsAmount)}
-                          </td>
+                          {showCol("name") ? (
+                            <td className="py-2.5 pr-3 align-top">
+                              <p className="font-medium text-slate-900">{partyName(row)}</p>
+                              {showCol("kind") ? (
+                                <p className="text-xs text-muted-foreground">{audienceLabel(row.audience)}</p>
+                              ) : null}
+                              {showCol("email") && !hasEmail ? (
+                                <p className="text-xs text-amber-700">No email on file</p>
+                              ) : null}
+                            </td>
+                          ) : null}
+                          {showCol("membershipNo") ? (
+                            <td className="py-2.5 pr-3 align-top font-medium">{partyNo(row)}</td>
+                          ) : null}
+                          {showCol("category") ? (
+                            <td className="py-2.5 pr-3 align-top">{categoryLabel(row)}</td>
+                          ) : null}
+                          {showCol("due") ? (
+                            <td className="py-2.5 pr-3 align-top text-right tabular-nums">
+                              {formatKes(row.amountDue)}
+                            </td>
+                          ) : null}
+                          {showCol("arrears") ? (
+                            <td className="py-2.5 align-top text-right tabular-nums font-semibold text-slate-900">
+                              {formatKes(row.arrearsAmount)}
+                            </td>
+                          ) : null}
                         </tr>
                       );
                     })}

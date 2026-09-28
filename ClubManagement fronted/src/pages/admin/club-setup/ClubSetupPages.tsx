@@ -203,6 +203,7 @@ export function CompanyListingsPage() {
       <PageDataGate loading={list.isLoading} label="Loading companies…" minHeightClassName="min-h-[20rem]">
         <ClubSetupListing
           title="Company Listings"
+          note="Apply slug is the public join address for that club. Aero Club of East Africa uses aero-club, so applicants open /apply/aero-club. SKY EXPRESS uses sky-express, so applicants open /apply/sky-express. The company code (ACEA, SKYEX) stays inside the system."
           rows={list.data ?? []}
           rowKey={(row) => row.id}
           searchText={searchText}
@@ -250,11 +251,16 @@ export function CompanyListingsPage() {
               value={draft.companyName ?? ""}
               onChange={(value) => setDraft((current) => ({ ...current, companyName: value }))}
             />
-            <Field
-              label="Apply slug"
-              value={draft.slug ?? ""}
-              onChange={(value) => setDraft((current) => ({ ...current, slug: value }))}
-            />
+            <div className="sm:col-span-2">
+              <Field
+                label="Apply slug"
+                value={draft.slug ?? ""}
+                onChange={(value) => setDraft((current) => ({ ...current, slug: value }))}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Public address only. aero-club opens Aero Club of East Africa. sky-express opens SKY EXPRESS.
+              </p>
+            </div>
             {/* <Field
               label="Payroll name"
               value={draft.payrollName ?? ""}

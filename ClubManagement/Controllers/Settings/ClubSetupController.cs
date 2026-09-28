@@ -7,7 +7,7 @@ namespace ClubManagement.Controllers.Settings;
 
 [ApiController]
 [Route("api/club-setup")]
-[Authorize(Roles = "ADMIN,GENERAL_MANAGER,CHAIRMAN,TREASURER,COMMITTEE_MEMBER")]
+[Authorize(Roles = "SUPER_ADMIN")]
 public class ClubSetupController : ControllerBase
 {
     private readonly IClubSetupService _setup;

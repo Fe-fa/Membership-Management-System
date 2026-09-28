@@ -8,7 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { apiRequest, extractErrorMessage } from "@/services/membership/api";
-import { downloadExcelCsv, printHtmlReport, rowsToTableHtml } from "@/utils/financeExport";
+import { useInvoiceSetup } from "@/services/finance/invoiceSetup";
+import { downloadExcelCsv, printHtmlReport, rowsToTableHtml, selectExportColumns } from "@/utils/financeExport";
+import { mergePaymentSetup } from "@/utils/invoiceSetup";
 import { formatKes } from "@/utils/format";
 
 type FinanceReportRow = {
@@ -33,17 +35,20 @@ type SummaryMetrics = {
 };
 
 const REPORT_COLUMNS = [
-  { header: "Date", value: (r: FinanceReportRow) => r.paymentDate?.slice(0, 10) || "—" },
-  { header: "Receipt No", value: (r: FinanceReportRow) => r.receiptNumber || "—" },
-  { header: "Member / Payer", value: (r: FinanceReportRow) => `${r.memberName}${r.membershipNo ? ` (${r.membershipNo})` : ""}` },
-  { header: "Fee Type", value: (r: FinanceReportRow) => r.feeType || "—" },
-  { header: "Payment Method", value: (r: FinanceReportRow) => r.method || "—" },
-  { header: "Reference", value: (r: FinanceReportRow) => r.reference || "—" },
-  { header: "Amount (KES)", value: (r: FinanceReportRow) => r.amount },
-  { header: "Status", value: (r: FinanceReportRow) => r.status || "—" },
+  { id: "date", header: "Date", value: (r: FinanceReportRow) => r.paymentDate?.slice(0, 10) || "—" },
+  { id: "receipt", header: "Receipt No", value: (r: FinanceReportRow) => r.receiptNumber || "—" },
+  { id: "name", header: "Member / Payer", value: (r: FinanceReportRow) => r.memberName || "—" },
+  { id: "membershipNo", header: "Membership no.", value: (r: FinanceReportRow) => r.membershipNo || "—" },
+  { id: "fee", header: "Fee Type", value: (r: FinanceReportRow) => r.feeType || "—" },
+  { id: "method", header: "Payment Method", value: (r: FinanceReportRow) => r.method || "—" },
+  { id: "reference", header: "Reference", value: (r: FinanceReportRow) => r.reference || "—" },
+  { id: "amount", header: "Amount (KES)", value: (r: FinanceReportRow) => r.amount },
+  { id: "status", header: "Status", value: (r: FinanceReportRow) => r.status || "—" },
 ];
 
 export function FinanceReportTab({ year }: { year: number }) {
+  const paymentSetup = useInvoiceSetup();
+  const columns = selectExportColumns(REPORT_COLUMNS, mergePaymentSetup(paymentSetup.data).reportColumns);
   const [fromDate, setFromDate] = useState(`${year}-01-01`);
   const [toDate, setToDate] = useState(`${year}-12-31`);
   const [feeType, setFeeType] = useState<string>("ALL");
@@ -90,7 +95,7 @@ export function FinanceReportTab({ year }: { year: number }) {
       toast.error("No data available to export.");
       return;
     }
-    downloadExcelCsv(`finance_report_${fromDate}_to_${toDate}.csv`, REPORT_COLUMNS, rows);
+    downloadExcelCsv(`finance_report_${fromDate}_to_${toDate}.csv`, columns, rows);
     toast.success("Financial report downloaded.");
   };
 
@@ -99,7 +104,7 @@ export function FinanceReportTab({ year }: { year: number }) {
       toast.error("No data available to print.");
       return;
     }
-    const htmlTable = rowsToTableHtml(REPORT_COLUMNS, rows);
+    const htmlTable = rowsToTableHtml(columns, rows);
     const title = `Financial Revenue Report (${fromDate} to ${toDate})`;
     printHtmlReport(title, htmlTable);
   };
@@ -182,47 +187,53 @@ export function FinanceReportTab({ year }: { year: number }) {
         <table className="w-full text-left text-sm">
           <thead className="border-b border-border bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
-              <th className="p-3">Date</th>
-              <th className="p-3">Receipt</th>
-              <th className="p-3">Member</th>
-              <th className="p-3">Fee Type</th>
-              <th className="p-3">Method</th>
-              <th className="p-3 text-right">Amount</th>
-              <th className="p-3">Status</th>
+              {columns.map((column) => (
+                <th key={column.id} className={column.id === "amount" ? "p-3 text-right" : "p-3"}>
+                  {column.header}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {reportQuery.isLoading ? (
               <tr>
-                <td colSpan={7} className="p-6 text-center text-muted-foreground">
+                <td colSpan={Math.max(columns.length, 1)} className="p-6 text-center text-muted-foreground">
                   Loading financial records...
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="p-6 text-center text-muted-foreground">
+                <td colSpan={Math.max(columns.length, 1)} className="p-6 text-center text-muted-foreground">
                   No financial records found for the selected date range and criteria.
                 </td>
               </tr>
             ) : (
               rows.map((row) => (
                 <tr key={row.transactionId} className="border-b border-border/60 last:border-0 hover:bg-muted/20">
-                  <td className="p-3">{row.paymentDate?.slice(0, 10)}</td>
-                  <td className="p-3 font-mono">{row.receiptNumber || "—"}</td>
-                  <td className="p-3 font-medium">
-                    {row.memberName}
-                    {row.membershipNo && (
-                      <span className="ml-1 text-xs text-muted-foreground">({row.membershipNo})</span>
-                    )}
-                  </td>
-                  <td className="p-3">{row.feeType}</td>
-                  <td className="p-3">{row.method}</td>
-                  <td className="p-3 text-right font-medium">{formatKes(row.amount)}</td>
-                  <td className="p-3">
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
-                      {row.status}
-                    </span>
-                  </td>
+                  {columns.map((column) => (
+                    <td
+                      key={column.id}
+                      className={
+                        column.id === "amount"
+                          ? "p-3 text-right font-medium"
+                          : column.id === "name"
+                            ? "p-3 font-medium"
+                            : column.id === "receipt"
+                              ? "p-3 font-mono"
+                              : "p-3"
+                      }
+                    >
+                      {column.id === "amount" ? (
+                        formatKes(row.amount)
+                      ) : column.id === "status" ? (
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
+                          {row.status}
+                        </span>
+                      ) : (
+                        column.value(row)
+                      )}
+                    </td>
+                  ))}
                 </tr>
               ))
             )}

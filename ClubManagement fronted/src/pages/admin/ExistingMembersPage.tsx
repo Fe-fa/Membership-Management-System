@@ -44,6 +44,8 @@ import {
   type MembershipTypeRow,
 } from "@/services/admin/membershipDesk";
 import { apiRequest, extractErrorMessage } from "@/services/membership/api";
+import { useInvoiceSetup } from "@/services/finance/invoiceSetup";
+import { mergePaymentSetup } from "@/utils/invoiceSetup";
 import { DEFAULT_PAGE_SIZE, emptyPage, pagedQuery, type PagedResult } from "@/lib/pagination";
 import {
   downloadMemberImportTemplate,
@@ -101,6 +103,7 @@ function ExistingMembersPanel() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [selected, setSelected] = useState<Record<number, MemberRow>>({});
   const [exportBusy, setExportBusy] = useState(false);
+  const reportColumns = mergePaymentSetup(useInvoiceSetup().data).reportColumns;
   const [registerOpen, setRegisterOpen] = useState(false);
   const [invite, setInvite] = useState<{ username: string; inviteUrl: string; emailSent: boolean } | null>(null);
 
@@ -221,7 +224,7 @@ function ExistingMembersPanel() {
         return;
       }
       const title = selectedCount > 0 ? `Member register · ${selectedCount} selected` : "Member register";
-      if (!printMembers(title, list)) toast.error("Could not open the print dialog.");
+      if (!printMembers(title, list, reportColumns)) toast.error("Could not open the print dialog.");
     } catch (err) {
       toast.error(extractErrorMessage(err));
     } finally {
@@ -238,7 +241,7 @@ function ExistingMembersPanel() {
         return;
       }
       const filename = selectedCount > 0 ? `members-selected-${selectedCount}.csv` : "member-register.csv";
-      downloadMembersExcel(filename, list);
+      downloadMembersExcel(filename, list, reportColumns);
       toast.success(`Downloaded ${list.length} member(s).`);
     } catch (err) {
       toast.error(extractErrorMessage(err));

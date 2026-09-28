@@ -93,6 +93,10 @@ public class ApplicationListItemDto
 
     /// <summary>Latest manager/staff rejection reason, when the application is rejected.</summary>
     public string? LastRejectionReason { get; set; }
+
+    /// <summary>Held at manager review without reject or authorize.</summary>
+    public bool ManagerStagePending { get; set; }
+    public string? ManagerStagePendingNote { get; set; }
 }
 
 public class ApplicationPaymentLineDto

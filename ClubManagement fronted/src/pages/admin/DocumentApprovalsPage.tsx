@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, FileText, Loader2, X } from "lucide-react";
+import { Check, CheckCheck, Download, FileText, Loader2, Printer, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { ListPagination } from "@/components/common/ListPagination";
 import { PageBodyLoading } from "@/components/layout/PageLoading";
 import { PageFrame, PageHeader } from "@/components/layout/PageFrame";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -23,7 +24,7 @@ import { apiRequest, extractErrorMessage } from "@/services/membership/api";
 import { formatKes } from "@/utils/format";
 import { cn } from "@/utils/cn";
 
-type DocumentKind = "INVOICE" ;
+type DocumentKind = "INVOICE";
 type ApprovalStatus = "PENDING_GM" | "APPROVED" | "REJECTED" | "PUBLISHED";
 
 type ApprovalRow = {
@@ -53,12 +54,138 @@ type ApprovalRow = {
 
 type PendingCounts = { invoices: number; statements: number };
 
+type BulkApproveError = { billingDocumentId: number; documentNo?: string | null; message: string };
+type BulkApproveResult = {
+  requested: number;
+  approved: number;
+  failed: number;
+  errors: BulkApproveError[];
+};
+
 function statusLabel(status: string) {
   if (status === "PENDING_GM") return "Waiting";
   if (status === "APPROVED") return "Approved";
   if (status === "PUBLISHED") return "Issued";
   if (status === "REJECTED") return "Returned";
   return status;
+}
+
+function csvEscape(value: string) {
+  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
+  return value;
+}
+
+function downloadTextFile(filename: string, content: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function buildCsv(rows: ApprovalRow[]) {
+  const headers = [
+    "Document No.",
+    "Member name",
+    "Membership no.",
+    "Amount",
+    "Amount paid",
+    "Balance",
+    "Status",
+    "Submitted at",
+    "Submitted by",
+  ];
+  const lines = [headers.map(csvEscape).join(",")];
+  for (const row of rows) {
+    lines.push(
+      [
+        row.documentNo,
+        row.partyName,
+        row.partyNo || "",
+        row.amount.toFixed(2),
+        row.amountPaid.toFixed(2),
+        row.balance.toFixed(2),
+        statusLabel(row.status),
+        row.submittedAt ? new Date(row.submittedAt).toISOString() : "",
+        row.submittedBy || "",
+      ]
+        .map((v) => csvEscape(String(v)))
+        .join(","),
+    );
+  }
+  return lines.join("\n");
+}
+
+function openPrintView(rows: ApprovalRow[], title: string) {
+  const win = window.open("", "_blank", "width=1024,height=768");
+  if (!win) {
+    toast.error("Your browser blocked the print window. Allow pop-ups and try again.");
+    return;
+  }
+  const rowsHtml = rows
+    .map(
+      (row) => `
+        <tr>
+          <td>${row.documentNo}</td>
+          <td>${row.partyName}</td>
+          <td>${row.partyNo || "—"}</td>
+          <td class="num">${formatKes(row.amount)}</td>
+          <td class="num">${formatKes(row.amountPaid)}</td>
+          <td class="num">${formatKes(row.balance)}</td>
+          <td>${statusLabel(row.status)}</td>
+        </tr>`,
+    )
+    .join("");
+
+  win.document.write(`<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>${title}</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { font-family: -apple-system, Segoe UI, Arial, sans-serif; color: #1f2430; padding: 24px; }
+      h1 { font-size: 18px; margin: 0 0 4px; }
+      p.meta { color: #6b7280; font-size: 12px; margin: 0 0 20px; }
+      table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e5e7eb; }
+      th { text-transform: uppercase; letter-spacing: 0.03em; color: #6b7280; font-size: 10px; }
+      td.num, th.num { text-align: right; }
+      @media print {
+        body { padding: 0; }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>${title}</h1>
+    <p class="meta">Generated ${new Date().toLocaleString()} · ${rows.length} document${rows.length === 1 ? "" : "s"}</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Document No.</th>
+          <th>Member name</th>
+          <th>Membership no.</th>
+          <th class="num">Amount</th>
+          <th class="num">Paid</th>
+          <th class="num">Balance</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+  </body>
+</html>`);
+  win.document.close();
+  win.focus();
+  win.onload = () => win.print();
+  // Some browsers fire onload before write settles; fall back to a short timeout too.
+  setTimeout(() => win.print(), 300);
 }
 
 export function DocumentApprovalsPage() {
@@ -73,6 +200,8 @@ export function DocumentApprovalsPage() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [returnRow, setReturnRow] = useState<ApprovalRow | null>(null);
   const [returnNotes, setReturnNotes] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [isExporting, setIsExporting] = useState<"print" | "download" | null>(null);
 
   const counts = useQuery({
     queryKey: ["billing-pending-count"],
@@ -94,6 +223,39 @@ export function DocumentApprovalsPage() {
 
   const pageData = list.data ?? emptyPage<ApprovalRow>(page, pageSize);
   const rows = pageData.items;
+
+  // Selection only makes sense while looking at rows that can actually be approved.
+  const selectableIds = useMemo(
+    () => rows.filter((r) => r.status === "PENDING_GM" && canDecide).map((r) => r.billingDocumentId),
+    [rows, canDecide],
+  );
+  const allSelectedOnPage = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
+  const someSelectedOnPage = selectableIds.some((id) => selectedIds.has(id));
+
+  // Reset selection whenever the underlying list changes shape (filters, page, etc.).
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [kind, status, appliedSearch, page, pageSize]);
+
+  function toggleRow(id: number, checked: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function toggleAllOnPage(checked: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of selectableIds) {
+        if (checked) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  }
 
   const approve = useMutation({
     mutationFn: (row: ApprovalRow) =>
@@ -123,6 +285,30 @@ export function DocumentApprovalsPage() {
     onError: (err) => toast.error(extractErrorMessage(err)),
   });
 
+  const bulkApprove = useMutation({
+    mutationFn: (ids: number[]) =>
+      apiRequest<BulkApproveResult>("/api/finance/billing/bulk-approve", {
+        method: "POST",
+        body: JSON.stringify({ billingDocumentIds: ids }),
+      }),
+    onSuccess: async (result) => {
+      if (result.failed === 0) {
+        toast.success(
+          `Approved ${result.approved} document${result.approved === 1 ? "" : "s"}. Recipients can now see them.`,
+        );
+      } else if (result.approved === 0) {
+        toast.error(`Could not approve the selected documents. ${result.errors[0]?.message ?? ""}`.trim());
+      } else {
+        toast.warning(
+          `Approved ${result.approved} of ${result.requested} documents. ${result.failed} could not be approved — check they're still waiting for review.`,
+        );
+      }
+      setSelectedIds(new Set());
+      await invalidate();
+    },
+    onError: (err) => toast.error(extractErrorMessage(err)),
+  });
+
   async function invalidate() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["billing-approvals"] }),
@@ -132,10 +318,62 @@ export function DocumentApprovalsPage() {
     ]);
   }
 
+  /** Pulls every row matching the current filters (not just the current page) for print/export. */
+  async function fetchAllFilteredRows(): Promise<ApprovalRow[]> {
+    const result = await apiRequest<PagedResult<ApprovalRow>>(
+      `/api/finance/billing/approvals?${pagedQuery({
+        kind,
+        status,
+        search: appliedSearch || undefined,
+        page: 1,
+        pageSize: 5000,
+      })}`,
+    );
+    return result.items;
+  }
+
+  async function handlePrint() {
+    setIsExporting("print");
+    try {
+      const all = await fetchAllFilteredRows();
+      if (all.length === 0) {
+        toast.info("There's nothing to print for this view.");
+        return;
+      }
+      openPrintView(all, `${kind === "INVOICE" ? "Invoices" : "Statements"} — ${statusLabel(status)}`);
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setIsExporting(null);
+    }
+  }
+
+  async function handleDownload() {
+    setIsExporting("download");
+    try {
+      const all = await fetchAllFilteredRows();
+      if (all.length === 0) {
+        toast.info("There's nothing to download for this view.");
+        return;
+      }
+      const csv = buildCsv(all);
+      const filename = `billing-${kind.toLowerCase()}-${status.toLowerCase()}-${new Date()
+        .toISOString()
+        .slice(0, 10)}.csv`;
+      downloadTextFile(filename, csv, "text/csv;charset=utf-8;");
+      toast.success(`Downloaded ${all.length} document${all.length === 1 ? "" : "s"}.`);
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setIsExporting(null);
+    }
+  }
+
   const invoiceCount = counts.data?.invoices ?? 0;
   const statementCount = counts.data?.statements ?? 0;
   const pendingTotal = invoiceCount + statementCount;
   const busyId = approve.isPending ? approve.variables?.billingDocumentId : reject.isPending ? returnRow?.billingDocumentId : null;
+  const selectedCount = selectedIds.size;
 
   return (
     <PageFrame width="lg">
@@ -143,12 +381,40 @@ export function DocumentApprovalsPage() {
         title=""
         description="Review invoices and statements Finance prepared. Approve to release them to the member or applicant, or return them with a note."
         actions={
-          <Button type="button" variant="outline" asChild>
-            <Link to="/finance/invoices">
-              <FileText className="size-4" />
-              Finance invoices
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isExporting !== null}
+              onClick={handlePrint}
+            >
+              {isExporting === "print" ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Printer className="size-4" />
+              )}
+              Print
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isExporting !== null}
+              onClick={handleDownload}
+            >
+              {isExporting === "download" ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Download className="size-4" />
+              )}
+              Download
+            </Button>
+            <Button type="button" variant="outline" asChild>
+              <Link to="/finance/invoices">
+                <FileText className="size-4" />
+                Finance invoices
+              </Link>
+            </Button>
+          </div>
         }
       />
 
@@ -182,7 +448,6 @@ export function DocumentApprovalsPage() {
             >
               {item === "INVOICE" ? "Invoices" : null}
               {item === "INVOICE" && invoiceCount > 0 ? ` (${invoiceCount})` : null}
-
             </button>
           ))}
         </div>
@@ -247,11 +512,55 @@ export function DocumentApprovalsPage() {
           </p>
         ) : (
           <>
+            {selectedCount > 0 ? (
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+                <div className="flex items-center gap-2 text-sm font-medium text-primary">
+                  <CheckCheck className="size-4" />
+                  {selectedCount} selected
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={bulkApprove.isPending}
+                    onClick={() => setSelectedIds(new Set())}
+                  >
+                    Clear
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={bulkApprove.isPending}
+                    onClick={() => bulkApprove.mutate(Array.from(selectedIds))}
+                  >
+                    {bulkApprove.isPending ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Check className="size-4" />
+                    )}
+                    Bulk Approve ({selectedCount})
+                  </Button>
+                </div>
+              </div>
+            ) : null}
             <div className="overflow-x-auto">
               <table className="w-full table-fixed text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="w-[32%] py-2 pr-3 font-medium">Member name</th>
+                    {canDecide && status === "PENDING_GM" ? (
+                      <th className="w-[6%] py-2 pr-2">
+                        <Checkbox
+                          checked={allSelectedOnPage ? true : someSelectedOnPage ? "indeterminate" : false}
+                          disabled={selectableIds.length === 0}
+                          onCheckedChange={(checked) => toggleAllOnPage(checked === true)}
+                          aria-label="Select all rows on this page"
+                        />
+                      </th>
+                    ) : null}
+                    <th className={cn("py-2 pr-3 font-medium", canDecide && status === "PENDING_GM" ? "w-[28%]" : "w-[32%]")}>
+                      Member name
+                    </th>
                     <th className="w-[22%] py-2 pr-3 font-medium">Membership no.</th>
                     <th className="w-[22%] py-2 pr-3 text-right font-medium">Amount</th>
                     <th className="w-[24%] py-2 text-right font-medium">Action</th>
@@ -260,8 +569,21 @@ export function DocumentApprovalsPage() {
                 <tbody>
                   {rows.map((row) => {
                     const rowBusy = busyId === row.billingDocumentId;
+                    const canSelectRow = row.status === "PENDING_GM" && canDecide;
                     return (
                       <tr key={row.billingDocumentId} className="border-b border-slate-100 last:border-0 hover:bg-muted/40">
+                        {canDecide && status === "PENDING_GM" ? (
+                          <td className="py-3 pr-2 align-middle">
+                            {canSelectRow ? (
+                              <Checkbox
+                                checked={selectedIds.has(row.billingDocumentId)}
+                                onCheckedChange={(checked) => toggleRow(row.billingDocumentId, checked === true)}
+                                disabled={bulkApprove.isPending}
+                                aria-label={`Select ${row.partyName}`}
+                              />
+                            ) : null}
+                          </td>
+                        ) : null}
                         <td className="py-3 pr-3 align-middle">
                           <p className="font-medium text-slate-900">{row.partyName}</p>
                         </td>
@@ -275,7 +597,7 @@ export function DocumentApprovalsPage() {
                               <Button
                                 type="button"
                                 size="sm"
-                                disabled={Boolean(busyId)}
+                                disabled={Boolean(busyId) || bulkApprove.isPending}
                                 onClick={() => approve.mutate(row)}
                               >
                                 {rowBusy && approve.isPending ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
@@ -285,7 +607,7 @@ export function DocumentApprovalsPage() {
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                disabled={Boolean(busyId)}
+                                disabled={Boolean(busyId) || bulkApprove.isPending}
                                 onClick={() => {
                                   setReturnRow(row);
                                   setReturnNotes("");

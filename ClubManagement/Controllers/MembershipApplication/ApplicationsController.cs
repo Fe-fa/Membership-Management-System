@@ -395,6 +395,26 @@ public class ApplicationsController : ControllerBase
     }
 
     [Authorize]
+    [HttpPost("{applicationId:long}/manager-pending")]
+    public async Task<ActionResult<ApplicationDetailDto>> MarkManagerPending(
+        long applicationId,
+        [FromBody] ChangeApplicationStatusRequest? request,
+        CancellationToken cancellationToken)
+    {
+        if (!User.IsStaff()) return Forbid();
+        try
+        {
+            var result = await _applicationService.MarkManagerPendingAsync(
+                applicationId,
+                User.UserId(),
+                request?.Reason,
+                cancellationToken);
+            return result is null ? NotFound() : Ok(result);
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize]
     [HttpPost("{applicationId:long}/review")]
     public async Task<ActionResult<ApplicationDetailDto>> StartReview(
         long applicationId,

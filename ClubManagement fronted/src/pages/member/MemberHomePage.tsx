@@ -1,6 +1,7 @@
 import {
   BedDouble,
   Bell,
+  CalendarDays,
   ClipboardList,
   CreditCard,
   FileText,
@@ -130,6 +131,14 @@ export function MemberHomePage({ me }: { me: MemberDashboard }) {
       icon: FileText,
       tone: "slate" as const,
       locked: !me.cards.documents,
+    },
+    {
+      id: "events",
+      title: "Events",
+      description: "Current, upcoming and past club events.",
+      to: "/events",
+      icon: CalendarDays,
+      tone: "emerald" as const,
     },
     {
       id: "support",

@@ -29,8 +29,10 @@ public record RegisterRequest(
     string? ParentFullName = null,
     DateOnly? DateOfBirth = null,
     long? CompanyId = null);
-/// <summary>Sign-in identifier: email (any role) or membership number (members / staff).</summary>
-public record LoginRequest(string Password, string? Login = null, string? Username = null, string? Email = null);
+/// <summary>Sign-in identifier: email or membership number.</summary>
+public record LoginRequest(string Password, string? Login = null, string? Email = null);
+public record RegisterResult(bool VerificationRequired, string Email, string Message, string? DebugCode = null);
+public record VerifyEmailRequest(string Email, string Code);
 public record AuthUserDto(
     long UserAccountId,
     long ProfileId,
@@ -49,12 +51,15 @@ public record ChangeMyPasswordRequest(string CurrentPassword, string NewPassword
 
 public interface IAuthService
 {
-    Task<AuthResponse> RegisterApplicantAsync(RegisterRequest request, CancellationToken cancellationToken);
+    Task<RegisterResult> RegisterApplicantAsync(RegisterRequest request, CancellationToken cancellationToken);
+    Task<AuthResponse> VerifyEmailAsync(VerifyEmailRequest request, CancellationToken cancellationToken);
+    Task<RegisterResult> ResendVerificationAsync(string email, CancellationToken cancellationToken);
     Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken);
     Task<AuthUserDto?> MeAsync(long userAccountId, CancellationToken cancellationToken);
     Task<AuthUserDto?> UpdateMeAsync(long userAccountId, UpdateMeRequest request, CancellationToken cancellationToken);
     Task ChangeMyPasswordAsync(long userAccountId, ChangeMyPasswordRequest request, CancellationToken cancellationToken);
     Task SetPasswordByTokenAsync(string token, string password, CancellationToken cancellationToken);
+    Task RequestPasswordResetAsync(string email, CancellationToken cancellationToken);
 }
 
 public class AuthService : IAuthService
@@ -64,26 +69,30 @@ public class AuthService : IAuthService
     private readonly IUserManagementService _users;
     private readonly ITenantContext _tenant;
     private readonly IGuestService _guests;
+    private readonly IEmailVerificationService _verification;
 
     public AuthService(
         ApplicationModuleDbContext db,
         IOptions<JwtOptions> jwt,
         IUserManagementService users,
         ITenantContext tenant,
-        IGuestService guests)
+        IGuestService guests,
+        IEmailVerificationService verification)
     {
         _db = db;
         _jwt = jwt.Value;
         _users = users;
         _tenant = tenant;
         _guests = guests;
+        _verification = verification;
     }
 
-    public async Task<AuthResponse> RegisterApplicantAsync(RegisterRequest request, CancellationToken cancellationToken)
+    public async Task<RegisterResult> RegisterApplicantAsync(RegisterRequest request, CancellationToken cancellationToken)
     {
         var email = (request.Email ?? "").Trim();
-        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 8)
-            throw new InvalidOperationException("Email and a password of at least 8 characters are required.");
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(request.Password))
+            throw new InvalidOperationException("Email and a password are required.");
+        EnsurePasswordStrength(request.Password);
         if (!email.Contains('@'))
             throw new InvalidOperationException("Enter a valid email address.");
 
@@ -102,8 +111,6 @@ public class AuthService : IAuthService
             if (request.ParentAccountId is long claimed && claimed != parent.ParentAccountId)
                 throw new InvalidOperationException("Parent verification does not match. Verify the parent again.");
         }
-        else if (request.GuestId is null or <= 0)
-            throw new InvalidOperationException("We have no record of your visits. Please visit the Aero Club of East Africa and ask reception to introduce and log you as a guest of an existing member before registering an account.");
         var idPassport = (request.IdPassportNo ?? "").Trim();
         if (string.IsNullOrWhiteSpace(idPassport))
             throw new InvalidOperationException("ID / Passport number is required to create your applicant profile.");
@@ -111,12 +118,27 @@ public class AuthService : IAuthService
         MGuest? guest = null;
         if (!childOfMember)
         {
-            guest = await _db.Guests
-                .Include(g => g.GuestStatus)
-                .Include(g => g.MVisits)
-                .FirstOrDefaultAsync(g => g.GuestId == request.GuestId!.Value && g.IsActive, cancellationToken);
+            if (request.GuestId is > 0)
+            {
+                guest = await _db.Guests
+                    .Include(g => g.GuestStatus)
+                    .Include(g => g.MVisits)
+                    .FirstOrDefaultAsync(g => g.GuestId == request.GuestId.Value && g.IsActive, cancellationToken);
+            }
+            else
+            {
+                var visitEmail = email.ToLowerInvariant();
+                var matches = await _db.Guests
+                    .Include(g => g.GuestStatus)
+                    .Include(g => g.MVisits)
+                    .Where(g => g.IsActive && g.Email != null && g.Email.ToLower() == visitEmail)
+                    .ToListAsync(cancellationToken);
+                if (matches.Count > 1)
+                    throw new InvalidOperationException("More than one guest is registered with that email. Ask reception to correct the visit record.");
+                guest = matches.FirstOrDefault();
+            }
             if (guest is null)
-                throw new InvalidOperationException("We have no record of your visits. Please visit the Aero Club of East Africa and ask reception to introduce and log you as a guest of an existing member before registering an account.");
+                throw new InvalidOperationException("No club visit is recorded for this email. Visit the Aero Club of East Africa and ask reception to log you as a guest before registering.");
             if (!string.IsNullOrWhiteSpace(guest.BarredReason) ||
                 string.Equals(guest.GuestStatus.Code, "BARRED", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("This guest is barred and may not register.");
@@ -126,7 +148,7 @@ public class AuthService : IAuthService
                 !string.Equals(guest.VisitSlipCode, request.VisitSlipCode.Trim(), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("The visit slip code does not match this guest record.");
 
-            const int requiredVisits = 3;
+            var requiredVisits = GuestService.RequiredVisitsForRegistration;
             var visitCount = guest.MVisits.Count;
             if (visitCount < requiredVisits)
                 throw new InvalidOperationException(
@@ -139,12 +161,15 @@ public class AuthService : IAuthService
         // Applicants sign in with email — store email as the account username.
         var username = string.IsNullOrWhiteSpace(request.Username) ? email.ToLowerInvariant() : request.Username.Trim();
 
-        if (await _db.UserAccounts.AnyAsync(x => x.Username == username, cancellationToken))
+        var emailKey = email.ToLowerInvariant();
+        if (await _db.UserAccounts.IgnoreQueryFilters().AnyAsync(x => x.Username.ToLower() == username.ToLower(), cancellationToken))
             throw new InvalidOperationException("An account with that email already exists.");
-        if (await _db.Profiles.AnyAsync(x => x.Email == email, cancellationToken))
+        if (await _db.Profiles.IgnoreQueryFilters().AnyAsync(
+                x => !x.IsDeleted && x.Email != null && x.Email.Trim().ToLower() == emailKey, cancellationToken))
             throw new InvalidOperationException("An account with that email already exists.");
 
         var now = DateTime.UtcNow;
+        await using var registration = await _db.Database.BeginTransactionAsync(cancellationToken);
         var companyId = request.CompanyId is > 0 ? request.CompanyId.Value : _tenant.TenantId ?? 0;
         if (companyId <= 0)
             throw new InvalidOperationException("Company context is required to register.");
@@ -185,9 +210,9 @@ public class AuthService : IAuthService
             Username = username,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
             IsActive = true,
-            AccountStatus = "ACTIVE",
+            AccountStatus = "UNVERIFIED",
             MustChangePassword = false,
-            EmailVerifiedAt = now,
+            EmailVerifiedAt = null,
             CreatedAt = now
         };
         _db.UserAccounts.Add(user);
@@ -202,12 +227,46 @@ public class AuthService : IAuthService
         });
         await _db.SaveChangesAsync(cancellationToken);
 
+        await registration.CommitAsync(cancellationToken);
+        var debugCode = await _verification.SendCodeAsync(user, email, cancellationToken);
+        return new RegisterResult(
+            true,
+            email,
+            "We sent a 6-digit verification code to your email.",
+            debugCode);
+    }
+
+    public async Task<AuthResponse> VerifyEmailAsync(VerifyEmailRequest request, CancellationToken cancellationToken)
+    {
+        await _verification.VerifyCodeAsync(request.Email, request.Code, cancellationToken);
+        var email = (request.Email ?? "").Trim().ToLowerInvariant();
+        var user = await _db.UserAccounts
+            .Include(x => x.Profile)
+            .FirstOrDefaultAsync(x => x.Profile.Email != null && x.Profile.Email.ToLower() == email, cancellationToken)
+            ?? throw new InvalidOperationException("We could not find an account for that email.");
         return await IssueAsync(user.UserAccountId, cancellationToken);
+    }
+
+    public async Task<RegisterResult> ResendVerificationAsync(string email, CancellationToken cancellationToken)
+    {
+        var needle = (email ?? "").Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(needle))
+            throw new InvalidOperationException("Enter the email address you registered with.");
+        var user = await _db.UserAccounts
+            .Include(x => x.Profile)
+            .FirstOrDefaultAsync(x => x.Profile.Email != null && x.Profile.Email.ToLower() == needle, cancellationToken)
+            ?? throw new InvalidOperationException("We could not find an account for that email.");
+        if (user.EmailVerifiedAt is not null && !string.Equals(user.AccountStatus, "UNVERIFIED", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("This email is already verified. Sign in.");
+        if (user.EmailVerificationExpiresAt is DateTime expires && expires > DateTime.UtcNow.AddMinutes(EmailVerificationService.CodeLifetimeMinutes - 1))
+            throw new InvalidOperationException("A code was just sent. Wait a minute before requesting another.");
+        var debugCode = await _verification.SendCodeAsync(user, user.Profile.Email ?? needle, cancellationToken);
+        return new RegisterResult(true, user.Profile.Email ?? needle, "Verification code sent. Check your email.", debugCode);
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
     {
-        var login = (request.Login ?? request.Email ?? request.Username ?? "").Trim();
+        var login = (request.Login ?? request.Email ?? "").Trim();
         if (string.IsNullOrWhiteSpace(login) || string.IsNullOrWhiteSpace(request.Password))
             throw new InvalidOperationException("Enter your email or membership number, and password.");
 
@@ -216,6 +275,8 @@ public class AuthService : IAuthService
         if (user is null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             throw new InvalidOperationException("Invalid email / membership number or password.");
 
+        if (string.Equals(user.AccountStatus, "UNVERIFIED", StringComparison.OrdinalIgnoreCase))
+            throw new EmailVerificationRequiredException(user.Profile.Email ?? login);
         if (user.AccountStatus == "PENDING")
             throw new InvalidOperationException("Verify your email using the link sent by the administrator, then choose a password.");
         if (user.AccountStatus is "SUSPENDED" or "BLOCKED" or "DEACTIVATED" || !user.IsActive)
@@ -232,34 +293,43 @@ public class AuthService : IAuthService
         var emailNeedle = needle.ToLowerInvariant();
 
         // 1) Email on profile
-        var byEmail = await _db.UserAccounts
+        var byEmail = await _db.UserAccounts.IgnoreQueryFilters()
             .Include(x => x.Profile)
             .Include(x => x.UserRoles).ThenInclude(x => x.Role)
-            .FirstOrDefaultAsync(
-                x => x.Profile.Email != null && x.Profile.Email.ToLower() == emailNeedle,
-                cancellationToken);
+            .Where(x =>
+                (x.Profile.Email != null && x.Profile.Email.Trim().ToLower() == emailNeedle)
+                || x.Username.ToLower() == emailNeedle)
+            .OrderByDescending(x => x.IsActive)
+            .ThenByDescending(x => x.UserAccountId)
+            .FirstOrDefaultAsync(cancellationToken);
         if (byEmail is not null) return byEmail;
 
         // 2) Membership number on club account (members / staff linked to a register)
-        var profileId = await _db.Accounts
+        var profileId = await _db.Accounts.IgnoreQueryFilters()
             .AsNoTracking()
             .Where(a => !a.IsDeleted && a.MembershipNo == needle)
             .Select(a => (long?)a.ProfileId)
             .FirstOrDefaultAsync(cancellationToken);
         if (profileId is long pid)
         {
-            var byMembership = await _db.UserAccounts
+            var byMembership = await _db.UserAccounts.IgnoreQueryFilters()
                 .Include(x => x.Profile)
                 .Include(x => x.UserRoles).ThenInclude(x => x.Role)
                 .FirstOrDefaultAsync(x => x.ProfileId == pid, cancellationToken);
             if (byMembership is not null) return byMembership;
         }
 
-        // 3) Legacy username (kept so older accounts still work until everyone uses email / membership no.)
-        return await _db.UserAccounts
-            .Include(x => x.Profile)
-            .Include(x => x.UserRoles).ThenInclude(x => x.Role)
-            .FirstOrDefaultAsync(x => x.Username == needle, cancellationToken);
+        return null;
+    }
+
+    private static void EnsurePasswordStrength(string password)
+    {
+        var strong = password.Length >= 8
+            && password.Any(char.IsUpper)
+            && password.Any(char.IsDigit)
+            && password.Any(ch => !char.IsLetterOrDigit(ch));
+        if (!strong)
+            throw new InvalidOperationException("Password must be at least 8 characters and include an uppercase letter, a number, and a special character.");
     }
 
     public async Task<AuthUserDto?> MeAsync(long userAccountId, CancellationToken cancellationToken)
@@ -278,7 +348,7 @@ public class AuthService : IAuthService
         if (!email.Contains('@'))
             throw new InvalidOperationException("Enter a valid email address.");
 
-        var user = await _db.UserAccounts
+        var user = await _db.UserAccounts.IgnoreQueryFilters()
             .Include(x => x.Profile)
             .Include(x => x.UserRoles).ThenInclude(x => x.Role)
             .FirstOrDefaultAsync(x => x.UserAccountId == userAccountId, cancellationToken);
@@ -307,7 +377,7 @@ public class AuthService : IAuthService
         if (next.Length < 8)
             throw new InvalidOperationException("New password must be at least 8 characters.");
 
-        var user = await _db.UserAccounts.FirstOrDefaultAsync(x => x.UserAccountId == userAccountId, cancellationToken)
+        var user = await _db.UserAccounts.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.UserAccountId == userAccountId, cancellationToken)
             ?? throw new InvalidOperationException("Account was not found.");
         if (!BCrypt.Net.BCrypt.Verify(current, user.PasswordHash))
             throw new InvalidOperationException("Current password is incorrect.");
@@ -320,6 +390,9 @@ public class AuthService : IAuthService
 
     public Task SetPasswordByTokenAsync(string token, string password, CancellationToken cancellationToken) =>
         _users.SetPasswordByTokenAsync(token, password, cancellationToken);
+
+    public Task RequestPasswordResetAsync(string email, CancellationToken cancellationToken) =>
+        _users.RequestPasswordResetAsync(email, cancellationToken);
 
     private async Task<AuthResponse> IssueAsync(long userAccountId, CancellationToken cancellationToken)
     {
@@ -352,7 +425,7 @@ public class AuthService : IAuthService
     }
 
     private Task<UserAccount?> LoadUserAsync(long userAccountId, CancellationToken cancellationToken) =>
-        _db.UserAccounts
+        _db.UserAccounts.IgnoreQueryFilters()
             .AsNoTracking()
             .Include(x => x.Profile)
             .Include(x => x.UserRoles).ThenInclude(x => x.Role)
@@ -394,4 +467,15 @@ public class AuthService : IAuthService
             tenant?.Name ?? "Club",
             user.Profile.PhotoUrl);
     }
+}
+
+public sealed class EmailVerificationRequiredException : InvalidOperationException
+{
+    public EmailVerificationRequiredException(string email)
+        : base("Verify your email with the 6-digit code before signing in.")
+    {
+        Email = email;
+    }
+
+    public string Email { get; }
 }

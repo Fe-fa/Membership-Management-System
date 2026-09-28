@@ -1,9 +1,9 @@
 ﻿import type { ApplicationDraft, FileRef } from "./schema";
 import { emptyDraft, normalizeDraft } from "./schema";
 import { kenyaTodayISO } from "@/utils/kenyaDate";
-import { authHeaders, readUser } from "@/lib/auth";
+import { authHeaders, isSuperAdmin, readUser } from "@/lib/auth";
 
-import { applyCompanyId, applyTenantCode } from "@/services/applyCompany";
+import { applyCompanyId } from "@/services/applyCompany";
 import { API_BASE, TENANT_CODE } from "@/config/env";
 export { API_BASE };
 
@@ -153,7 +153,11 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
   const auth = authHeaders();
   const authorization = auth["Authorization"];
   if (authorization) headers.set("Authorization", authorization);
-  if (!headers.has("X-Tenant-Code")) headers.set("X-Tenant-Code", applyTenantCode() || TENANT_CODE);
+  if (!headers.has("X-Tenant-Code") && auth["X-Tenant-Code"]) {
+    headers.set("X-Tenant-Code", auth["X-Tenant-Code"]);
+  } else if (!headers.has("X-Tenant-Code") && !isSuperAdmin(readUser())) {
+    headers.set("X-Tenant-Code", TENANT_CODE);
+  }
 
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,

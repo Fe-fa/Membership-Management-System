@@ -40,6 +40,12 @@ namespace ClubManagement.Entities.Identity
         [Column("email_verified_at")]
         public DateTime? EmailVerifiedAt { get; set; }
 
+        [Column("email_verification_code_hash")]
+        public string? EmailVerificationCodeHash { get; set; }
+
+        [Column("email_verification_expires_at")]
+        public DateTime? EmailVerificationExpiresAt { get; set; }
+
         [Column("password_reset_token")]
         public string? PasswordResetToken { get; set; }
 

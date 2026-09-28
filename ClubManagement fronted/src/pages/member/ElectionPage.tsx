@@ -191,8 +191,6 @@ const MEMBER_ELECTION_CYCLES = [
     icon: ScrollText,
   },
 ];
-
-/** Standalone Election page — AGM notices / member ballot, plus Committee For/Against for sitting members. */
 export function ElectionPage() {
   return <MemberElectionCards />;
 }

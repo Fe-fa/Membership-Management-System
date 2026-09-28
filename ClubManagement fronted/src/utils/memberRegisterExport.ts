@@ -3,16 +3,17 @@ import {
   downloadExcelCsv,
   printHtmlReport,
   rowsToTableHtml,
+  selectExportColumns,
   type FinanceExportColumn,
 } from "@/utils/financeExport";
 
 export const MEMBER_EXPORT_COLS: FinanceExportColumn<MemberRow>[] = [
-  { header: "MembershipNo", value: (row) => row.membershipNo },
-  { header: "Member", value: (row) => row.fullName },
-  { header: "Class", value: (row) => row.membershipType },
-  { header: "Status", value: (row) => row.status },
-  { header: "Joined", value: (row) => formatMembershipDate(row.joinedDate) },
-  { header: "Arrears", value: (row) => row.outstandingArrears },
+  { id: "membershipNo", header: "MembershipNo", value: (row) => row.membershipNo },
+  { id: "member", header: "Member", value: (row) => row.fullName },
+  { id: "membershipType", header: "Class", value: (row) => row.membershipType },
+  { id: "status", header: "Status", value: (row) => row.status },
+  { id: "joined", header: "Joined", value: (row) => formatMembershipDate(row.joinedDate) },
+  { id: "arrears", header: "Arrears", value: (row) => row.outstandingArrears },
 ];
 
 export type MemberImportRow = {
@@ -45,16 +46,16 @@ const IMPORT_TEMPLATE_COLS: FinanceExportColumn<MemberImportRow>[] = [
   { header: "JoinedDate", value: (row) => row.joinedDate },
 ];
 
-export function downloadMembersExcel(filename: string, rows: MemberRow[]) {
-  downloadExcelCsv(filename, MEMBER_EXPORT_COLS, rows);
+export function downloadMembersExcel(filename: string, rows: MemberRow[], columns?: string[] | null) {
+  downloadExcelCsv(filename, selectExportColumns(MEMBER_EXPORT_COLS, columns), rows);
 }
 
 export function downloadMemberImportTemplate() {
   downloadExcelCsv("member-register-template.csv", IMPORT_TEMPLATE_COLS, [IMPORT_EXAMPLE]);
 }
 
-export function printMembers(title: string, rows: MemberRow[]) {
-  return printHtmlReport(title, rowsToTableHtml(MEMBER_EXPORT_COLS, rows), "Member register");
+export function printMembers(title: string, rows: MemberRow[], columns?: string[] | null) {
+  return printHtmlReport(title, rowsToTableHtml(selectExportColumns(MEMBER_EXPORT_COLS, columns), rows), "Member register");
 }
 
 export async function readMemberImportFile(file: File): Promise<MemberImportRow[]> {

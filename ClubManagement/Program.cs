@@ -50,6 +50,8 @@ builder.Services.AddSingleton<IEmailDispatchQueue, EmailDispatchQueue>();
 builder.Services.AddHostedService<EmailDispatchWorker>();
 builder.Services.AddHostedService<SubscriptionLifecycleWorker>();
 builder.Services.AddScoped<IEmailSender, EmailSender>();
+builder.Services.AddScoped<IEmailVerificationService, EmailVerificationService>();
+builder.Services.AddScoped<ClubManagement.Services.Engagement.IClubEventService, ClubManagement.Services.Engagement.ClubEventService>();
 builder.Services.AddScoped<IApplicationDecisionNotifier, ApplicationDecisionNotifier>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
@@ -92,6 +94,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             NameClaimType = System.Security.Claims.ClaimTypes.Name
         };
     });
+builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, ClubManagement.Auth.SuperAdminAuthorizationHandler>();
 builder.Services.AddAuthorization();
 
 builder.Services.AddCors(options =>
@@ -143,6 +146,8 @@ using (var scope = app.Services.CreateScope())
     try
     {
         await userManagement.EnsureSchemaAsync(CancellationToken.None);
+        var emailVerification = scope.ServiceProvider.GetRequiredService<IEmailVerificationService>();
+        await emailVerification.EnsureSchemaAsync(CancellationToken.None);
         var guestService = scope.ServiceProvider.GetRequiredService<IGuestService>();
         await guestService.EnsureSchemaAsync(CancellationToken.None);
         await EnsureTenantSchemaAsync(db);

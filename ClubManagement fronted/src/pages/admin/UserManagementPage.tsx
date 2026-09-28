@@ -176,7 +176,9 @@ export function UserManagementPage() {
                   <td className="px-4 py-3 text-muted-foreground">
                     {row.companyId
                       ? row.companyName || row.companyCode || `Company ${row.companyId}`
-                      : "None"}
+                      : row.roles.some((code) => code.toUpperCase() === "SUPER_ADMIN")
+                        ? "Oversees all clubs"
+                        : "None"}
                   </td>
                   <td className="px-4 py-3">
                     <span
@@ -445,7 +447,7 @@ function CreateUserDialog({
                 </Field>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Admin does not belong to a company.
+                  Super Admin and Admin do not belong to a company. They oversee the whole system.
                 </p>
               )}
               {needsMembershipNo ? (

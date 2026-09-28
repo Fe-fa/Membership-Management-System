@@ -16,7 +16,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { isAuthenticated, isClubMember, readPortalMode, readUser, subscribeAuthChanged, canVisitPath, homePathForUser, type AuthUser } from "@/lib/auth";
 
-const PUBLIC_PATHS = new Set(["/", "/login", "/register", "/set-password"]);
+const PUBLIC_PATHS = new Set(["/", "/login", "/register", "/set-password", "/verify-email", "/forgot-password"]);
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.has(pathname) || pathname.startsWith("/apply/");
@@ -185,6 +185,8 @@ function RootComponent() {
     pathname === "/register" ||
     pathname.startsWith("/apply/") ||
     pathname === "/set-password" ||
+    pathname === "/verify-email" ||
+    pathname === "/forgot-password" ||
     (pathname === "/" && !authed);
 
   const portalHome =

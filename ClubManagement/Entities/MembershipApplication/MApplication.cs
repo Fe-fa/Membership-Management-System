@@ -72,6 +72,16 @@ namespace ClubManagement.Entities
         [Column("stage_a_authorized_by_user_id")]
         public long? StageAAuthorizedByUserId { get; set; }
 
+        /// <summary>Manager held the application at Stage A without rejecting or authorizing interview.</summary>
+        [Column("manager_stage_pending")]
+        public bool ManagerStagePending { get; set; }
+
+        [Column("manager_stage_pending_note")]
+        public string? ManagerStagePendingNote { get; set; }
+
+        [Column("manager_stage_pending_at")]
+        public DateTime? ManagerStagePendingAt { get; set; }
+
         [Column("current_handler_user_id")]
         public long? CurrentHandlerUserId { get; set; }
 

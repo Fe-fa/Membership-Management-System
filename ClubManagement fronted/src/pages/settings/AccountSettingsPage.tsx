@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { PasswordField } from "@/components/auth/PasswordField";
 import { PageFrame, PageHeader } from "@/components/layout/PageFrame";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -95,11 +96,11 @@ export function AccountSettingsPage() {
         <p className="text-sm font-medium">Password / security</p>
         <label className="grid gap-1 text-sm">
           <Label>Current password</Label>
-          <Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
+          <PasswordField tone="field" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required autoComplete="current-password" />
         </label>
         <label className="grid gap-1 text-sm">
           <Label>New password</Label>
-          <Input type="password" minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+          <PasswordField tone="field" minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required autoComplete="new-password" />
         </label>
         <Button type="submit" disabled={password.isPending || newPassword.length < 8}>
           {password.isPending ? <Loader2 className="size-4 animate-spin" /> : null}

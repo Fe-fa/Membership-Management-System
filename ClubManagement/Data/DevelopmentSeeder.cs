@@ -12,6 +12,7 @@ public static class DevelopmentSeeder
 {
     public static async Task SeedAsync(ApplicationModuleDbContext db)
     {
+        await EnsureRole(db, "SUPER_ADMIN", "Super Admin", 1);
         await EnsureRole(db, "ADMIN", "Admin", 5);
         await EnsureRole(db, "APPLICANT", "Applicant", 10);
         await EnsureRole(db, "MEMBER", "Member", 20);
@@ -40,6 +41,9 @@ public static class DevelopmentSeeder
         await EnsureLookup(db.MemberStatuses, "PAID", "Paid", true, false);
         await EnsureLookup(db.MemberStatuses, "DUE", "Due", true, false);
         await EnsureLookup(db.MemberStatuses, "UNPAID", "Unpaid", true, false);
+        await EnsureLookup(db.MemberStatuses, "CANCELLED", "Cancelled", false, true);
+        await EnsureLookup(db.MemberStatuses, "VOID", "Void", false, true);
+        await EnsureLookup(db.MemberStatuses, "PENDING_PAYMENT", "Pending payment", false, false);
 
         await EnsurePayment(db, db.PaymentMethods, "CASH", "Cash");
         await EnsurePayment(db, db.PaymentMethods, "CHEQUE", "Cheque");
@@ -129,7 +133,72 @@ public static class DevelopmentSeeder
             });
         }
 
+        await EnsureSuperAdminAccountAsync(db);
         await db.SaveChangesAsync();
+    }
+
+    public const string SuperAdminEmail = "kipyegon14056@student.mmarau.ac.ke";
+    public const string SuperAdminPassword = "Super@2026";
+
+    private static async Task EnsureSuperAdminAccountAsync(ApplicationModuleDbContext db)
+    {
+        var email = SuperAdminEmail.ToLowerInvariant();
+        var role = await db.SystemRoles.FirstAsync(x => x.Code == "SUPER_ADMIN");
+        var user = await db.UserAccounts.IgnoreQueryFilters()
+            .Include(x => x.Profile)
+            .Include(x => x.UserRoles)
+            .FirstOrDefaultAsync(x =>
+                x.Username.ToLower() == email
+                || (x.Profile.Email != null && x.Profile.Email.ToLower() == email));
+
+        if (user is null)
+        {
+            var profile = new MProfile
+            {
+                TenantId = -1,
+                FirstName = "Super",
+                LastName = "Admin",
+                Email = SuperAdminEmail,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            db.Profiles.Add(profile);
+            await db.SaveChangesAsync();
+
+            user = new UserAccount
+            {
+                TenantId = -1,
+                ProfileId = profile.ProfileId,
+                Username = SuperAdminEmail,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(SuperAdminPassword),
+                IsActive = true,
+                AccountStatus = "ACTIVE",
+                MustChangePassword = false,
+                EmailVerifiedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow
+            };
+            db.UserAccounts.Add(user);
+            await db.SaveChangesAsync();
+        }
+
+        user.IsActive = true;
+        user.AccountStatus = "ACTIVE";
+        user.MustChangePassword = false;
+        user.EmailVerifiedAt ??= DateTime.UtcNow;
+        if (!BCrypt.Net.BCrypt.Verify(SuperAdminPassword, user.PasswordHash)
+            && user.LastLoginAt is null)
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(SuperAdminPassword);
+
+        if (!user.UserRoles.Any(x => x.RoleId == role.SystemRoleId))
+        {
+            db.UserRoles.Add(new UserRole
+            {
+                UserAccountId = user.UserAccountId,
+                RoleId = role.SystemRoleId,
+                AssignedDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                CreatedAt = DateTime.UtcNow
+            });
+        }
     }
 
     private static async Task EnsureRole(ApplicationModuleDbContext db, string code, string name, int sort)

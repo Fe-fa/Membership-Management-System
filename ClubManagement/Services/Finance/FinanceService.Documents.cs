@@ -2,7 +2,9 @@
 using System.Text.Json.Serialization;
 using ClubManagement.DTOs.Common;
 using ClubManagement.Entities;
+using ClubManagement.Entities.Facilities;
 using ClubManagement.Entities.Finance;
+using ClubManagement.Entities.Identity;
 using ClubManagement.Entities.Lookups;
 using ClubManagement.Entities.MembershipAccount;
 using ClubManagement.Entities.Settings;
@@ -830,6 +832,10 @@ public partial class FinanceService
         var paidStatus = await _db.MemberStatuses.FirstOrDefaultAsync(s => s.Code == "PAID", cancellationToken);
 
         var paidPool = txs.Where(t => CountsTowardDues(t.PaymentStatus?.Code)).Sum(t => t.Amount);
+        var awaitingRefund = await _db.InvoiceCreditNotes.AsNoTracking()
+            .Where(c => c.AccountId == accountId)
+            .SumAsync(c => (decimal?)c.AwaitingRefundAmount, cancellationToken) ?? 0m;
+        paidPool = Math.Max(0, paidPool - awaitingRefund);
         ApplyAnnualPaymentWaterfall(subs, paidPool);
         foreach (var sub in subs)
         {
@@ -1397,12 +1403,14 @@ public partial class FinanceService
         CancellationToken cancellationToken)
     {
         var y = year ?? DateTime.UtcNow.Year;
-        var kind = (audience ?? "").Trim().ToUpperInvariant();
-        var rows = new List<StatementPartyRowDto>();
-        if (kind is not "APPLICANT")
-            rows.AddRange(await MemberStatementPartiesAsync(search, membershipType, y, cancellationToken));
-        if (kind is not "MEMBER")
-            rows.AddRange(await ApplicantStatementPartiesAsync(search, membershipType, cancellationToken));
+        var kind = (audience ?? "MEMBER").Trim().ToUpperInvariant();
+        var rows = kind switch
+        {
+            "ACCOMMODATION" => await ChargeStatementPartiesAsync("ACCOMMODATION", search, y, cancellationToken),
+            "CORKAGE" => await ChargeStatementPartiesAsync("CORKAGE", search, y, cancellationToken),
+            "CUSTOM" => await ChargeStatementPartiesAsync("CUSTOM", search, y, cancellationToken),
+            _ => await MemberStatementPartiesAsync(search, membershipType, y, cancellationToken)
+        };
 
         var ordered = rows
             .OrderBy(r => r.PartyName)
@@ -1462,6 +1470,112 @@ public partial class FinanceService
         _db.BillingDocuments.RemoveRange(docs);
         await _db.SaveChangesAsync(cancellationToken);
         return docs.Count;
+    }
+
+    private async Task<List<StatementPartyRowDto>> ChargeStatementPartiesAsync(
+        string feeType,
+        string? search,
+        int year,
+        CancellationToken cancellationToken)
+    {
+        var totals = new Dictionary<long, (decimal Paid, decimal Balance, string Name, string No, string? Email, string? Type)>();
+
+        async Task Touch(long? accountId, decimal amount, decimal paid, string fallbackName)
+        {
+            if (accountId is not long id || id <= 0) return;
+            totals.TryGetValue(id, out var current);
+            totals[id] = (current.Paid + paid, current.Balance + Math.Max(0, amount - paid), current.Name, current.No, current.Email, current.Type);
+            if (string.IsNullOrWhiteSpace(totals[id].Name))
+            {
+                var row = totals[id];
+                totals[id] = (row.Paid, row.Balance, fallbackName, row.No, row.Email, row.Type);
+            }
+        }
+
+        var docs = await _db.BillingDocuments.AsNoTracking()
+            .Where(d => d.Kind == "INVOICE" && d.FeeType == feeType && d.AccountId != null
+                && (d.Year == null || d.Year == year)
+                && (d.Status == "PENDING_GM" || d.Status == "APPROVED" || d.Status == "PUBLISHED"))
+            .ToListAsync(cancellationToken);
+        foreach (var doc in docs)
+            await Touch(doc.AccountId, doc.Amount, doc.AmountPaid, doc.PartyName);
+        var invoicedAccounts = docs.Where(d => d.AccountId is long).Select(d => d.AccountId!.Value).ToHashSet();
+
+        var yearStart = new DateOnly(year, 1, 1);
+        var yearEnd = new DateOnly(year, 12, 31);
+        var createdFrom = new DateTime(year, 1, 1);
+        var createdTo = new DateTime(year + 1, 1, 1);
+        if (feeType == "ACCOMMODATION")
+        {
+            var bookings = await _db.NmAccommodationBookings.AsNoTracking()
+                .Where(b => b.CheckInDate <= yearEnd && b.CheckOutDate >= yearStart)
+                .ToListAsync(cancellationToken);
+            foreach (var booking in bookings)
+            {
+                if (booking.AccountId is long booked && invoicedAccounts.Contains(booked)) continue;
+                var paid = booking.IsPaidInAdvance ? booking.TotalAmount : 0m;
+                await Touch(booking.AccountId, booking.TotalAmount, paid, booking.GuestName);
+            }
+        }
+        else if (feeType == "CORKAGE")
+        {
+            var charges = await _db.NmCorkageCharges.AsNoTracking()
+                .Where(c => c.CreatedAt >= createdFrom && c.CreatedAt < createdTo)
+                .ToListAsync(cancellationToken);
+            foreach (var charge in charges)
+            {
+                if (charge.AccountId is long charged && invoicedAccounts.Contains(charged)) continue;
+                var paid = charge.PaidAt is null ? 0m : charge.FeeAmount;
+                await Touch(charge.AccountId, charge.FeeAmount, paid, charge.PayerName);
+            }
+        }
+        else if (feeType == "CUSTOM")
+        {
+            var charges = await _db.NmCustomCharges.AsNoTracking()
+                .Where(c => c.CreatedAt >= createdFrom && c.CreatedAt < createdTo)
+                .ToListAsync(cancellationToken);
+            foreach (var charge in charges)
+            {
+                if (charge.AccountId is long charged && invoicedAccounts.Contains(charged)) continue;
+                var paid = charge.PaidAt is null ? 0m : charge.TotalAmount;
+                await Touch(charge.AccountId, charge.TotalAmount, paid, charge.PayerName);
+            }
+        }
+
+        if (totals.Count == 0) return [];
+        var ids = totals.Keys.ToList();
+        var accounts = await _db.Accounts.AsNoTracking()
+            .Include(a => a.Profile)
+            .Include(a => a.MembershipType)
+            .Where(a => ids.Contains(a.AccountId) && !a.IsDeleted)
+            .ToListAsync(cancellationToken);
+
+        var rows = new List<StatementPartyRowDto>();
+        foreach (var account in accounts)
+        {
+            if (!totals.TryGetValue(account.AccountId, out var money)) continue;
+            var name = $"{account.Profile?.FirstName} {account.Profile?.LastName}".Trim();
+            if (string.IsNullOrWhiteSpace(name)) name = money.Name;
+            if (string.IsNullOrWhiteSpace(name)) name = account.MembershipNo ?? "Member";
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var hay = $"{name} {account.MembershipNo} {account.Profile?.Email}";
+                if (hay.IndexOf(search.Trim(), StringComparison.OrdinalIgnoreCase) < 0) continue;
+            }
+            rows.Add(new StatementPartyRowDto(
+                $"{feeType}-{account.AccountId}",
+                feeType,
+                account.AccountId,
+                account.ApplicationId,
+                account.ProfileId,
+                account.MembershipNo ?? "",
+                name,
+                account.MembershipType?.Name,
+                account.Profile?.Email,
+                money.Paid,
+                money.Balance));
+        }
+        return rows;
     }
 
     private async Task<List<StatementPartyRowDto>> MemberStatementPartiesAsync(
@@ -1723,15 +1837,17 @@ public partial class FinanceService
         ClubManagement.Entities.Subscriptions.Subscription? sub,
         CancellationToken cancellationToken)
     {
-        var paid = sub?.AmountPaid ?? 0;
-        var yearDue = sub?.AmountDue ?? invoice.Amount;
-        var yearBalance = Math.Max(0, yearDue - paid);
         var priorSubs = await _db.Subscriptions.AsNoTracking()
             .Where(s => s.AccountId == account.AccountId && s.SubscriptionYear < invoice.Year && !s.WaivedFlag)
             .ToListAsync(cancellationToken);
         var broughtForward = priorSubs.Sum(SubscriptionUnpaid);
-        var due = yearDue + broughtForward;
-        var balance = yearBalance + broughtForward;
+        // Invoice.Amount is the bill as issued (year fee + brought forward). Credit notes
+        // reduce the subscription balance afterwards, so the document must not read AmountDue.
+        var yearCharges = invoice.Amount > broughtForward + 0.009m
+            ? decimal.Round(invoice.Amount - broughtForward, 2, MidpointRounding.AwayFromZero)
+            : broughtForward <= 0.009m
+                ? invoice.Amount
+                : Math.Max(0, sub?.AmountDue ?? 0);
         var category = account.MembershipType?.Name;
         var lines = new List<InvoiceLineDto>();
         if (broughtForward > 0.01m)
@@ -1746,12 +1862,12 @@ public partial class FinanceService
         lines.Add(new(
             string.IsNullOrWhiteSpace(category) ? "Annual subscription" : $"{category} Membership",
             invoice.Year.ToString(),
-            yearDue,
-            paid,
-            yearBalance));
-        var displayDue = due;
-        var displayPaid = paid;
-        var displayBalance = balance;
+            yearCharges,
+            0,
+            yearCharges));
+        var displayDue = decimal.Round(broughtForward + yearCharges, 2, MidpointRounding.AwayFromZero);
+        var displayPaid = 0m;
+        var displayBalance = displayDue;
         var memberName = $"{account.Profile?.FirstName} {account.Profile?.LastName}".Trim();
         if (string.IsNullOrWhiteSpace(memberName))
             memberName = account.MembershipNo ?? "Member";
@@ -2142,5 +2258,392 @@ public partial class FinanceService
             .Select(s => s.SettingValue)
             .FirstOrDefaultAsync(cancellationToken);
         return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+    }
+
+    public async Task<PagedResult<IssuedInvoiceRowDto>> ListIssuedInvoicesAsync(
+        SubscriptionListFilter filter,
+        PagedRequest paging,
+        CancellationToken cancellationToken)
+    {
+        var query = IssuedInvoiceQuery(filter).OrderByDescending(i => i.IssuedAt).ThenByDescending(i => i.InvoiceId);
+        var page = await query.ToPagedResultAsync(paging, cancellationToken);
+        var credits = await CreditTotalsAsync(page.Items.Select(i => i.InvoiceId).ToList(), cancellationToken);
+        var rows = page.Items.Select(invoice =>
+        {
+            var credited = credits.GetValueOrDefault(invoice.InvoiceId);
+            return new IssuedInvoiceRowDto(
+                invoice.InvoiceId,
+                invoice.InvoiceNo,
+                invoice.AccountId,
+                MemberName(invoice.Account),
+                invoice.Account.MembershipNo,
+                invoice.Account.MembershipType?.Name,
+                invoice.Year,
+                invoice.DueDate,
+                invoice.Amount,
+                credited,
+                Math.Max(0, invoice.Amount - credited),
+                invoice.Status,
+                invoice.IssuedAt);
+        }).ToList();
+        return Paging.Create(rows, paging, page.TotalCount);
+    }
+
+    public async Task<PagedResult<InvoiceCreditNoteRowDto>> ListInvoiceCreditNotesAsync(
+        SubscriptionListFilter filter,
+        PagedRequest paging,
+        CancellationToken cancellationToken)
+    {
+        var year = filter.Year;
+        var search = filter.Search?.Trim();
+        var type = filter.MembershipType?.Trim();
+        var query = _db.InvoiceCreditNotes.AsNoTracking()
+            .Include(c => c.Invoice)
+                .ThenInclude(i => i.Account)
+                    .ThenInclude(a => a.Profile)
+            .Include(c => c.Invoice)
+                .ThenInclude(i => i.Account)
+                    .ThenInclude(a => a.MembershipType)
+            .AsQueryable();
+        if (year is int y) query = query.Where(c => c.Invoice.Year == y);
+        if (!string.IsNullOrWhiteSpace(type))
+            query = query.Where(c => c.Invoice.Account.MembershipType.Code == type || c.Invoice.Account.MembershipType.Name == type);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.ToLower();
+            query = query.Where(c =>
+                c.CreditNoteNo.ToLower().Contains(s)
+                || c.Invoice.InvoiceNo.ToLower().Contains(s)
+                || (c.Invoice.Account.MembershipNo != null && c.Invoice.Account.MembershipNo.ToLower().Contains(s))
+                || ((c.Invoice.Account.Profile.FirstName + " " + c.Invoice.Account.Profile.LastName).ToLower().Contains(s)));
+        }
+        var page = await query.OrderByDescending(c => c.IssuedAt).ThenByDescending(c => c.CreditNoteId)
+            .ToPagedResultAsync(paging, cancellationToken);
+        return Paging.Create(page.Items.Select(MapCreditNote).ToList(), paging, page.TotalCount);
+    }
+
+    public Task<IssuedInvoiceDetailDto> GetIssuedInvoiceAsync(long invoiceId, CancellationToken cancellationToken) =>
+        LoadIssuedInvoiceDetailAsync(invoiceId, cancellationToken);
+
+    public async Task<IssuedInvoiceDetailDto> UpdateIssuedInvoiceAsync(
+        long invoiceId,
+        UpdateIssuedInvoiceRequest request,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        if (request.Amount < 0)
+            throw new InvalidOperationException("Invoice amount cannot be negative.");
+        var invoice = await TrackedInvoiceAsync(invoiceId, cancellationToken);
+        var credited = await CreditedAmountAsync(invoice.InvoiceId, cancellationToken);
+        if (request.Amount + 0.009m < credited)
+            throw new InvalidOperationException("Invoice amount cannot be less than the credit notes already issued.");
+        var delta = request.Amount - invoice.Amount;
+        invoice.Amount = decimal.Round(request.Amount, 2, MidpointRounding.AwayFromZero);
+        invoice.DueDate = request.DueDate;
+        if (invoice.Subscription is not null)
+        {
+            invoice.Subscription.AmountDue = Math.Max(0, invoice.Subscription.AmountDue + delta);
+            invoice.Subscription.DueDate = request.DueDate;
+            invoice.Subscription.UpdatedByUserId = actorUserId;
+        }
+        await _db.SaveChangesAsync(cancellationToken);
+        await ReconcileAccountDuesAsync(invoice.AccountId, cancellationToken);
+        await ApplyCreditStatusAsync(invoice, cancellationToken);
+        return await LoadIssuedInvoiceDetailAsync(invoiceId, cancellationToken);
+    }
+
+    public async Task<IssuedInvoiceDetailDto> IssueInvoiceCreditNoteAsync(
+        long invoiceId,
+        IssueInvoiceCreditNoteRequest request,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            throw new InvalidOperationException("A reason is required to issue a credit note.");
+        if (request.Amount <= 0)
+            throw new InvalidOperationException("Credit note amount must be greater than zero.");
+        var invoice = await TrackedInvoiceAsync(invoiceId, cancellationToken);
+        var credited = await CreditedAmountAsync(invoice.InvoiceId, cancellationToken);
+        var remaining = Math.Max(0, invoice.Amount - credited);
+        var amount = decimal.Round(request.Amount, 2, MidpointRounding.AwayFromZero);
+        if (amount > remaining + 0.009m)
+            throw new InvalidOperationException($"Credit note cannot exceed the open invoice balance of {remaining:0.00}.");
+
+        var paidOnYear = Math.Max(0, invoice.Subscription?.AmountPaid ?? 0);
+        var awaitingRefund = Math.Min(amount, paidOnYear);
+        var note = new InvoiceCreditNote
+        {
+            CreditNoteNo = $"TMP-{Guid.NewGuid():N}",
+            InvoiceId = invoice.InvoiceId,
+            AccountId = invoice.AccountId,
+            Amount = amount,
+            AwaitingRefundAmount = decimal.Round(awaitingRefund, 2, MidpointRounding.AwayFromZero),
+            Reason = request.Reason.Trim(),
+            Status = "ISSUED",
+            IssuedAt = DateTime.UtcNow,
+            CreatedByUserId = actorUserId
+        };
+        _db.InvoiceCreditNotes.Add(note);
+        if (invoice.Subscription is not null)
+        {
+            invoice.Subscription.AmountDue = Math.Max(0, invoice.Subscription.AmountDue - amount);
+            invoice.Subscription.UpdatedByUserId = actorUserId;
+        }
+        await _db.SaveChangesAsync(cancellationToken);
+        note.CreditNoteNo = $"CN-{invoice.Year}-{note.CreditNoteId:D6}";
+        await _db.SaveChangesAsync(cancellationToken);
+        await ReconcileAccountDuesAsync(invoice.AccountId, cancellationToken);
+        await ApplyCreditStatusAsync(invoice, cancellationToken);
+        var creditedNow = await CreditedAmountAsync(invoice.InvoiceId, cancellationToken);
+        if (creditedNow >= invoice.Amount - 0.01m)
+            await ApplyInvoiceReversalEffectsAsync(invoice, note, paidOnYear <= 0.01m, actorUserId, cancellationToken);
+        return await LoadIssuedInvoiceDetailAsync(invoiceId, cancellationToken);
+    }
+
+    /// <summary>
+    /// A fully reversed invoice drops the access that issuing it granted.
+    /// Unpaid joiner invoices become Cancelled or Void. Unpaid renewals become Pending payment.
+    /// Paid reversals leave a credit awaiting refund and still suspend access.
+    /// </summary>
+    private async Task ApplyInvoiceReversalEffectsAsync(
+        MembershipInvoice invoice,
+        InvoiceCreditNote note,
+        bool unpaid,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var account = await _db.Accounts
+            .Include(a => a.CurrentMemberStatus)
+            .FirstOrDefaultAsync(a => a.AccountId == invoice.AccountId && !a.IsDeleted, cancellationToken);
+        if (account is null) return;
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var now = DateTime.UtcNow;
+        string? statusCode = null;
+        if (unpaid)
+        {
+            var firstYear = await _db.Subscriptions.AsNoTracking()
+                .Where(s => s.AccountId == account.AccountId)
+                .MinAsync(s => (int?)s.SubscriptionYear, cancellationToken);
+            var joiner = firstYear is null || invoice.Year <= firstYear.Value;
+            var current = (account.CurrentMemberStatus?.Code ?? "").Trim().ToUpperInvariant();
+            statusCode = joiner
+                ? current is "TEMPORARY" or "POSTED" or "INACTIVE" or "DUE" or "UNPAID" ? "VOID" : "CANCELLED"
+                : "PENDING_PAYMENT";
+            var next = await EnsureMemberStatusAsync(
+                statusCode,
+                statusCode switch
+                {
+                    "VOID" => "Void",
+                    "CANCELLED" => "Cancelled",
+                    _ => "Pending payment"
+                },
+                activeStatus: false,
+                terminal: statusCode is "VOID" or "CANCELLED",
+                cancellationToken);
+            if (account.CurrentMemberStatusId != next.MemberStatusId)
+            {
+                var fromId = account.CurrentMemberStatusId;
+                account.CurrentMemberStatusId = next.MemberStatusId;
+                account.CurrentMemberStatus = next;
+                if (next.IsTerminal)
+                    account.EndDate ??= today;
+                _db.MemberStatusHistories.Add(new MemberStatusHistory
+                {
+                    AccountId = account.AccountId,
+                    FromStatusId = fromId,
+                    ToStatusId = next.MemberStatusId,
+                    EffectiveDate = today,
+                    Reason = $"Invoice {invoice.InvoiceNo} reversed by credit note {note.CreditNoteNo} before payment.",
+                    ReferenceType = "INVOICE",
+                    ReferenceId = invoice.InvoiceId,
+                    ChangedByUserId = actorUserId,
+                    CreatedAt = now,
+                    CreatedByUserId = actorUserId
+                });
+            }
+            if (invoice.Subscription is not null)
+                invoice.Subscription.SubscriptionStatusId = next.MemberStatusId;
+        }
+
+        account.IsActive = false;
+        account.UpdatedByUserId = actorUserId;
+
+        var staff = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "SUPER_ADMIN", "ADMIN", "GENERAL_MANAGER", "TREASURER", "CHAIRMAN", "RECEPTIONIST", "COMMITTEE_MEMBER"
+        };
+        var logins = await _db.UserAccounts
+            .Include(u => u.UserRoles)
+                .ThenInclude(r => r.Role)
+            .Where(u => u.ProfileId == account.ProfileId && u.IsActive)
+            .ToListAsync(cancellationToken);
+        foreach (var login in logins)
+        {
+            if (login.UserRoles.Any(r => r.Role != null && staff.Contains(r.Role.Code))) continue;
+            login.IsActive = false;
+            login.AccountStatus = "SUSPENDED";
+            login.UpdatedByUserId = actorUserId;
+        }
+
+        var roomBookings = await _db.AccommodationBookings
+            .Where(b => b.AccountId == account.AccountId && b.CheckInDate >= today && b.Status != "CANCELLED")
+            .ToListAsync(cancellationToken);
+        foreach (var booking in roomBookings)
+        {
+            booking.Status = "CANCELLED";
+            booking.UpdatedAt = now;
+            booking.UpdatedByUserId = actorUserId;
+        }
+        var guestBookings = await _db.NmAccommodationBookings
+            .Where(b => b.AccountId == account.AccountId && b.CheckInDate >= today && b.Status != "CANCELLED")
+            .ToListAsync(cancellationToken);
+        foreach (var booking in guestBookings)
+        {
+            booking.Status = "CANCELLED";
+            booking.UpdatedByUserId = actorUserId;
+        }
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            TableName = "MAccount",
+            RecordId = account.AccountId,
+            Action = "UPDATE",
+            NewValues = unpaid
+                ? $"invoice {invoice.InvoiceNo} reversed before payment; status={statusCode}; portal suspended; future bookings cancelled"
+                : $"invoice {invoice.InvoiceNo} reversed after payment; credit {note.AwaitingRefundAmount:0.00} awaiting refund; portal suspended; future bookings cancelled",
+            ChangedByUserId = actorUserId,
+            ChangedAt = now
+        });
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<MemberStatus> EnsureMemberStatusAsync(
+        string code,
+        string name,
+        bool activeStatus,
+        bool terminal,
+        CancellationToken cancellationToken)
+    {
+        var existing = await _db.MemberStatuses.FirstOrDefaultAsync(s => s.Code == code, cancellationToken);
+        if (existing is not null) return existing;
+        var created = new MemberStatus
+        {
+            Code = code,
+            Name = name,
+            SortOrder = 80,
+            IsActive = true,
+            IsActiveStatus = activeStatus,
+            IsTerminal = terminal,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.MemberStatuses.Add(created);
+        await _db.SaveChangesAsync(cancellationToken);
+        return created;
+    }
+
+    private IQueryable<MembershipInvoice> IssuedInvoiceQuery(SubscriptionListFilter filter)
+    {
+        var year = filter.Year;
+        var search = filter.Search?.Trim();
+        var type = filter.MembershipType?.Trim();
+        var query = _db.MembershipInvoices.AsNoTracking()
+            .Include(i => i.Account).ThenInclude(a => a.Profile)
+            .Include(i => i.Account).ThenInclude(a => a.MembershipType)
+            .AsQueryable();
+        if (year is int y) query = query.Where(i => i.Year == y);
+        if (!string.IsNullOrWhiteSpace(type))
+            query = query.Where(i => i.Account.MembershipType.Code == type || i.Account.MembershipType.Name == type);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.ToLower();
+            query = query.Where(i =>
+                i.InvoiceNo.ToLower().Contains(s)
+                || (i.Account.MembershipNo != null && i.Account.MembershipNo.ToLower().Contains(s))
+                || ((i.Account.Profile.FirstName + " " + i.Account.Profile.LastName).ToLower().Contains(s)));
+        }
+        return query;
+    }
+
+    private async Task<MembershipInvoice> TrackedInvoiceAsync(long invoiceId, CancellationToken cancellationToken)
+    {
+        return await _db.MembershipInvoices
+            .Include(i => i.Subscription)
+            .FirstOrDefaultAsync(i => i.InvoiceId == invoiceId, cancellationToken)
+            ?? throw new InvalidOperationException("Invoice was not found.");
+    }
+
+    private async Task<Dictionary<long, decimal>> CreditTotalsAsync(IReadOnlyCollection<long> invoiceIds, CancellationToken cancellationToken)
+    {
+        if (invoiceIds.Count == 0) return [];
+        var rows = await _db.InvoiceCreditNotes.AsNoTracking()
+            .Where(c => invoiceIds.Contains(c.InvoiceId))
+            .GroupBy(c => c.InvoiceId)
+            .Select(g => new { InvoiceId = g.Key, Amount = g.Sum(x => x.Amount) })
+            .ToListAsync(cancellationToken);
+        return rows.ToDictionary(x => x.InvoiceId, x => x.Amount);
+    }
+
+    private async Task<decimal> CreditedAmountAsync(long invoiceId, CancellationToken cancellationToken) =>
+        await _db.InvoiceCreditNotes.AsNoTracking()
+            .Where(c => c.InvoiceId == invoiceId)
+            .SumAsync(c => (decimal?)c.Amount, cancellationToken) ?? 0m;
+
+    private async Task ApplyCreditStatusAsync(MembershipInvoice invoice, CancellationToken cancellationToken)
+    {
+        var credited = await CreditedAmountAsync(invoice.InvoiceId, cancellationToken);
+        if (credited >= invoice.Amount - 0.01m && invoice.Amount > 0)
+            invoice.Status = "CREDITED";
+        else if (credited > 0.01m && invoice.Status is not ("PAID" or "CREDITED"))
+            invoice.Status = "PARTIAL";
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<IssuedInvoiceDetailDto> LoadIssuedInvoiceDetailAsync(long invoiceId, CancellationToken cancellationToken)
+    {
+        var invoice = await _db.MembershipInvoices.AsNoTracking()
+            .Include(i => i.Account).ThenInclude(a => a.Profile)
+            .Include(i => i.Account).ThenInclude(a => a.MembershipType)
+            .Include(i => i.Subscription)
+            .FirstOrDefaultAsync(i => i.InvoiceId == invoiceId, cancellationToken)
+            ?? throw new InvalidOperationException("Invoice was not found.");
+        var mapped = await MapInvoiceAsync(invoice, invoice.Account, invoice.Subscription, cancellationToken);
+        mapped = mapped with { DueDate = invoice.DueDate, Amount = invoice.Amount };
+        var notes = await _db.InvoiceCreditNotes.AsNoTracking()
+            .Include(c => c.Invoice).ThenInclude(i => i.Account).ThenInclude(a => a.Profile)
+            .Where(c => c.InvoiceId == invoiceId)
+            .OrderByDescending(c => c.IssuedAt)
+            .ToListAsync(cancellationToken);
+        var credited = notes.Sum(c => c.Amount);
+        return new IssuedInvoiceDetailDto(
+            mapped,
+            invoice.Amount,
+            credited,
+            Math.Max(0, invoice.Amount - credited),
+            invoice.DueDate,
+            notes.Select(MapCreditNote).ToList());
+    }
+
+    private static InvoiceCreditNoteRowDto MapCreditNote(InvoiceCreditNote note)
+    {
+        var account = note.Invoice.Account;
+        return new InvoiceCreditNoteRowDto(
+            note.CreditNoteId,
+            note.CreditNoteNo,
+            note.InvoiceId,
+            note.Invoice.InvoiceNo,
+            note.AccountId,
+            MemberName(account),
+            account.MembershipNo,
+            note.Amount,
+            note.Reason,
+            note.IssuedAt,
+            note.Status);
+    }
+
+    private static string MemberName(MAccount account)
+    {
+        var name = $"{account.Profile?.FirstName} {account.Profile?.LastName}".Trim();
+        return string.IsNullOrWhiteSpace(name) ? account.MembershipNo ?? "Member" : name;
     }
 }

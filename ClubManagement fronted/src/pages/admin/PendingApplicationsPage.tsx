@@ -42,6 +42,14 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
@@ -87,6 +95,9 @@ import {
   parseApplicationImportFile,
   printApplications,
 } from "@/utils/applicationDeskExport";
+import { downloadManagerReview, printManagerReview } from "@/utils/managerReviewPack";
+import { useInvoiceSetup } from "@/services/finance/invoiceSetup";
+import { mergePaymentSetup } from "@/utils/invoiceSetup";
 
 const MANAGER_MISSING_FILTERS = [
   { id: "any", label: "Any" },
@@ -322,6 +333,7 @@ function sponsorTone(row: ApplicationRow): "green" | "amber" | "slate" | "rose" 
 }
 
 function statusTone(row: ApplicationRow): "green" | "amber" | "slate" | "rose" {
+  if (row.managerStagePending) return "amber";
   const code = row.statusCode ?? "";
   if (code === "Approved") return "green";
   if (code === "Rejected" || code === "Withdrawn") return "rose";
@@ -442,8 +454,12 @@ function PendingApplicationsPanel({
   const [verifyingId, setVerifyingId] = useState<number | null>(null);
   const [viewingFullDetails, setViewingFullDetails] = useState(false);
   const [rejectTarget, setRejectTarget] = useState<ApplicationRow | null>(null);
+  const [pendingTarget, setPendingTarget] = useState<ApplicationRow | null>(null);
+  const [pendingNote, setPendingNote] = useState("");
+  const [packBusy, setPackBusy] = useState(false);
   const [selected, setSelected] = useState<Record<number, ApplicationRow>>({});
   const [exportBusy, setExportBusy] = useState(false);
+  const reportColumns = mergePaymentSetup(useInvoiceSetup().data).reportColumns;
   const [statusFilter, setStatusFilter] = useState("all");
   const [deskTab, setDeskTab] = useState<"applications" | "statistics">("applications");
   const [resumeBusyId, setResumeBusyId] = useState<number | null>(null);
@@ -596,7 +612,7 @@ function PendingApplicationsPanel({
       toast.error("Nothing to print.");
       return;
     }
-    const ok = printApplications(title, list);
+    const ok = printApplications(title, list, reportColumns);
     if (!ok) toast.error("Could not open the print dialog. Try again.");
   }
 
@@ -605,7 +621,7 @@ function PendingApplicationsPanel({
       toast.error("Nothing to export.");
       return;
     }
-    downloadApplicationsExcel(filename, list);
+    downloadApplicationsExcel(filename, list, reportColumns);
     toast.success(`Downloaded ${list.length} application(s).`);
   }
 
@@ -840,6 +856,41 @@ function PendingApplicationsPanel({
     },
     onError: (error) => toast.error(extractErrorMessage(error)),
   });
+
+  const markPending = useMutation({
+    mutationFn: ({ applicationId, note }: { applicationId: number; note: string }) =>
+      apiRequest(`/api/applications/${applicationId}/manager-pending`, {
+        method: "POST",
+        body: JSON.stringify({ reason: note }),
+      }),
+    onSuccess: () => {
+      toast.success("Applicant marked pending at manager review.");
+      setPendingTarget(null);
+      setPendingNote("");
+      void queryClient.invalidateQueries({ queryKey: ["applications"] });
+    },
+    onError: (error) => toast.error(extractErrorMessage(error)),
+  });
+
+  async function openReviewPack(mode: "print" | "download") {
+    if (!verifyingRow) return;
+    setPackBusy(true);
+    try {
+      const detail = verifyDetail.data ?? (await verifyDetail.refetch()).data;
+      if (!detail) throw new Error("Application details are still loading.");
+      if (mode === "print") {
+        const ok = await printManagerReview(verifyingRow, detail);
+        if (!ok) toast.error("Allow pop-ups to print this review.");
+      } else {
+        await downloadManagerReview(verifyingRow, detail);
+        toast.success("Review pack downloaded as a PDF.");
+      }
+    } catch (error) {
+      toast.error(extractErrorMessage(error));
+    } finally {
+      setPackBusy(false);
+    }
+  }
 
   const authorizeStage = useMutation({
     mutationFn: (applicationId: number) =>
@@ -1674,6 +1725,7 @@ function PendingApplicationsPanel({
           open
           onOpenChange={(open) => {
             if (!open) {
+              if (pendingTarget || rejectTarget) return;
               setViewingFullDetails(false);
               setVerifyingId(null);
             }
@@ -1682,6 +1734,12 @@ function PendingApplicationsPanel({
           <SheetContent
             side="right"
             className="flex h-full w-full flex-col gap-0 p-0 sm:max-w-7xl"
+            onPointerDownOutside={(event) => {
+              if (pendingTarget || rejectTarget) event.preventDefault();
+            }}
+            onInteractOutside={(event) => {
+              if (pendingTarget || rejectTarget) event.preventDefault();
+            }}
           >
             <SheetHeader className="border-b border-border px-6 py-4 pr-12 text-left">
               <SheetTitle>
@@ -1715,6 +1773,7 @@ function PendingApplicationsPanel({
                       applicationId={String(verifyingRow.applicationId)}
                       draft={parseApplicationDraft(verifyDetail.data.formDataJson)}
                       documents={verifyDetail.data.documents ?? []}
+                      variant="summary"
                     />
                   ) : (
                     <p className="text-sm text-muted-foreground">
@@ -1738,11 +1797,30 @@ function PendingApplicationsPanel({
             </div>
             <SheetFooter className="sticky bottom-0 gap-3 border-t border-border bg-background px-6 py-3 sm:flex-row sm:items-center sm:justify-between sm:space-x-0">
               <p className="text-xs font-medium text-muted-foreground">
-                Stage 3 of 4: Manager Review ({applicationStage(verifyingRow)})
+                Stage 3 of 4: Manager Review ({verifyingRow.managerStagePending ? "Pending" : applicationStage(verifyingRow)})
               </p>
               <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" disabled={packBusy} onClick={() => void openReviewPack("print")}>
+                {packBusy ? <Loader2 className="size-4 animate-spin" /> : <Printer className="size-4" />}
+                Print
+              </Button>
+              <Button type="button" variant="outline" disabled={packBusy} onClick={() => void openReviewPack("download")}>
+                <Download className="size-4" />
+                Download
+              </Button>
               <Button type="button" variant="outline" onClick={() => setVerifyingId(null)}>
                 Close
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={busy || markPending.isPending}
+                onClick={() => {
+                  setPendingNote("");
+                  setPendingTarget(verifyingRow);
+                }}
+              >
+                Pending
               </Button>
               <Button
                 type="button"
@@ -1776,6 +1854,45 @@ function PendingApplicationsPanel({
           </SheetContent>
         </Sheet>
       ) : null}
+
+      <Dialog open={Boolean(pendingTarget)} onOpenChange={(open) => { if (!open) setPendingTarget(null); }}>
+        <DialogContent className="z-[80]">
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!pendingTarget) return;
+              markPending.mutate({ applicationId: pendingTarget.applicationId, note: pendingNote.trim() });
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Mark as pending</DialogTitle>
+              <DialogDescription>
+                {pendingTarget ? applicantDisplayName(pendingTarget) : "This applicant"} stays at manager review and is shown as pending.
+              </DialogDescription>
+            </DialogHeader>
+            <label className="block text-sm">
+              Note (optional)
+              <textarea
+                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2"
+                rows={3}
+                value={pendingNote}
+                onChange={(e) => setPendingNote(e.target.value)}
+                placeholder="Why this application is held"
+              />
+            </label>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setPendingTarget(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={markPending.isPending}>
+                {markPending.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+                Mark pending
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <RejectApplicationDialog
         open={Boolean(rejectTarget)}

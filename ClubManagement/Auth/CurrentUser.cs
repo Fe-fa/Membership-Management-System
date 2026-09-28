@@ -17,11 +17,17 @@ public static class CurrentUser
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-    public static bool HasAnyRole(this ClaimsPrincipal user, params string[] roles) =>
-        user.RoleCodes().Any(r => roles.Contains(r, StringComparer.OrdinalIgnoreCase));
+    public static bool HasAnyRole(this ClaimsPrincipal user, params string[] roles)
+    {
+        var codes = user.RoleCodes();
+        if (codes.Any(r => r.Equals("SUPER_ADMIN", StringComparison.OrdinalIgnoreCase)))
+            return true;
+        return codes.Any(r => roles.Contains(r, StringComparer.OrdinalIgnoreCase));
+    }
 
     public static readonly string[] StaffRoles =
     [
+        "SUPER_ADMIN",
         "ADMIN",
         "GENERAL_MANAGER",
         "CHAIRMAN",

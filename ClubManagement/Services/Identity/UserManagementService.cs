@@ -27,6 +27,7 @@ public interface IUserManagementService
     Task<InviteResult?> SendResetLinkAsync(long userAccountId, long? actorUserId, CancellationToken cancellationToken);
     Task DeleteAsync(long userAccountId, long? actorUserId, CancellationToken cancellationToken);
     Task SetPasswordByTokenAsync(string token, string password, CancellationToken cancellationToken);
+    Task RequestPasswordResetAsync(string email, CancellationToken cancellationToken);
     Task<InviteResult> CreateLoginForProfileAsync(long profileId, string username, string email, string firstName, string roleCode, long? actorUserId, CancellationToken cancellationToken);
 }
 
@@ -88,6 +89,7 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
 
         foreach (var (code, name, sort) in new (string, string, int)[]
         {
+            ("SUPER_ADMIN", "Super Admin", 1),
             ("ADMIN", "Admin", 5),
             ("RECEPTIONIST", "Receptionist", 70)
         })
@@ -105,6 +107,7 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
             }
         }
         await _db.SaveChangesAsync(cancellationToken);
+        await EnsureSuperAdminAsync(cancellationToken);
         await DetachAdminFromCompaniesAsync(cancellationToken);
     }
 
@@ -192,9 +195,11 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
             ? (needsMembershipNo && !string.IsNullOrWhiteSpace(membershipNo) ? membershipNo : email)
             : request.Username.Trim();
 
-        if (await _db.UserAccounts.AnyAsync(x => x.Username == username, cancellationToken))
+        var emailKey = email.ToLowerInvariant();
+        if (await _db.UserAccounts.IgnoreQueryFilters().AnyAsync(x => x.Username.ToLower() == username.ToLower(), cancellationToken))
             throw new InvalidOperationException("That username is already taken.");
-        if (await _db.Profiles.AnyAsync(x => x.Email == email, cancellationToken))
+        if (await _db.Profiles.IgnoreQueryFilters().AnyAsync(
+                x => !x.IsDeleted && x.Email != null && x.Email.Trim().ToLower() == emailKey, cancellationToken))
             throw new InvalidOperationException("That email is already in use.");
 
         var roles = await ResolveActiveRolesAsync(roleCodes, cancellationToken);
@@ -478,21 +483,72 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
     public async Task SetPasswordByTokenAsync(string token, string password, CancellationToken cancellationToken)
     {
         RequirePassword(password);
-        var user = await _db.UserAccounts
+        var user = await _db.UserAccounts.IgnoreQueryFilters()
             .Include(x => x.Profile)
             .FirstOrDefaultAsync(x => x.PasswordResetToken == token, cancellationToken)
             ?? throw new InvalidOperationException("This invite or reset link is invalid.");
         if (user.PasswordResetExpiresAt is null || user.PasswordResetExpiresAt < DateTime.UtcNow)
-            throw new InvalidOperationException("This invite or reset link has expired. Ask an administrator to send a new one.");
+            throw new InvalidOperationException("This link has expired. On the sign-in page, choose Forgot password to request a new one.");
+
+        if (user.AccountStatus is "SUSPENDED" or "BLOCKED" or "DEACTIVATED")
+            throw new InvalidOperationException("This account is not active. Contact the club office.");
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);
         user.MustChangePassword = false;
         user.PasswordResetToken = null;
         user.PasswordResetExpiresAt = null;
-        user.EmailVerifiedAt = DateTime.UtcNow;
-        user.AccountStatus = "ACTIVE";
-        user.IsActive = true;
+        if (user.AccountStatus is "PENDING" or "UNVERIFIED" || user.EmailVerifiedAt is null)
+        {
+            user.EmailVerifiedAt = DateTime.UtcNow;
+            user.AccountStatus = "ACTIVE";
+            user.IsActive = true;
+        }
         await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task RequestPasswordResetAsync(string email, CancellationToken cancellationToken)
+    {
+        var needle = (email ?? "").Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(needle) || !needle.Contains('@'))
+            throw new InvalidOperationException("Enter the email address on your account.");
+
+        var user = await _db.UserAccounts.IgnoreQueryFilters()
+            .Include(x => x.Profile)
+            .Where(x =>
+                (x.Profile.Email != null && x.Profile.Email.Trim().ToLower() == needle)
+                || x.Username.ToLower() == needle)
+            .OrderByDescending(x => x.IsActive)
+            .ThenByDescending(x => x.UserAccountId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (user?.Profile is null || user.Profile.IsDeleted)
+            return;
+        if (user.AccountStatus is "SUSPENDED" or "BLOCKED" or "DEACTIVATED")
+            return;
+        if (user.PasswordResetExpiresAt is DateTime expires
+            && expires > DateTime.UtcNow.AddMinutes(29)
+            && expires <= DateTime.UtcNow.AddMinutes(30))
+            return;
+
+        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .Replace('+', '-').Replace('/', '_').TrimEnd('=');
+        user.PasswordResetToken = token;
+        user.PasswordResetExpiresAt = DateTime.UtcNow.AddMinutes(30);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        var baseUrl = (_app.PublicBaseUrl ?? "http://localhost:8080").TrimEnd('/');
+        var resetUrl = $"{baseUrl}/set-password?token={Uri.EscapeDataString(token)}";
+        var firstName = string.IsNullOrWhiteSpace(user.Profile.FirstName) ? "there" : user.Profile.FirstName.Trim();
+        var to = string.IsNullOrWhiteSpace(user.Profile.Email) ? needle : user.Profile.Email.Trim();
+        var body =
+            $"Hello {firstName},\n\n" +
+            "We received a request to reset the password for your Aero Club of East Africa account.\n\n" +
+            "Open this link to choose a new password. It expires in 30 minutes:\n" +
+            $"{resetUrl}\n\n" +
+            "If you did not ask for this, you can ignore this email. Your current password will stay the same.\n";
+        var sent = await _email.SendAsync(to, "Aero Club of East Africa — reset your password", body, cancellationToken);
+        if (!sent)
+            throw new InvalidOperationException("We could not send the reset email. Try again in a moment.");
     }
 
     private async Task<InviteResult> IssueInviteAsync(UserAccount user, string email, string firstName, CancellationToken cancellationToken)
@@ -561,10 +617,11 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
         return roles;
     }
 
-    /// <summary>Membership no. is not required for Admin, Applicant, or Receptionist (assigned by Admin/GM).</summary>
+    /// <summary>Membership no. is not required for Super Admin, Admin, Applicant, or Receptionist.</summary>
     private static bool RolesRequireMembershipNo(IEnumerable<string> roleCodes) =>
         roleCodes.Any(code =>
             !string.Equals(code, "ADMIN", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(code, "SUPER_ADMIN", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(code, "APPLICANT", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(code, "RECEPTIONIST", StringComparison.OrdinalIgnoreCase));
 
@@ -573,8 +630,13 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
 
     private static void RequirePassword(string password)
     {
-        if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
-            throw new InvalidOperationException("Password must be at least 8 characters.");
+        var strong = !string.IsNullOrWhiteSpace(password)
+            && password.Length >= 8
+            && password.Any(char.IsUpper)
+            && password.Any(char.IsDigit)
+            && password.Any(ch => !char.IsLetterOrDigit(ch));
+        if (!strong)
+            throw new InvalidOperationException("Password must be at least 8 characters and include an uppercase letter, a number, and a special character.");
     }
 
     private static UserListItemDto MapList(UserAccount user, IReadOnlyDictionary<long, Tenant> companies)
@@ -667,6 +729,40 @@ IF COL_LENGTH(N'dbo.User_account', N'password_reset_expires_at') IS NULL
             user.Profile.TenantId = companyId;
     }
 
+    /// <summary>
+    /// Existing Admin accounts become Super Admin when none exists, so Club setup stays reachable.
+    /// Accounts created later are not promoted.
+    /// </summary>
+    private async Task EnsureSuperAdminAsync(CancellationToken cancellationToken)
+    {
+        var role = await _db.SystemRoles.FirstOrDefaultAsync(x => x.Code == "SUPER_ADMIN", cancellationToken);
+        if (role is null) return;
+        var exists = await _db.UserRoles.AnyAsync(x => x.RoleId == role.SystemRoleId, cancellationToken);
+        if (exists) return;
+
+        var adminRole = await _db.SystemRoles.FirstOrDefaultAsync(x => x.Code == "ADMIN", cancellationToken);
+        if (adminRole is null) return;
+        var adminUserIds = await _db.UserRoles
+            .Where(x => x.RoleId == adminRole.SystemRoleId)
+            .Select(x => x.UserAccountId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        if (adminUserIds.Count == 0) return;
+
+        var now = DateTime.UtcNow;
+        foreach (var adminUserId in adminUserIds)
+        {
+            _db.UserRoles.Add(new UserRole
+            {
+                UserAccountId = adminUserId,
+                RoleId = role.SystemRoleId,
+                AssignedDate = DateOnly.FromDateTime(now),
+                CreatedAt = now
+            });
+        }
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
     private async Task DetachAdminFromCompaniesAsync(CancellationToken cancellationToken)
     {
         await _db.Database.ExecuteSqlRawAsync(@"
@@ -677,7 +773,7 @@ WHERE EXISTS (
     SELECT 1
     FROM dbo.User_role ur
     INNER JOIN dbo.System_role sr ON sr.system_role_id = ur.role_id
-    WHERE ur.user_account_id = ua.user_account_id AND sr.code = N'ADMIN'
+    WHERE ur.user_account_id = ua.user_account_id AND sr.code IN (N'ADMIN', N'SUPER_ADMIN')
 )
 AND NOT EXISTS (
     SELECT 1

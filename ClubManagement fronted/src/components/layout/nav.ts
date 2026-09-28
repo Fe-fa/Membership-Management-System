@@ -4,6 +4,7 @@
   Bell,
   Briefcase,
   Building2,
+  CalendarDays,
   Clock,
   History,
   ClipboardCheck,
@@ -108,6 +109,13 @@ function electedMemberModuleNav(pathname: string): AppNavGroup[] {
       to: "/payment",
       icon: Receipt,
       card: "subscriptions",
+    });
+  }
+  if (pathname === "/events" || pathname.startsWith("/events/")) {
+    return memberCardNav("Events", {
+      label: "Events",
+      to: "/events",
+      icon: CalendarDays,
     });
   }
   if (pathname === "/guests" || pathname.startsWith("/guests/")) {
@@ -329,9 +337,9 @@ const MANAGE_RECORDS_NAV: AppNavGroup[] = withDashboard("/existing-members", [
     label: "Club setup",
     collapsible: true,
     items: [
-      { label: "Country", to: "/club-setup/countries", icon: Globe },
-      { label: "Company", to: "/club-setup/companies", icon: Building2 },
-      { label: "Designation", to: "/club-setup/designations", icon: Briefcase },
+      { label: "Country", to: "/club-setup/countries", icon: Globe, roles: ["SUPER_ADMIN"] },
+      { label: "Company", to: "/club-setup/companies", icon: Building2, roles: ["SUPER_ADMIN"] },
+      { label: "Designation", to: "/club-setup/designations", icon: Briefcase, roles: ["SUPER_ADMIN"] },
     ],
   },
   
@@ -370,6 +378,7 @@ const FINANCE_NAV: AppNavGroup[] = withDashboard("/finance", [
     items: [
       { label: "Finance desk", to: "/finance/desk", icon: Wallet, match: ["/finance/desk"] },
       { label: "Invoices", to: "/finance/invoices", icon: FileText, match: ["/finance/invoices"] },
+      { label: "Issued invoices", to: "/finance/invoices/issued", icon: FileClock, match: ["/finance/invoices/issued"] },
       {
         label: "Statements",
         to: "/finance/statements",
@@ -384,7 +393,6 @@ const FINANCE_NAV: AppNavGroup[] = withDashboard("/finance", [
         match: ["/finance/approvals"],
         roles: ["ADMIN", "GENERAL_MANAGER"],
       },
-      { label: "Setup", to: "/finance/invoices/setup", icon: SlidersHorizontal, match: ["/finance/invoices/setup"] },
       { label: "Accommodation", to: "/finance/non-membership/accommodation", icon: BedDouble },
       { label: "Corkage", to: "/finance/non-membership/corkage", icon: Wine },
       { label: "Custom charges", to: "/finance/non-membership/custom-charges", icon: Receipt },
@@ -574,6 +582,13 @@ const SETTINGS_NAV: AppNavGroup[] = [
         roles: ["ADMIN", "GENERAL_MANAGER", "CHAIRMAN"],
       },
       {
+        label: "Setup",
+        to: "/settings/setup",
+        icon: SlidersHorizontal,
+        match: ["/settings/setup"],
+        roles: ["ADMIN", "GENERAL_MANAGER", "CHAIRMAN", "TREASURER"],
+      },
+      {
         label: "User accounts",
         to: "/user-management",
         icon: UserCog,
@@ -744,7 +759,8 @@ export function isNavActive(
   return targets.some((to) => {
     if (to === "/") return pathname === "/";
     if (to === "/settings") return pathname === "/settings" || pathname === "/settings/";
-    if (to === "/finance/invoices") return pathname === "/finance/invoices";
+    if (to === "/finance/invoices") return pathname === "/finance/invoices" || pathname === "/finance/invoices/";
+    if (to === "/finance/invoices/issued") return pathname === "/finance/invoices/issued";
     if (to === "/finance/statements") return pathname === "/finance/statements" || pathname.startsWith("/finance/statements/");
     if (to === "/finance/approvals") return pathname === "/finance/approvals" || pathname.startsWith("/finance/approvals/");
     return pathname === to || pathname.startsWith(`${to}/`);

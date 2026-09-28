@@ -2,8 +2,8 @@
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { PasswordField } from "@/components/auth/PasswordField";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { API_BASE, extractErrorMessage } from "@/services/membership/api";
 
 const routeApi = getRouteApi("/set-password");
@@ -17,6 +17,14 @@ export function SetPasswordPage() {
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
+    const strong = password.length >= 8
+      && /[A-Z]/.test(password)
+      && /\d/.test(password)
+      && /[^A-Za-z0-9]/.test(password);
+    if (!strong) {
+      toast.error("Password must be at least 8 characters and include an uppercase letter, a number, and a special character.");
+      return;
+    }
     if (password !== confirm) {
       toast.error("Passwords do not match.");
       return;
@@ -45,31 +53,33 @@ export function SetPasswordPage() {
         onSubmit={onSubmit}
         className="w-full max-w-md space-y-4 rounded-2xl border border-border bg-card p-8 shadow-sm"
       >
-        <h1 className="text-2xl">Choose your password</h1>
+        <h1 className="text-2xl">Choose a new password</h1>
         <p className="text-sm text-muted-foreground">
-          This verifies the email address used when an administrator created your account.
+          Use at least 8 characters, with an uppercase letter, a number, and a special character.
         </p>
         {!token ? (
           <p className="text-sm text-destructive">This link is missing a token. Request a new invite.</p>
         ) : null}
         <label className="grid gap-1 text-sm">
           New password
-          <Input
-            type="password"
+          <PasswordField
+            tone="field"
             minLength={8}
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
           />
         </label>
         <label className="grid gap-1 text-sm">
           Confirm password
-          <Input
-            type="password"
+          <PasswordField
+            tone="field"
             minLength={8}
             required
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
+            autoComplete="new-password"
           />
         </label>
         <Button type="submit" className="w-full" disabled={busy || !token}>

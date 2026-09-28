@@ -408,4 +408,13 @@ C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-build\ClubManagement.deps.json
 C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-build\ClubManagement.runtimeconfig.json
 C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-build\ClubManagement.dll
 C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-build\ClubManagement.pdb
+C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-reversal-check\appsettings.Development.json
+C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-reversal-check\appsettings.json
+C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-reversal-check\ClubManagement.staticwebassets.runtime.json
+C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-reversal-check\ClubManagement.staticwebassets.endpoints.json
+C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-reversal-check\ClubManagement.exe
+C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-reversal-check\ClubManagement.deps.json
+C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-reversal-check\ClubManagement.runtimeconfig.json
+C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-reversal-check\ClubManagement.dll
+C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-reversal-check\ClubManagement.pdb
 D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\ClubManagement\obj\Debug\net10.0\staticwebassets.upToDateCheck.txt

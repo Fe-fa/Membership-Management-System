@@ -218,8 +218,8 @@ export function crumbsForLocation(
     rest.push({ label: "Finance", to: "/finance/desk" }, { label: "Statements" });
   } else if (pathname.startsWith("/finance/approvals")) {
     rest.push({ label: "Finance", to: "/finance/desk" }, { label: "Document approvals" });
-  } else if (pathname.startsWith("/finance/invoices/setup")) {
-    rest.push({ label: "Finance", to: "/finance/desk" }, { label: "Invoices", to: "/finance/invoices" }, { label: "Payment setup" });
+  } else if (pathname.startsWith("/finance/invoices/issued")) {
+    rest.push({ label: "Finance", to: "/finance/desk" }, { label: "Issued invoices" });
   } else if (pathname.startsWith("/finance/invoices")) {
     rest.push({ label: "Finance", to: "/finance/desk" }, { label: "Invoices" });
   } else if (pathname === "/finance" || pathname === "/finance/") {
@@ -237,6 +237,8 @@ export function crumbsForLocation(
     rest.push({ label: "Settings", to: "/settings/rbac" }, { label: "Lookups & fee schedule" });
   } else if (pathname.startsWith("/settings/club")) {
     rest.push({ label: "Settings", to: "/settings/rbac" }, { label: "Club preferences" });
+  } else if (pathname.startsWith("/settings/setup")) {
+    rest.push({ label: "Settings", to: "/settings/rbac" }, { label: "Setup" });
   } else if (pathname.startsWith("/settings/account")) {
     rest.push({ label: "Settings", to: "/settings/account" }, { label: "Account & Profile" });
   } else if (pathname.startsWith("/settings/privacy")) {

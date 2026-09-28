@@ -39,6 +39,70 @@ export type ReceiptDisplay = {
 
 export type ProrationMode = "DAILY" | "MONTHLY";
 
+export const REPORT_COLUMN_GROUPS = [
+  {
+    title: "People",
+    columns: [
+      { id: "member", label: "Member" },
+      { id: "name", label: "Name" },
+      { id: "applicant", label: "Applicant" },
+      { id: "membershipNo", label: "Membership no." },
+      { id: "membershipType", label: "Membership type" },
+      { id: "kind", label: "Kind" },
+      { id: "email", label: "Email" },
+    ],
+  },
+  {
+    title: "Money and payment",
+    columns: [
+      { id: "year", label: "Year" },
+      { id: "due", label: "Due" },
+      { id: "paid", label: "Paid" },
+      { id: "arrears", label: "Arrears" },
+      { id: "amount", label: "Amount" },
+      { id: "fee", label: "Fee type" },
+      { id: "method", label: "Method" },
+      { id: "reference", label: "Reference" },
+      { id: "receipt", label: "Receipt" },
+      { id: "documentNo", label: "Document no." },
+      { id: "status", label: "Status" },
+      { id: "date", label: "Date" },
+    ],
+  },
+  {
+    title: "Applications and register",
+    columns: [
+      { id: "applicationNo", label: "Application no." },
+      { id: "category", label: "Category" },
+      { id: "appliedAt", label: "Applied at" },
+      { id: "updatedAt", label: "Updated at" },
+      { id: "joined", label: "Joined" },
+    ],
+  },
+] as const;
+
+export const REPORT_COLUMNS = REPORT_COLUMN_GROUPS.flatMap((group) => group.columns);
+
+/** Columns that already existed before the wider catalog. Saved setups keep these choices and turn new columns on. */
+const LEGACY_REPORT_COLUMN_IDS = new Set<string>([
+  "member",
+  "membershipNo",
+  "name",
+  "membershipType",
+  "kind",
+  "year",
+  "due",
+  "paid",
+  "arrears",
+  "status",
+  "date",
+  "fee",
+  "method",
+  "reference",
+  "receipt",
+  "amount",
+]);
+
 export type PaymentSetup = {
   pin: string;
   website: string;
@@ -50,6 +114,8 @@ export type PaymentSetup = {
   extraParameters: ExtraParameter[];
   /** Controls how the first-year annual subscription is prorated for new joiners. */
   prorationMode: ProrationMode;
+  /** Column ids included when finance desk reports are printed or downloaded. */
+  reportColumns: string[];
 };
 
 /** @deprecated Use PaymentSetup. Kept so existing invoice/email callers keep compiling. */
@@ -138,6 +204,7 @@ export const DEFAULT_PAYMENT_SETUP: PaymentSetup = {
   methods: defaultPaymentMethods(),
   extraParameters: [],
   prorationMode: "DAILY",
+  reportColumns: REPORT_COLUMNS.map((column) => column.id),
 };
 
 export const DEFAULT_INVOICE_SETUP = DEFAULT_PAYMENT_SETUP;
@@ -279,7 +346,19 @@ export function mergePaymentSetup(partial?: Partial<PaymentSetup> | Record<strin
     methods: mergeMethods(lifted.methods),
     extraParameters: mergeExtraParameters(lifted.extraParameters),
     prorationMode: prorationMode(lifted.prorationMode, DEFAULT_PAYMENT_SETUP.prorationMode),
+    reportColumns: mergeReportColumns(lifted.reportColumns),
   };
+}
+
+function mergeReportColumns(raw: unknown) {
+  const known = REPORT_COLUMNS.map((column) => column.id);
+  const knownSet = new Set<string>(known);
+  if (!Array.isArray(raw)) return [...known];
+  const picked = raw.filter((id): id is string => typeof id === "string" && knownSet.has(id));
+  if (picked.length === 0) return [...known];
+  const mentionsNew = picked.some((id) => !LEGACY_REPORT_COLUMN_IDS.has(id));
+  if (mentionsNew) return picked;
+  return [...picked, ...known.filter((id) => !LEGACY_REPORT_COLUMN_IDS.has(id))];
 }
 
 export const mergeInvoiceSetup = mergePaymentSetup;

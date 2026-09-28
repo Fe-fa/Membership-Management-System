@@ -76,9 +76,15 @@ public class InterviewConductService : IInterviewConductService
     public async Task EnsureStatusesAsync(CancellationToken cancellationToken)
     {
         await EnsureStatusRowAsync(
+            "SCREENING",
+            "Screening",
+            "Passed interview — screening with restricted rights, ahead of election.",
+            12,
+            cancellationToken);
+        await EnsureStatusRowAsync(
             "TEMPORARY_MEMBER",
             "Temporary Member",
-            "Passed interview — temporary membership (guarantor-backed window).",
+            "Earlier post-interview status. New interviews move to Screening.",
             12,
             cancellationToken);
         await EnsureStatusRowAsync(
@@ -152,7 +158,7 @@ public class InterviewConductService : IInterviewConductService
 
         var status = NormalizeStatus(app.Status?.Code);
         var eligible =
-            status is "Interview" or "InterviewReview" or "TemporaryMember"
+            status is "Interview" or "InterviewReview" or "TemporaryMember" or "Screening"
             || app.StageAAuthorizedAt is not null;
         if (!eligible)
             throw new InvalidOperationException(
@@ -198,7 +204,7 @@ public class InterviewConductService : IInterviewConductService
         }
 
         // Move into Interview status if still earlier.
-        if (status is not ("Interview" or "InterviewReview" or "TemporaryMember" or "Rejected" or "NotElected"))
+        if (status is not ("Interview" or "InterviewReview" or "TemporaryMember" or "Screening" or "Rejected" or "NotElected"))
         {
             var interviewStatus = await FindStatusAsync("Interview", cancellationToken)
                 ?? await FindStatusAsync("INTERVIEW", cancellationToken);
@@ -436,7 +442,7 @@ public class InterviewConductService : IInterviewConductService
         var status = NormalizeStatus(app.Status?.Code);
         if (status is "Rejected" or "NotElected" or "Withdrawn")
             throw new InvalidOperationException("This application is closed and cannot return to interview.");
-        if (status is "TemporaryMember" or "Approved" or "Waitlist" or "ElectionReview")
+        if (status is "TemporaryMember" or "Screening" or "Approved" or "Waitlist" or "ElectionReview")
             throw new InvalidOperationException(
                 "This applicant already moved past interview. The deferred record stays in history.");
 
@@ -499,7 +505,7 @@ public class InterviewConductService : IInterviewConductService
     {
         var code = NormalizeStatus(a.Status?.Code);
         // Finished or later pipeline — not waiting on committee to schedule/conduct interview.
-        if (code is "Approved" or "TemporaryMember" or "Waitlist" or "ElectionReview"
+        if (code is "Approved" or "TemporaryMember" or "Screening" or "Waitlist" or "ElectionReview"
             or "Rejected" or "NotElected" or "Withdrawn")
             return false;
         var name = a.Status?.Name ?? "";
@@ -663,11 +669,11 @@ public class InterviewConductService : IInterviewConductService
     private async Task ApplyPositiveAsync(Interview interview, long? actorUserId, CancellationToken cancellationToken)
     {
         var app = interview.Application;
-        var tempStatus = await FindStatusAsync("TemporaryMember", cancellationToken)
-            ?? await FindStatusAsync("TEMPORARY_MEMBER", cancellationToken)
-            ?? throw new InvalidOperationException("TEMPORARY_MEMBER application status is missing.");
+        var tempStatus = await FindStatusAsync("Screening", cancellationToken)
+            ?? await FindStatusAsync("SCREENING", cancellationToken)
+            ?? throw new InvalidOperationException("SCREENING application status is missing.");
 
-        if (!string.Equals(NormalizeStatus(app.Status?.Code), "TemporaryMember", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(NormalizeStatus(app.Status?.Code), "Screening", StringComparison.OrdinalIgnoreCase))
         {
             var fromId = app.ApplicationStatusId;
             app.ApplicationStatusId = tempStatus.ApplicationStatusId;
@@ -681,7 +687,7 @@ public class InterviewConductService : IInterviewConductService
                 ChangedAt = DateTime.UtcNow,
                 ChangedByUserId = actorUserId,
                 Action = ApplicationWorkflowRouter.ApproveAction,
-                Reason = "Interview outcome: Positive — Temporary Member."
+                Reason = "Interview outcome: Positive — Screening."
             });
             var current = app.CurrentHandlerUserId;
             var previous = app.PreviousHandlerUserId;
@@ -1096,7 +1102,7 @@ public class InterviewConductService : IInterviewConductService
     {
         if (app is null) return false;
         var code = NormalizeStatus(app.Status?.Code);
-        if (code is "TemporaryMember" or "Approved" or "Waitlist" or "ElectionReview")
+        if (code is "TemporaryMember" or "Screening" or "Approved" or "Waitlist" or "ElectionReview")
             return true;
         var name = app.Status?.Name ?? "";
         return name.Contains("temporary", StringComparison.OrdinalIgnoreCase)
@@ -1160,6 +1166,7 @@ public class InterviewConductService : IInterviewConductService
         return compact.ToUpperInvariant() switch
         {
             "TEMPORARYMEMBER" => "TemporaryMember",
+            "SCREENING" => "Screening",
             "NOTELECTED" => "NotElected",
             "REJECTED" => "Rejected",
             "INTERVIEW" => "Interview",

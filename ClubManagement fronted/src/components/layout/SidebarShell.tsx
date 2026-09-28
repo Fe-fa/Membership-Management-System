@@ -3,6 +3,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, LogOut, Menu } from "lucide-react";
 
+import { ActiveClubSwitch } from "@/components/admin/ActiveClubSwitch";
 import { ClubLogo } from "@/components/brand/ClubLogo";
 import { AppBreadcrumb } from "@/components/layout/AppBreadcrumb";
 import { NotificationBell } from "@/components/layout/NotificationBell";
@@ -368,6 +369,7 @@ export const SidebarShell = memo(function SidebarShell({
             </div>
 
             <div className="flex flex-wrap items-center justify-center gap-1.5 justify-self-center">
+              {portalMode === "admin" ? <ActiveClubSwitch /> : null}
               {showSwitch ? (
                 <Button type="button" size="sm" variant="default" onClick={goToMainDashboard}>
                   Switch

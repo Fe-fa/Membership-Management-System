@@ -46,6 +46,8 @@ export type ApplicationRow = {
   committeeMeetingName?: string | null;
   committeeMeetingTime?: string | null;
   assignedToMeeting?: boolean | null;
+  managerStagePending?: boolean;
+  managerStagePendingNote?: string | null;
 };
 
 export function applicationReference(row: ApplicationRow) {
@@ -62,11 +64,13 @@ export function applicationProgress(row: ApplicationRow) {
   return { done, total, percent: (done / Math.max(total, 1)) * 100 };
 }
 
-export function applicationStage(row: Pick<ApplicationRow, "statusCode" | "statusName">) {
-  // Prefer Application_status.name from the database; code map is fallback only.
+export function applicationStage(row: Pick<ApplicationRow, "statusCode" | "statusName" | "managerStagePending">) {
+  if (row.managerStagePending) return "Pending — manager review";
+  const code = row.statusCode ?? "";
+  if (code === "TemporaryMember" || code === "Screening") return "Screening";
   const fromDb = row.statusName?.trim();
   if (fromDb) return fromDb;
-  return APPLICATION_STAGE[row.statusCode ?? ""] ?? row.statusCode ?? "—";
+  return APPLICATION_STAGE[code] ?? code ?? "—";
 }
 
 export type MemberRow = {
@@ -114,7 +118,8 @@ export const APPLICATION_STAGE: Record<string, string> = {
   EndorsementReview: "Endorsement Review",
   Interview: "Interview",
   InterviewReview: "Interview Review",
-  TemporaryMember: "Temporary Member",
+  TemporaryMember: "Screening",
+  Screening: "Screening",
   Waitlist: "Waitlisted",
   ElectionReview: "Election Review",
   Committee: "Committee signatures",

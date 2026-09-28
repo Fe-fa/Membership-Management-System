@@ -19,7 +19,7 @@ public static class ApplicationWorkflowRouter
         "Interview" => "EndorsementReview",
         "Waitlist" => "InterviewReview",
         "Committee" => "ElectionReview",
-        "TemporaryMember" => "InterviewReview",
+        "TemporaryMember" or "Screening" => "InterviewReview",
         "Endorsement" => "UnderReview",
         "UnderReview" => "Submitted",
         _ => null,

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { PasswordField } from "@/components/auth/PasswordField";
 import { PageBackLink, PageFrame, PageHeader } from "@/components/layout/PageFrame";
 import { PageBodyLoading } from "@/components/layout/PageLoading";
 import { Button } from "@/components/ui/button";
@@ -211,7 +212,11 @@ export function UserDetailPage() {
       <PageHeader
         title={user.fullName}
         description={`${user.username} · ${user.email || "No email"} · ${
-          user.companyId ? user.companyName || user.companyCode || `Company ${user.companyId}` : "No company"
+          user.companyId
+            ? user.companyName || user.companyCode || `Company ${user.companyId}`
+            : user.roles.some((code) => code.toUpperCase() === "SUPER_ADMIN")
+              ? "Oversees all clubs"
+              : "No company"
         }`}
         actions={
           <span
@@ -296,7 +301,9 @@ export function UserDetailPage() {
                   </select>
                 </label>
               ) : (
-                <p className="text-xs text-muted-foreground">Admin does not belong to a company.</p>
+                <p className="text-xs text-muted-foreground">
+                  Super Admin and Admin do not belong to a company. They oversee the whole system.
+                </p>
               )}
               <Button type="submit" disabled={busy}>
                 {save.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
@@ -364,11 +371,12 @@ export function UserDetailPage() {
           <CardContent className="space-y-3">
             <label className="grid gap-1 text-sm">
               <Label>New password</Label>
-              <Input
-                type="password"
+              <PasswordField
+                tone="field"
                 minLength={8}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
+                autoComplete="new-password"
               />
             </label>
             <div className="flex flex-wrap gap-2">

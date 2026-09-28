@@ -93,6 +93,24 @@ function renderPaymentMethodsHtml(methods: PaymentMethodBlock[]) {
   </tr>`;
 }
 
+/** Keep the printed year fee equal to the billed invoice amount minus brought-forward. */
+function billedInvoiceLines(lines: InvoiceLine[], billedAmount: number): InvoiceLine[] {
+  const brought = lines
+    .filter((line) => /brought forward/i.test(line.description))
+    .reduce((sum, line) => sum + Number(line.charges || 0), 0);
+  const yearCharge = Math.round((billedAmount - brought) * 100) / 100;
+  if (yearCharge <= 0.009) return lines;
+  let applied = false;
+  return lines.map((line) => {
+    if (/brought forward/i.test(line.description) || applied) return line;
+    applied = true;
+    if (Math.abs(Number(line.charges || 0) - yearCharge) < 0.009 && Math.abs(Number(line.total || 0) - yearCharge) < 0.009) {
+      return line;
+    }
+    return { ...line, charges: yearCharge, credits: 0, total: yearCharge };
+  });
+}
+
 function invoiceSheetInnerHtml(invoice: InvoiceDocument) {
   const setup = mergePaymentSetup(invoice.setup);
   const clubName = officialClubName(invoice.clubName);
@@ -114,7 +132,10 @@ function invoiceSheetInnerHtml(invoice: InvoiceDocument) {
       total: lineTotal,
     },
   ];
-  const lines = invoice.lines && invoice.lines.length > 0 ? invoice.lines : fallbackLines;
+  const lines = billedInvoiceLines(
+    invoice.lines && invoice.lines.length > 0 ? invoice.lines : fallbackLines,
+    charges,
+  );
   const logo = escapeHtml(clubLogoUrl(invoice.clubLogo));
   const pinLine = setup.invoice.showPin ? `<br />PIN: ${escapeHtml(setup.pin)}` : "";
   const dueLine = setup.invoice.showDueDate

@@ -228,10 +228,6 @@ export function MeetingPendingPage() {
             <DialogContent className="sm:max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Schedule sitting</DialogTitle>
-                <DialogDescription>
-                  Set the date, time, duration, and whether the sitting is in person or online.
-                  Applicants you attach afterwards move to Waiting for meeting.
-                </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4">
                 <div className="grid gap-3 sm:grid-cols-2">

@@ -20,6 +20,9 @@ public static class CompanyMembership
     public static bool IsAdmin(string? roleCode) =>
         string.Equals(roleCode, "ADMIN", StringComparison.OrdinalIgnoreCase);
 
+    public static bool IsSuperAdmin(string? roleCode) =>
+        string.Equals(roleCode, "SUPER_ADMIN", StringComparison.OrdinalIgnoreCase);
+
     public static bool RequiresCompany(string? roleCode) =>
         !string.IsNullOrWhiteSpace(roleCode)
         && CompanyRequiredRoleCodes.Contains(roleCode.Trim(), StringComparer.OrdinalIgnoreCase);
@@ -30,7 +33,7 @@ public static class CompanyMembership
     public static bool IsAdminOnly(IEnumerable<string> roleCodes)
     {
         var codes = roleCodes.Where(c => !string.IsNullOrWhiteSpace(c)).ToList();
-        return codes.Any(IsAdmin) && !RequiresCompany(codes);
+        return (codes.Any(IsAdmin) || codes.Any(IsSuperAdmin)) && !RequiresCompany(codes);
     }
 
     public static bool HasAdmin(IEnumerable<string> roleCodes) =>
@@ -38,10 +41,10 @@ public static class CompanyMembership
 
     public static void EnsureCompatible(IReadOnlyList<string> roleCodes)
     {
-        if (HasAdmin(roleCodes) && RequiresCompany(roleCodes))
+        if ((HasAdmin(roleCodes) || roleCodes.Any(IsSuperAdmin)) && RequiresCompany(roleCodes))
         {
             throw new InvalidOperationException(
-                "Admin does not belong to a company. Remove Admin, or remove the company roles (Applicant, Member, Chairman, General Manager, Treasurer, Committee Member, Receptionist).");
+                "Super Admin and Admin do not belong to a company. Remove that role, or remove the company roles (Applicant, Member, Chairman, General Manager, Treasurer, Committee Member, Receptionist).");
         }
     }
 }

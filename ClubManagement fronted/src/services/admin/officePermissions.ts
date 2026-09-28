@@ -66,6 +66,7 @@ export function canViewModule(
   moduleId: string,
   userRoles: string[] | undefined,
 ) {
+  if (userRoles?.some((role) => role.toUpperCase() === "SUPER_ADMIN")) return true;
   if (!matrix || !userRoles?.length) return false;
   const row = matrix.modules.find((m) => m.moduleId === moduleId);
   if (!row) return false;
@@ -77,6 +78,7 @@ export function canWriteModule(
   moduleId: string,
   userRoles: string[] | undefined,
 ) {
+  if (userRoles?.some((role) => role.toUpperCase() === "SUPER_ADMIN")) return true;
   if (!matrix || !userRoles?.length) return false;
   const row = matrix.modules.find((m) => m.moduleId === moduleId);
   if (!row) return false;

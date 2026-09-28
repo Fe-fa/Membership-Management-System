@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { PasswordField } from "@/components/auth/PasswordField";
 import { ClubLogo } from "@/components/brand/ClubLogo";
 import { Button } from "@/components/ui/button";
 import { TENANT_CODE } from "@/config/env";
@@ -37,8 +38,21 @@ export function LoginPage() {
         },
         body: JSON.stringify({ login: login.trim(), password }),
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({ message: "Sign-in failed" }))).message);
-      const data = (await res.json()) as AuthResponse;
+      const body = (await res.json().catch(() => ({}))) as AuthResponse & {
+        message?: string;
+        verificationRequired?: boolean;
+        email?: string;
+      };
+      if (!res.ok) {
+        const message = body.message || "Sign-in failed";
+        const email = body.email?.includes("@") ? body.email.trim() : login.trim();
+        if ((body.verificationRequired || /6-digit code/i.test(message)) && email.includes("@")) {
+          await navigate({ to: "/verify-email", search: { email }, replace: true });
+          return;
+        }
+        throw new Error(message);
+      }
+      const data = body;
       persistSession(data);
       toast.success(`Welcome, ${data.user.fullName}`);
       const dest = nextAfterLogin() || homePathForUser(data.user);
@@ -68,16 +82,15 @@ export function LoginPage() {
             value={login}
             onChange={(e) => setLogin(e.target.value)}
             required
-            autoComplete="username"
+            autoComplete="email"
             placeholder="name@example.com or AC-0001"
             disabled={busy}
           />
         </label>
         <label className="block text-sm">
           Password
-          <input
-            type="password"
-            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2"
+          <PasswordField
+            className="mt-1"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -85,6 +98,15 @@ export function LoginPage() {
             disabled={busy}
           />
         </label>
+        <p className="text-right text-sm">
+          <Link
+            to="/forgot-password"
+            search={{ email: login.includes("@") ? login.trim() : "" }}
+            className="text-primary underline"
+          >
+            Forgot password?
+          </Link>
+        </p>
         <Button type="submit" className="w-full" disabled={busy}>
           {busy ? "Signing in…" : "Sign in"}
         </Button>

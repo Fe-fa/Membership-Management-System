@@ -39,6 +39,23 @@ public sealed class TenantResolutionMiddleware
         var claimId = http.User.FindFirstValue("tenantId");
         var parsedJwt = long.TryParse(claimId, out var fromJwt);
 
+        // Super Admin belongs to no club. With no club header they see every company.
+        // A club code in the header only narrows the lists they are looking at.
+        var header = http.Request.Headers[HeaderName].FirstOrDefault();
+        var authenticated = http.User.Identity?.IsAuthenticated == true;
+        if (authenticated && http.User.IsInRole("SUPER_ADMIN"))
+        {
+            if (!string.IsNullOrWhiteSpace(header)
+                && !header.Equals("ALL", StringComparison.OrdinalIgnoreCase))
+            {
+                var switched = await FindTenantAsync(db, header, http.RequestAborted);
+                if (switched is not null)
+                    tenant.Set(switched.TenantId, switched.Code);
+            }
+            await _next(http);
+            return;
+        }
+
         if (parsedJwt && fromJwt > 0)
         {
             var jwtCode = http.User.FindFirstValue("tenantCode");
@@ -48,7 +65,6 @@ public sealed class TenantResolutionMiddleware
         }
 
         // Global admin has no company. Do not fall back to ACEA via header — that would hide other companies.
-        var authenticated = http.User.Identity?.IsAuthenticated == true;
         if (authenticated && http.User.IsInRole("ADMIN") && (!parsedJwt || fromJwt <= 0))
         {
             await _next(http);
@@ -56,24 +72,26 @@ public sealed class TenantResolutionMiddleware
         }
 
         var code = http.User.FindFirstValue("tenantCode")
-            ?? http.Request.Headers[HeaderName].FirstOrDefault()
+            ?? header
             ?? DefaultTenantCode;
-        code = code.Trim().ToUpperInvariant();
-
-        var row = await db.Tenants.AsNoTracking().IgnoreQueryFilters()
-            .FirstOrDefaultAsync(t => t.IsActive && t.Code == code, http.RequestAborted)
-            ?? await db.Tenants.AsNoTracking().IgnoreQueryFilters()
-                .FirstOrDefaultAsync(t => t.IsActive && t.Slug != null && t.Slug.ToLower() == code.ToLowerInvariant(), http.RequestAborted);
-        if (row is null && !string.Equals(code, DefaultTenantCode, StringComparison.OrdinalIgnoreCase))
-        {
-            row = await db.Tenants.AsNoTracking().IgnoreQueryFilters()
-                .FirstOrDefaultAsync(t => t.IsActive && t.Code == DefaultTenantCode, http.RequestAborted);
-        }
+        var row = await FindTenantAsync(db, code, http.RequestAborted);
+        if (row is null && !string.Equals(code.Trim(), DefaultTenantCode, StringComparison.OrdinalIgnoreCase))
+            row = await FindTenantAsync(db, DefaultTenantCode, http.RequestAborted);
 
         if (row is not null)
             tenant.Set(row.TenantId, row.Code);
 
         await _next(http);
+    }
+
+    private static async Task<Tenant?> FindTenantAsync(ApplicationModuleDbContext db, string code, CancellationToken cancellationToken)
+    {
+        var normalized = code.Trim().ToUpperInvariant();
+        var lower = code.Trim().ToLowerInvariant();
+        return await db.Tenants.AsNoTracking().IgnoreQueryFilters()
+            .FirstOrDefaultAsync(t => t.IsActive && t.Code == normalized, cancellationToken)
+            ?? await db.Tenants.AsNoTracking().IgnoreQueryFilters()
+                .FirstOrDefaultAsync(t => t.IsActive && t.Slug != null && t.Slug.ToLower() == lower, cancellationToken);
     }
 }
 

@@ -1,0 +1,18 @@
+[2026-09-27 14:17:53.700] [00007F4C] === Logging started ===
+[2026-09-27 14:17:53.724] [00007F4C] Executing: "C:\Program Files\dotnet\dotnet.exe" build .\ClubManagement\ClubManagement.csproj --no-restore -v q, PID: 32588, PPID: 33772
+[2026-09-27 14:17:53.726] [00007F4C] IsElevated: False
+[2026-09-27 14:17:53.726] [00007F4C] Is64BitProcess: True
+[2026-09-27 14:17:53.726] [00007F4C] RebootPending: False
+[2026-09-27 14:17:53.726] [00007F4C] ProcessorArchitecture: amd64
+[2026-09-27 14:17:53.726] [00007F4C] HostArchitecture: x64
+[2026-09-27 14:17:53.726] [00007F4C] SdkDirectory: 10.0.302
+[2026-09-27 14:17:53.726] [00007F4C] VerifySignatures: False
+[2026-09-27 14:17:53.726] [00007F4C] SDK feature band: 10.0.300
+[2026-09-27 14:18:00.143] [00007F4C] ExtractManifestAsync: Extracting 'D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\.msbuild-temp\isuzpqo3.mnp\microsoft.net.workloads.10.0.300.msi.x64\10.303.1\microsoft.net.workloads.10.0.300.msi.x64.10.303.1.nupkg' to 'C:\Users\fe-fa\.dotnet\sdk-advertising\10.0.300\microsoft.net.workloads'
+[2026-09-27 14:18:00.146] [00007F4C] ExtractManifestAsync: Temporary extraction path: 'D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\.msbuild-temp\dd0kxilj.swl'
+[2026-09-27 14:18:00.243] [00007F4C] ExtractManifestAsync: Running admin install for 'D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\.msbuild-temp\dd0kxilj.swl\msi'.  Log file: 'D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\.msbuild-temp\Microsoft.NET.Workload_32588_20260927_141753_698_78e099e247ca594b0441bd342d8965c5-x64_AdminInstall.log'
+[2026-09-27 14:18:02.661] [00007F4C] ExtractManifestAsync: Admin install failed: 1639
+[2026-09-27 14:18:34.550] [00007F4C] Shutting down
+[2026-09-27 14:18:34.550] [00007F4C] Shutdown completed.
+[2026-09-27 14:18:34.550] [00007F4C] Restart required: False
+[2026-09-27 14:18:34.551] [00007F4C] === Logging ended ===

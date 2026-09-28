@@ -170,6 +170,13 @@ public record BillingApprovalRowDto(
     string? DocumentHtml);
 public record BillingDecisionRequest(string? Notes = null, bool? SendEmail = null);
 public record BillingPendingCountsDto(int Invoices, int Statements);
+public record BillingBulkApproveRequest(IReadOnlyList<long> BillingDocumentIds);
+public record BillingBulkApproveErrorDto(long BillingDocumentId, string? DocumentNo, string Message);
+public record BillingBulkApproveResultDto(
+    int Requested,
+    int Approved,
+    int Failed,
+    IReadOnlyList<BillingBulkApproveErrorDto> Errors);
 public record InvoiceRunStatsDto(
     int MembersInArrears,
     int MembersReceived,
@@ -260,6 +267,9 @@ public class PaymentSetupDto
 
     /// <summary>"DAILY" or "MONTHLY" — controls how the first-year annual subscription is prorated.</summary>
     public string ProrationMode { get; set; } = "DAILY";
+
+    /// <summary>Column ids included on reports, Excel downloads, and printouts. Null means every column.</summary>
+    public List<string>? ReportColumns { get; set; }
 }
 public record PaymentListFilter(
     long? AccountId = null,
@@ -285,6 +295,41 @@ public record RejectPaymentRequest(string Reason);
 public record VoidPaymentRequest(string? Reason = null);
 public record RefundPaymentRequest(string Reason);
 public record ReversePaymentRequest(string Reason);
+public record IssuedInvoiceRowDto(
+    long InvoiceId,
+    string InvoiceNo,
+    long AccountId,
+    string MemberName,
+    string? MembershipNo,
+    string? MembershipType,
+    int Year,
+    DateOnly DueDate,
+    decimal Amount,
+    decimal Credited,
+    decimal Balance,
+    string Status,
+    DateTime IssuedAt);
+public record InvoiceCreditNoteRowDto(
+    long CreditNoteId,
+    string CreditNoteNo,
+    long InvoiceId,
+    string InvoiceNo,
+    long AccountId,
+    string MemberName,
+    string? MembershipNo,
+    decimal Amount,
+    string Reason,
+    DateTime IssuedAt,
+    string Status);
+public record IssuedInvoiceDetailDto(
+    InvoiceDocumentDto Invoice,
+    decimal Amount,
+    decimal Credited,
+    decimal Balance,
+    DateOnly DueDate,
+    IReadOnlyList<InvoiceCreditNoteRowDto> CreditNotes);
+public record UpdateIssuedInvoiceRequest(decimal Amount, DateOnly DueDate);
+public record IssueInvoiceCreditNoteRequest(decimal Amount, string Reason);
 public record InvoiceLineDto(string Description, string? Period, decimal Charges, decimal Credits, decimal Total);
 public record InvoiceDocumentDto(
     long InvoiceId,
@@ -637,6 +682,29 @@ public interface IFinanceService
         BillingDecisionRequest request,
         long? actorUserId,
         CancellationToken cancellationToken);
+    Task<BillingBulkApproveResultDto> BulkApproveBillingDocumentsAsync(
+        IReadOnlyList<long> billingDocumentIds,
+        long? actorUserId,
+        CancellationToken cancellationToken);
+    Task<PagedResult<IssuedInvoiceRowDto>> ListIssuedInvoicesAsync(
+        SubscriptionListFilter filter,
+        PagedRequest paging,
+        CancellationToken cancellationToken);
+    Task<PagedResult<InvoiceCreditNoteRowDto>> ListInvoiceCreditNotesAsync(
+        SubscriptionListFilter filter,
+        PagedRequest paging,
+        CancellationToken cancellationToken);
+    Task<IssuedInvoiceDetailDto> GetIssuedInvoiceAsync(long invoiceId, CancellationToken cancellationToken);
+    Task<IssuedInvoiceDetailDto> UpdateIssuedInvoiceAsync(
+        long invoiceId,
+        UpdateIssuedInvoiceRequest request,
+        long? actorUserId,
+        CancellationToken cancellationToken);
+    Task<IssuedInvoiceDetailDto> IssueInvoiceCreditNoteAsync(
+        long invoiceId,
+        IssueInvoiceCreditNoteRequest request,
+        long? actorUserId,
+        CancellationToken cancellationToken);
 }
 
 public partial class FinanceService : IFinanceService
@@ -737,6 +805,25 @@ BEGIN
     ALTER TABLE dbo.Membership_invoice ADD published_to_member BIT NOT NULL CONSTRAINT DF_inv_published DEFAULT(0);
     EXEC(N'UPDATE dbo.Membership_invoice SET published_to_member = 1 WHERE sent_at IS NOT NULL');
 END
+IF OBJECT_ID(N'dbo.Invoice_credit_note', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Invoice_credit_note (
+        credit_note_id BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        credit_note_no NVARCHAR(40) NOT NULL,
+        invoice_id BIGINT NOT NULL,
+        account_id BIGINT NOT NULL,
+        amount DECIMAL(18,2) NOT NULL,
+        awaiting_refund_amount DECIMAL(18,2) NOT NULL CONSTRAINT DF_icn_refund DEFAULT(0),
+        reason NVARCHAR(500) NOT NULL,
+        status NVARCHAR(40) NOT NULL,
+        issued_at DATETIME2 NOT NULL,
+        created_by_user_id BIGINT NULL
+    );
+    CREATE UNIQUE INDEX UX_invoice_credit_note_no ON dbo.Invoice_credit_note(credit_note_no);
+    CREATE INDEX IX_invoice_credit_note_invoice ON dbo.Invoice_credit_note(invoice_id);
+END
+IF COL_LENGTH(N'dbo.Invoice_credit_note', N'awaiting_refund_amount') IS NULL
+    ALTER TABLE dbo.Invoice_credit_note ADD awaiting_refund_amount DECIMAL(18,2) NOT NULL CONSTRAINT DF_icn_refund DEFAULT(0);
 IF OBJECT_ID(N'dbo.Billing_document', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.Billing_document (
@@ -1710,7 +1797,15 @@ END
         var membersInArrears = await _db.Subscriptions.AsNoTracking()
             .Where(s =>
                 s.SubscriptionYear <= year
-                && (s.ArrearsAmount > 0 || s.AmountPaid < s.AmountDue))
+                && (s.ArrearsAmount > 0 || s.AmountPaid < s.AmountDue)
+                && (_db.BillingDocuments.Any(d =>
+                        d.Kind == "INVOICE"
+                        && d.FeeType == "ANNUAL"
+                        && d.AccountId == s.AccountId
+                        && d.Year == s.SubscriptionYear
+                        && (d.Status == "PENDING_GM" || d.Status == "APPROVED" || d.Status == "PUBLISHED"))
+                    || _db.MembershipInvoices.Any(i =>
+                        i.AccountId == s.AccountId && i.Year == s.SubscriptionYear && i.PublishedToMember)))
             .Select(s => s.AccountId)
             .Distinct()
             .CountAsync(cancellationToken);
@@ -2634,7 +2729,17 @@ END
         var accountToTypeId = accountTypeMap.ToDictionary(a => a.AccountId, a => a.MembershipTypeId);
 
         var accountIds = rows.Select(s => s.AccountId).Distinct().ToList();
-        var priorUnpaid = await PriorUnpaidByAccountAsync(accountIds, y, cancellationToken);
+        var invoicedYears = await InvoicedAnnualYearsAsync(accountIds, cancellationToken);
+        var priorSubs = accountIds.Count == 0
+            ? []
+            : await _db.Subscriptions.AsNoTracking()
+                .Where(s => accountIds.Contains(s.AccountId) && s.SubscriptionYear < y && !s.WaivedFlag)
+                .Select(s => new { s.AccountId, s.SubscriptionYear, s.AmountDue, s.AmountPaid })
+                .ToListAsync(cancellationToken);
+        var priorUnpaid = priorSubs
+            .Where(s => invoicedYears.Contains((s.AccountId, s.SubscriptionYear)))
+            .GroupBy(s => s.AccountId)
+            .ToDictionary(g => g.Key, g => g.Sum(s => Math.Max(0, s.AmountDue - s.AmountPaid)));
 
         var items = rows.Select(s =>
         {
@@ -2647,15 +2752,18 @@ END
                 typeCode = mt.Code;
             }
             priorUnpaid.TryGetValue(s.AccountId, out var brought);
+            var invoiced = invoicedYears.Contains((s.AccountId, s.SubscriptionYear));
+            var due = invoiced ? s.AmountDue + brought : brought;
+            var arrears = invoiced ? s.ArrearsAmount + brought : brought;
             return new SubscriptionRowDto(
                 s.SubscriptionId,
                 s.AccountId,
                 s.Account.MembershipNo ?? "",
                 (s.Account.Profile.FirstName + " " + s.Account.Profile.LastName).Trim(),
                 s.SubscriptionYear,
-                s.AmountDue + brought,
+                due,
                 s.AmountPaid,
-                s.ArrearsAmount + brought,
+                arrears,
                 s.Status.Name,
                 s.DueDate,
                 s.PostedDate,
@@ -2683,6 +2791,32 @@ END
         }
 
         return Paging.Create(pageItems, paging, combinedTotal);
+    }
+
+    private async Task<HashSet<(long AccountId, int Year)>> InvoicedAnnualYearsAsync(
+        List<long> accountIds,
+        CancellationToken cancellationToken)
+    {
+        var set = new HashSet<(long AccountId, int Year)>();
+        if (accountIds.Count == 0) return set;
+        var docs = await _db.BillingDocuments.AsNoTracking()
+            .Where(d =>
+                d.Kind == "INVOICE"
+                && d.FeeType == "ANNUAL"
+                && d.AccountId != null
+                && accountIds.Contains(d.AccountId.Value)
+                && (d.Status == "PENDING_GM" || d.Status == "APPROVED" || d.Status == "PUBLISHED"))
+            .Select(d => new { AccountId = d.AccountId!.Value, d.Year, d.CreatedAt })
+            .ToListAsync(cancellationToken);
+        foreach (var doc in docs)
+            set.Add((doc.AccountId, doc.Year ?? doc.CreatedAt.Year));
+        var published = await _db.MembershipInvoices.AsNoTracking()
+            .Where(i => accountIds.Contains(i.AccountId) && i.PublishedToMember)
+            .Select(i => new { i.AccountId, i.Year })
+            .ToListAsync(cancellationToken);
+        foreach (var invoice in published)
+            set.Add((invoice.AccountId, invoice.Year));
+        return set;
     }
 
     public async Task<IReadOnlyList<SettlementMemberHitDto>> SearchSettlementMembersAsync(

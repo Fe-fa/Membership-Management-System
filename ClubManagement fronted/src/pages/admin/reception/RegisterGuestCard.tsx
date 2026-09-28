@@ -94,7 +94,7 @@ export function RegisterGuestCard({ onRegistered, requestedHost }: Props) {
     if (!host) next.host = "Select the host member.";
     if (!guest.firstName.trim()) next.firstName = "Required.";
     if (!guest.surname.trim()) next.surname = "Required.";
-    if (guest.email.trim() && !guest.email.includes("@")) next.email = "Enter a valid email.";
+    if (!guest.email.trim() || !guest.email.includes("@")) next.email = "A unique email is required.";
     if (!guest.visitDate) next.visitDate = "Required.";
     if (!guest.signatureName.trim()) next.signature = "Type the guest's name.";
     if (isOtherVisitPurpose(guest.purpose) && !guest.purposeOther.trim()) {
@@ -197,7 +197,7 @@ export function RegisterGuestCard({ onRegistered, requestedHost }: Props) {
             <Input required value={guest.surname} onChange={(event) => setGuest({ ...guest, surname: event.target.value })} />
           </Field>
           <Field label="Email" error={errors.email}>
-            <Input type="email" value={guest.email} onChange={(event) => setGuest({ ...guest, email: event.target.value })} placeholder="Optional" />
+            <Input type="email" required value={guest.email} onChange={(event) => setGuest({ ...guest, email: event.target.value })} placeholder="Unique guest email" />
           </Field>
           <Field label="Reason for club visit">
             <select

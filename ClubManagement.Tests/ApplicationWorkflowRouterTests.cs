@@ -14,6 +14,7 @@ public class ApplicationWorkflowRouterTests
     [InlineData("Waitlist", "InterviewReview")]
     [InlineData("Committee", "ElectionReview")]
     [InlineData("TemporaryMember", "InterviewReview")]
+    [InlineData("Screening", "InterviewReview")]
     [InlineData("Endorsement", "UnderReview")]
     [InlineData("UnderReview", "Submitted")]
     public void PreviousStatus_returns_the_prior_stage(string current, string expected) =>

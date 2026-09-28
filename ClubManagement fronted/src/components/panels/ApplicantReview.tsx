@@ -165,10 +165,13 @@ export function ApplicantReview({
   applicationId,
   draft,
   documents = [],
+  variant = "full",
 }: {
   applicationId: string;
   draft: ApplicationDraft;
   documents?: ApplicationDocumentRow[];
+  /** Manager sheet: photo, aviation fields, supporters, then documents. */
+  variant?: "full" | "summary";
 }) {
   const docs = collectDocuments(draft, documents);
   const passport = docs.find((doc) => isPassportPhoto(doc) && doc.url);
@@ -198,34 +201,207 @@ export function ApplicantReview({
     onError: (err) => toast.error(extractErrorMessage(err)),
   });
 
-  return (
-    <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-      <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
+  const photoCard = (
+    <Card>
+      <CardHeader>
+        <CardTitle>Passport photo</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {portraitUrl ? (
+          <a href={portraitUrl} target="_blank" rel="noreferrer" className="block">
+            <img
+              src={portraitUrl}
+              alt={portraitName}
+              className={
+                variant === "summary"
+                  ? "aspect-[3/4] w-full rounded-lg border border-border bg-secondary object-cover"
+                  : "h-56 w-full rounded-lg border border-border bg-secondary object-contain"
+              }
+            />
+          </a>
+        ) : (
+          <div
+            className={
+              variant === "summary"
+                ? "grid aspect-[3/4] place-items-center rounded-lg border border-dashed border-border text-sm text-muted-foreground"
+                : "grid h-56 place-items-center rounded-lg border border-dashed border-border text-sm text-muted-foreground"
+            }
+          >
+            <span className="inline-flex items-center gap-2">
+              <ImageIcon className="size-4" />
+              No photo uploaded
+            </span>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  const supportersCard = (
         <Card>
           <CardHeader>
-            <CardTitle>Passport photo</CardTitle>
+            <CardTitle>Supporters, clubs and consent</CardTitle>
           </CardHeader>
-          <CardContent>
-            {portraitUrl ? (
-              <a href={portraitUrl} target="_blank" rel="noreferrer" className="block">
-                <img
-                  src={portraitUrl}
-                  alt={portraitName}
-                  className="h-56 w-full rounded-lg border border-border bg-secondary object-contain"
-                />
-              </a>
+          <CardContent className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Field label="Proposer" value={dash(draft.supporters.proposer?.name)} />
+            <Field label="Member since" value={dash(draft.supporters.proposer?.yearOfJoining)} />
+            <Field label="Proposer phone" value={dash(draft.supporters.proposer?.phone)} />
+            <Field label="Seconder" value={dash(draft.supporters.seconder?.name)} />
+            <Field label="Member since" value={dash(draft.supporters.seconder?.yearOfJoining)} />
+            <Field label="Seconder phone" value={dash(draft.supporters.seconder?.phone)} />
+            <Field label="Member of another club" value={yn(draft.clubs.memberOfOtherClub)} />
+            <Field
+              label="Club names"
+              value={
+                (draft.clubs.otherClubs ?? [])
+                  .map((club) => club.name)
+                  .filter(Boolean)
+                  .join(", ") || "—"
+              }
+            />
+            <Field label="Privacy policy accepted" value={yn(Boolean(draft.consent.privacyPolicyAccepted))} />
+            <Field label="Declaration accepted" value={yn(Boolean(draft.consent.declarationAccepted))} />
+            <Field label="Declaration signature" value={dash(draft.consent.declarationSignature)} />
+            <Field label="Declaration date" value={formatKenyaDate(draft.consent.declarationDate)} />
+          </CardContent>
+        </Card>
+  );
+
+  const documentsCard = (
+        <Card>
+          <CardHeader>
+            <CardTitle>Uploaded documents</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {docs.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No documents on this application.</p>
             ) : (
-              <div className="grid h-56 place-items-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
-                <span className="inline-flex items-center gap-2">
-                  <ImageIcon className="size-4" />
-                  No photo uploaded
-                </span>
-              </div>
+              docs.map((doc) => {
+                const status = (doc.verificationStatus ?? "").toLowerCase();
+                const verified = status === "verified";
+                const rejected = status === "rejected";
+                return (
+                  <div
+                    key={doc.key}
+                    className="flex flex-col gap-3 rounded-xl border border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-secondary text-muted-foreground">
+                        {doc.preview ? <ImageIcon className="size-4" /> : <FileText className="size-4" />}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="font-medium text-foreground">{doc.label}</p>
+                        <p className="break-words text-sm text-muted-foreground">{doc.fileName}</p>
+                        {doc.verificationNotes ? (
+                          <p className="mt-1 text-xs text-muted-foreground">{doc.verificationNotes}</p>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap shrink-0 items-center gap-2">
+                      <span
+                        className={cn(
+                          "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
+                          verified
+                            ? "bg-emerald-100 text-emerald-700"
+                            : rejected
+                              ? "bg-rose-100 text-rose-700"
+                              : doc.uploaded
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-secondary text-secondary-foreground",
+                        )}
+                      >
+                        {verified ? "Verified" : rejected ? "Rejected" : doc.uploaded ? "Needs check" : "Missing"}
+                      </span>
+                      {doc.url ? (
+                        <>
+                          <Button asChild size="sm" variant="outline">
+                            <a href={doc.url} target="_blank" rel="noreferrer">
+                              <ExternalLink className="size-3.5" />
+                              View
+                            </a>
+                          </Button>
+                          <Button asChild size="sm" variant="outline">
+                            <a href={doc.url} download={doc.fileName}>
+                              <Download className="size-3.5" />
+                              Download
+                            </a>
+                          </Button>
+                        </>
+                      ) : null}
+                      {doc.applicationDocumentId && !verified && !rejected ? (
+                        <>
+                          <Button
+                            size="sm"
+                            disabled={verify.isPending}
+                            onClick={() =>
+                              verify.mutate({
+                                applicationDocumentId: doc.applicationDocumentId!,
+                                verified: true,
+                              })
+                            }
+                          >
+                            {verify.isPending && verify.variables?.applicationDocumentId === doc.applicationDocumentId && verify.variables?.verified ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : null}
+                            Verify
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={verify.isPending}
+                            onClick={() =>
+                              verify.mutate({
+                                applicationDocumentId: doc.applicationDocumentId!,
+                                verified: false,
+                              })
+                            }
+                          >
+                            Reject
+                          </Button>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })
             )}
           </CardContent>
         </Card>
-      </aside>
+  );
 
+  const membershipFields = (
+    <>
+      <Field label="Affiliated" value={yn(draft.aviation.isAffiliated)} />
+      <Field label="Licence type" value={draft.aviation.isAffiliated ? dash(draft.aviation.licenseType) : "—"} />
+      <Field label="Licence number" value={draft.aviation.isAffiliated ? dash(draft.aviation.licenseNumber) : "—"} />
+      <Field label="Licence issuer" value={draft.aviation.isAffiliated ? dash(draft.aviation.licenseIssuer) : "—"} />
+      <Field label="Aircraft type" value={draft.aviation.isAffiliated ? dash(draft.aviation.aircraftType) : "—"} />
+      <Field label="Registration" value={draft.aviation.isAffiliated ? dash(draft.aviation.aircraftRegistration) : "—"} />
+      <Field label="Hangar" value={draft.aviation.isAffiliated ? dash(draft.aviation.hangarLocation) : "—"} />
+      <Field label="Applied for" value={membershipClassLabel(draft.membership.membershipType)} />
+      <Field label="Applicant signature" value={dash(draft.membership.applicantSignature)} />
+      <Field label="Signature date" value={formatKenyaDate(draft.membership.signatureDate)} />
+    </>
+  );
+
+  if (variant === "summary") {
+    return (
+      <div className="grid items-start gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+        {photoCard}
+        <Card>
+          <CardContent className="grid grid-cols-1 gap-x-6 gap-y-4 p-6 sm:grid-cols-2 lg:grid-cols-3">
+            {membershipFields}
+          </CardContent>
+        </Card>
+        <div className="lg:col-span-2">{supportersCard}</div>
+        <div className="lg:col-span-2">{documentsCard}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
+      <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">{photoCard}</aside>
       <div className="space-y-6">
         <Card>
           <CardHeader>
@@ -329,134 +505,8 @@ export function ApplicantReview({
             <Field label="Signature date" value={formatKenyaDate(draft.membership.signatureDate)} />
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Supporters, clubs and consent</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Field label="Proposer" value={dash(draft.supporters.proposer?.name)} />
-            <Field label="Member since" value={dash(draft.supporters.proposer?.yearOfJoining)} />
-            <Field label="Proposer phone" value={dash(draft.supporters.proposer?.phone)} />
-            <Field label="Seconder" value={dash(draft.supporters.seconder?.name)} />
-            <Field label="Member since" value={dash(draft.supporters.seconder?.yearOfJoining)} />
-            <Field label="Seconder phone" value={dash(draft.supporters.seconder?.phone)} />
-            <Field label="Member of another club" value={yn(draft.clubs.memberOfOtherClub)} />
-            <Field
-              label="Club names"
-              value={
-                (draft.clubs.otherClubs ?? [])
-                  .map((club) => club.name)
-                  .filter(Boolean)
-                  .join(", ") || "—"
-              }
-            />
-            <Field label="Privacy policy accepted" value={yn(Boolean(draft.consent.privacyPolicyAccepted))} />
-            <Field label="Declaration accepted" value={yn(Boolean(draft.consent.declarationAccepted))} />
-            <Field label="Declaration signature" value={dash(draft.consent.declarationSignature)} />
-            <Field label="Declaration date" value={formatKenyaDate(draft.consent.declarationDate)} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Uploaded documents</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {docs.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No documents on this application.</p>
-            ) : (
-              docs.map((doc) => {
-                const status = (doc.verificationStatus ?? "").toLowerCase();
-                const verified = status === "verified";
-                const rejected = status === "rejected";
-                return (
-                  <div
-                    key={doc.key}
-                    className="flex flex-col gap-3 rounded-xl border border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-secondary text-muted-foreground">
-                        {doc.preview ? <ImageIcon className="size-4" /> : <FileText className="size-4" />}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="font-medium text-foreground">{doc.label}</p>
-                        <p className="break-words text-sm text-muted-foreground">{doc.fileName}</p>
-                        {doc.verificationNotes ? (
-                          <p className="mt-1 text-xs text-muted-foreground">{doc.verificationNotes}</p>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap shrink-0 items-center gap-2">
-                      <span
-                        className={cn(
-                          "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
-                          verified
-                            ? "bg-emerald-100 text-emerald-700"
-                            : rejected
-                              ? "bg-rose-100 text-rose-700"
-                              : doc.uploaded
-                                ? "bg-amber-100 text-amber-800"
-                                : "bg-secondary text-secondary-foreground",
-                        )}
-                      >
-                        {verified ? "Verified" : rejected ? "Rejected" : doc.uploaded ? "Needs check" : "Missing"}
-                      </span>
-                      {doc.url ? (
-                        <>
-                          <Button asChild size="sm" variant="outline">
-                            <a href={doc.url} target="_blank" rel="noreferrer">
-                              <ExternalLink className="size-3.5" />
-                              View
-                            </a>
-                          </Button>
-                          <Button asChild size="sm" variant="outline">
-                            <a href={doc.url} download={doc.fileName}>
-                              <Download className="size-3.5" />
-                              Download
-                            </a>
-                          </Button>
-                        </>
-                      ) : null}
-                      {doc.applicationDocumentId && !verified && !rejected ? (
-                        <>
-                          <Button
-                            size="sm"
-                            disabled={verify.isPending}
-                            onClick={() =>
-                              verify.mutate({
-                                applicationDocumentId: doc.applicationDocumentId!,
-                                verified: true,
-                              })
-                            }
-                          >
-                            {verify.isPending && verify.variables?.applicationDocumentId === doc.applicationDocumentId && verify.variables?.verified ? (
-                              <Loader2 className="size-3.5 animate-spin" />
-                            ) : null}
-                            Verify
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={verify.isPending}
-                            onClick={() =>
-                              verify.mutate({
-                                applicationDocumentId: doc.applicationDocumentId!,
-                                verified: false,
-                              })
-                            }
-                          >
-                            Reject
-                          </Button>
-                        </>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </CardContent>
-        </Card>
+        {supportersCard}
+        {documentsCard}
       </div>
     </div>
   );

@@ -9,16 +9,17 @@ import {
   downloadExcelCsv,
   printHtmlReport,
   rowsToTableHtml,
+  selectExportColumns,
   type FinanceExportColumn,
 } from "@/utils/financeExport";
 
 export const APPLICATION_EXPORT_COLS: FinanceExportColumn<ApplicationRow>[] = [
-  { header: "Application no", value: (row) => applicationReference(row) },
-  { header: "Applicant", value: (row) => applicantDisplayName(row) },
-  { header: "Class", value: (row) => row.membershipTypeName ?? "" },
-  { header: "Status", value: (row) => applicationStage(row) },
-  { header: "Applied at", value: (row) => formatMembershipDate(row.appliedAt) },
-  { header: "Updated at", value: (row) => formatMembershipDate(row.updatedAt) },
+  { id: "applicationNo", header: "Application no", value: (row) => applicationReference(row) },
+  { id: "applicant", header: "Applicant", value: (row) => applicantDisplayName(row) },
+  { id: "membershipType", header: "Class", value: (row) => row.membershipTypeName ?? "" },
+  { id: "status", header: "Status", value: (row) => applicationStage(row) },
+  { id: "appliedAt", header: "Applied at", value: (row) => formatMembershipDate(row.appliedAt) },
+  { id: "updatedAt", header: "Updated at", value: (row) => formatMembershipDate(row.updatedAt) },
 ];
 
 export type ApplicationImportRow = {
@@ -45,12 +46,16 @@ const IMPORT_TEMPLATE_COLS: FinanceExportColumn<ApplicationImportRow>[] = [
   { header: "MembershipClass", value: (row) => row.membershipClass },
 ];
 
-export function downloadApplicationsExcel(filename: string, rows: ApplicationRow[]) {
-  downloadExcelCsv(filename, APPLICATION_EXPORT_COLS, rows);
+export function downloadApplicationsExcel(filename: string, rows: ApplicationRow[], columns?: string[] | null) {
+  downloadExcelCsv(filename, selectExportColumns(APPLICATION_EXPORT_COLS, columns), rows);
 }
 
-export function printApplications(title: string, rows: ApplicationRow[]) {
-  return printHtmlReport(title, rowsToTableHtml(APPLICATION_EXPORT_COLS, rows), "Applicant Management");
+export function printApplications(title: string, rows: ApplicationRow[], columns?: string[] | null) {
+  return printHtmlReport(
+    title,
+    rowsToTableHtml(selectExportColumns(APPLICATION_EXPORT_COLS, columns), rows),
+    "Applicant Management",
+  );
 }
 
 export function downloadApplicationImportTemplate() {

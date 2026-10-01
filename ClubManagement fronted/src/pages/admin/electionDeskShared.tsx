@@ -59,6 +59,7 @@ export type DeskProxy = {
   isValid?: boolean;
   reviewStatus?: string | null;
   reviewReason?: string | null;
+  votingWeight?: number;
 };
 
 export type Desk = {
@@ -136,7 +137,14 @@ export function instructionLabel(row: DeskProxy) {
 
 export function proxyReviewStatus(row: DeskProxy) {
   const status = (row.reviewStatus ?? "").toUpperCase();
-  if (status === "PENDING" || status === "APPROVED" || status === "REJECTED" || status === "LATE") {
+  if (
+    status === "PENDING" ||
+    status === "APPROVED" ||
+    status === "REJECTED" ||
+    status === "LATE" ||
+    status === "AWAITING_HOLDER" ||
+    status === "RETURNED"
+  ) {
     return status;
   }
   if (row.depositedOnTime === false || row.isValid === false) return "LATE";
@@ -144,17 +152,20 @@ export function proxyReviewStatus(row: DeskProxy) {
 }
 
 export function proxyStatusLabel(status: string) {
-  if (status === "PENDING") return "Pending review";
+  if (status === "AWAITING_HOLDER") return "Awaiting member";
+  if (status === "PENDING") return "Awaiting approval";
   if (status === "APPROVED") return "Approved";
   if (status === "REJECTED") return "Rejected";
+  if (status === "RETURNED") return "Returned";
   if (status === "LATE") return "Late";
   return status;
 }
 
 export function proxyStatusTone(status: string) {
   if (status === "APPROVED") return "bg-emerald-600";
-  if (status === "REJECTED") return "bg-red-600";
+  if (status === "REJECTED" || status === "RETURNED") return "bg-red-600";
   if (status === "LATE") return "bg-slate-500";
+  if (status === "AWAITING_HOLDER") return "bg-sky-700";
   return "bg-amber-600";
 }
 

@@ -71,6 +71,9 @@ export function memberProfileToDraft(profile: MemberProfile): ApplicationDraft {
       membershipType: profile.governance.membershipTypeCode || profile.governance.membershipTypeName,
       applicantSignature: "",
       signatureDate: profile.joinedDate?.slice(0, 10) ?? "",
+      invoiceTo: profile.invoiceTo === "CORPORATE" || profile.invoiceTo === "BOTH" ? profile.invoiceTo : "INDIVIDUAL",
+      corporateCompanyId: profile.corporateCompanyId ?? null,
+      corporateCompanyName: profile.corporateCompanyName ?? "",
     },
     supporters: {
       proposer: {
@@ -183,5 +186,10 @@ export function draftToMemberUpdate(draft: ApplicationDraft, membershipNo: strin
     joinedDate: draft.membership.signatureDate || null,
     membershipTypeId,
     changeReason: "Admin updated member from application-style form",
+    invoiceTo: draft.membership.invoiceTo || "INDIVIDUAL",
+    corporateCompanyId:
+      draft.membership.invoiceTo === "CORPORATE" || draft.membership.invoiceTo === "BOTH"
+        ? draft.membership.corporateCompanyId ?? null
+        : null,
   };
 }

@@ -22,6 +22,14 @@ public class MemberDashboardDto
     /// <summary>Members who appointed this profile as proxy for an active meeting.</summary>
     public int PendingProxies { get; set; }
     public int ChildrenRequiringOwnMembership { get; set; }
+    public decimal OutstandingBalance { get; set; }
+    public decimal AvailableCredit { get; set; }
+    public string CreditStatus { get; set; } = "NO AVAILABLE CREDIT";
+    public decimal TotalInvoiced { get; set; }
+    public decimal TotalAllocated { get; set; }
+    public decimal AnnualSubscription { get; set; }
+    public decimal AnnualPaid { get; set; }
+    public string AccountFinancialStatus { get; set; } = "UNPAID";
 }
 
 public class MemberCardFlagsDto
@@ -85,6 +93,8 @@ public class MemberSubscriptionDto
     public bool VotingBlockedByArrears { get; set; }
     /// <summary>Spendable club-card credit from overpayments (not dues outstanding).</summary>
     public decimal ClubCreditBalance { get; set; }
+    /// <summary>Unallocated advance receipts plus existing club-card credit.</summary>
+    public decimal AvailableCredit { get; set; }
     public int ContinuousMembershipYears { get; set; }
     public int? AgeYears { get; set; }
     public string StatusCode { get; set; } = string.Empty;
@@ -280,6 +290,8 @@ public class MemberPayRequest
     public string? ChequeFileName { get; set; }
     public string? ChequeFileUrl { get; set; }
     public string? ReferenceNote { get; set; }
+    /// <summary>MEMBER or CORPORATE. Names who owns any surplus on this receipt.</summary>
+    public string? CreditOwner { get; set; }
     /// <summary>Optional override (PENDING | PAID | PARTIALLY_PAID). Defaults by method.</summary>
     public string? PaymentStatusCode { get; set; }
     /// <summary>Optional line description for advance / custom fees.</summary>

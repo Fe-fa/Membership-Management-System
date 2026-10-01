@@ -49,6 +49,7 @@ public class MemberDashboardService : IMemberDashboardService
     private readonly IMemberAccountProvisioner _accounts;
     private readonly IEndorsementInviteService _endorsementInvites;
     private readonly IManagerStageService _managerStage;
+    private readonly IPaymentAllocationService _allocations;
 
     public MemberDashboardService(
         ApplicationModuleDbContext db,
@@ -56,7 +57,8 @@ public class MemberDashboardService : IMemberDashboardService
         INonMembershipBillingService nmBilling,
         IMemberAccountProvisioner accounts,
         IEndorsementInviteService endorsementInvites,
-        IManagerStageService managerStage)
+        IManagerStageService managerStage,
+        IPaymentAllocationService allocations)
     {
         _db = db;
         _finance = finance;
@@ -64,6 +66,7 @@ public class MemberDashboardService : IMemberDashboardService
         _accounts = accounts;
         _endorsementInvites = endorsementInvites;
         _managerStage = managerStage;
+        _allocations = allocations;
     }
 
     public async Task<MemberDashboardDto?> GetMineAsync(long profileId, CancellationToken cancellationToken)
@@ -110,6 +113,8 @@ public class MemberDashboardService : IMemberDashboardService
         var sittingCommittee = await _db.CommitteeMembers.AsNoTracking().AnyAsync(
             m => m.IsActive && m.ProfileId == profileId && m.Committee.IsActive,
             cancellationToken);
+        var summary = await _allocations.GetFinancialSummaryAsync(account.AccountId, cancellationToken);
+        var credit = await _allocations.GetAdvanceCreditPositionAsync(account.AccountId, cancellationToken);
 
         return new MemberDashboardDto
         {
@@ -151,7 +156,15 @@ public class MemberDashboardService : IMemberDashboardService
             StandingDetail = standing.Detail,
             PendingEndorsements = pending,
             PendingProxies = pendingProxies,
-            ChildrenRequiringOwnMembership = children21
+            ChildrenRequiringOwnMembership = children21,
+            OutstandingBalance = summary.OutstandingBalance,
+            AvailableCredit = summary.AvailableCredit,
+            CreditStatus = credit.Status,
+            TotalInvoiced = summary.InvoiceAmount,
+            TotalAllocated = summary.PaidApplied,
+            AnnualSubscription = summary.Invoices.Where(i => i.Year == DateTime.UtcNow.Year).Sum(i => i.InvoiceAmount),
+            AnnualPaid = summary.Invoices.Where(i => i.Year == DateTime.UtcNow.Year).Sum(i => i.PaidApplied),
+            AccountFinancialStatus = summary.AccountStatus
         };
     }
 
@@ -193,8 +206,8 @@ public class MemberDashboardService : IMemberDashboardService
             && jd > new DateOnly(year, 6, 30);
 
         var joiningRaw = await ResolveJoiningDuesAsync(account, cancellationToken);
+        // A joining payment is not an invoice. Without a published joining invoice the schedule quote is not a balance.
         var joiningInvoiced = joiningRaw.Waived
-            || joiningRaw.Paid > 0.01m
             || await HasPublishedJoiningInvoiceAsync(account.AccountId, account.ApplicationId, cancellationToken);
         var joining = joiningInvoiced
             ? joiningRaw
@@ -215,7 +228,6 @@ public class MemberDashboardService : IMemberDashboardService
         }
         else if (invoiceIssued)
         {
-                await _finance.ReconcileAccountDuesAsync(account.AccountId, cancellationToken);
                 // Mid-year joiners (after 30 June) show half-rate indicator and adjust unpaid schedule once.
                 if (halfYear)
                 {
@@ -237,10 +249,7 @@ public class MemberDashboardService : IMemberDashboardService
                     .FirstOrDefaultAsync(s => s.AccountId == account.AccountId && s.SubscriptionYear == year, cancellationToken);
                 amountDue = sub?.AmountDue ?? 0;
                 amountPaid = sub?.AmountPaid ?? 0;
-                var priorSubs = await _db.Subscriptions.AsNoTracking()
-                    .Where(s => s.AccountId == account.AccountId && s.SubscriptionYear < year && !s.WaivedFlag)
-                    .ToListAsync(cancellationToken);
-                var priorUnpaid = priorSubs.Sum(s => Math.Max(0, s.AmountDue - s.AmountPaid));
+                var priorUnpaid = await InvoicedArrearsAsync(account.AccountId, year, cancellationToken);
                 var yearExcess = Math.Max(0, amountPaid - amountDue);
                 broughtForward = Math.Max(0, priorUnpaid - yearExcess);
                 outstanding = Math.Max(0, amountDue - amountPaid) + broughtForward;
@@ -254,10 +263,7 @@ public class MemberDashboardService : IMemberDashboardService
         {
             amountDue = 0;
             amountPaid = 0;
-            var priorSubs = await _db.Subscriptions.AsNoTracking()
-                .Where(s => s.AccountId == account.AccountId && s.SubscriptionYear < year && !s.WaivedFlag)
-                .ToListAsync(cancellationToken);
-            broughtForward = priorSubs.Sum(s => Math.Max(0, s.AmountDue - s.AmountPaid));
+            broughtForward = await InvoicedArrearsAsync(account.AccountId, year, cancellationToken);
             outstanding = broughtForward;
             if (joiningInvoiced && joining.Outstanding > 0.01m)
             {
@@ -283,10 +289,6 @@ public class MemberDashboardService : IMemberDashboardService
             detail = "Joining fee invoice is unpaid.";
         }
 
-        var awaitingRefund = await _db.InvoiceCreditNotes.AsNoTracking()
-            .Where(c => c.AccountId == account.AccountId)
-            .SumAsync(c => (decimal?)c.AwaitingRefundAmount, cancellationToken) ?? 0m;
-        var clubCredit = Math.Max(0, joining.Paid - joining.Due) + Math.Max(0, amountPaid - amountDue) + awaitingRefund;
         var upcomingYear = (int?)null;
         decimal upcomingDue = 0, upcomingPaid = 0, upcomingOutstanding = 0;
         if (pays && !isLifeExempt)
@@ -306,9 +308,11 @@ public class MemberDashboardService : IMemberDashboardService
         }
 
         var openCharges = await ListOpenBilledChargesAsync(account.AccountId, cancellationToken);
-        var billedExtras = openCharges.Sum(c => c.Amount);
-        var membershipDues = outstanding + joining.Outstanding + upcomingOutstanding;
-        var duesBalance = membershipDues + billedExtras;
+        var availableCredit = await _allocations.GetAvailableCreditAsync(account.AccountId, cancellationToken);
+        var joiningOpen = joining.Outstanding;
+
+        var membershipDues = outstanding + joiningOpen + upcomingOutstanding;
+        var duesBalance = membershipDues + openCharges.Sum(c => c.Amount);
         var canVote = account.MembershipType.CanVote;
         var votingBlocked = canVote && membershipDues > 0;
 
@@ -334,7 +338,7 @@ public class MemberDashboardService : IMemberDashboardService
                 detail = "Joining fee and current-year subscription are settled.";
             }
         }
-        else if (upcomingOutstanding > 0 && outstanding <= 0 && joining.Outstanding <= 0)
+        else if (upcomingOutstanding > 0 && outstanding <= 0 && joiningOpen <= 0)
         {
             detail = $"{upcomingYear} annual subscription has been generated and is unpaid ({upcomingOutstanding:0.##} KES).";
         }
@@ -355,7 +359,7 @@ public class MemberDashboardService : IMemberDashboardService
             DiscountPercent = discount,
             JoiningFeeDue = joining.Due,
             JoiningPaid = joining.Paid,
-            JoiningOutstanding = joining.Outstanding,
+            JoiningOutstanding = joiningOpen,
             EntranceFeeWaived = joining.Waived,
             Balance = duesBalance,
             MembershipNo = account.MembershipNo,
@@ -367,7 +371,8 @@ public class MemberDashboardService : IMemberDashboardService
             HalfYearProrated = halfYear,
             CanVote = canVote,
             VotingBlockedByArrears = votingBlocked,
-            ClubCreditBalance = clubCredit,
+            ClubCreditBalance = availableCredit,
+            AvailableCredit = availableCredit,
             ContinuousMembershipYears = years,
             AgeYears = age,
             StatusCode = account.CurrentMemberStatus?.Code ?? "",
@@ -403,7 +408,7 @@ public class MemberDashboardService : IMemberDashboardService
                 "JOINING",
                 joining.Due,
                 joining.Paid,
-                joining.Outstanding,
+                joiningOpen,
                 waived: joining.Waived,
                 cancellationToken),
             OpenCharges = openCharges
@@ -443,6 +448,64 @@ public class MemberDashboardService : IMemberDashboardService
         };
     }
 
+    /// <summary>
+    /// Cash received before an invoice exists. The receipt stays unallocated and shows as available credit.
+    /// </summary>
+    private async Task<PaymentRowDto> RecordUninvoicedAdvanceAsync(
+        Entities.MembershipAccount.MAccount account,
+        MemberPayRequest request,
+        long? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var note = string.IsNullOrWhiteSpace(request.ReferenceNote)
+            ? "Advance payment — held as credit until an invoice is issued"
+            : request.ReferenceNote.Trim();
+        var advance = await _allocations.ReceiveAdvancePaymentAsync(
+            new ReceiveAdvancePaymentRequest(
+                account.AccountId,
+                request.Amount,
+                request.PaymentMethodId,
+                request.PaymentDate,
+                note,
+                request.MpesaCode,
+                request.ChequeNo,
+                request.ChequeBankName,
+                request.ChequeBankCode,
+                request.ChequeDate),
+            actorUserId,
+            cancellationToken);
+        await _finance.ReconcileAccountDuesAsync(account.AccountId, cancellationToken);
+
+        var method = await _db.PaymentMethods.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.PaymentMethodId == request.PaymentMethodId, cancellationToken);
+
+        return new PaymentRowDto(
+            advance.TransactionId,
+            advance.ReceiptNumber,
+            null,
+            method?.Name,
+            advance.StatusCode,
+            advance.Amount,
+            request.PaymentDate,
+            request.MpesaCode,
+            request.ChequeNo,
+            "Advance payment / credit",
+            note,
+            request.ChequeBankName,
+            request.ChequeBankCode,
+            request.ChequeDate,
+            request.ChequeFileName,
+            request.ChequeFileUrl,
+            method?.Code,
+            account.MembershipNo,
+            advance.StatusCode,
+            "ADVANCE",
+            account.ApplicationId,
+            null,
+            DateTime.UtcNow,
+            account.ProfileId);
+    }
+
     public async Task<PaymentRowDto> PaySubscriptionAsync(long profileId, MemberPayRequest request, long? actorUserId, CancellationToken cancellationToken)
     {
         var account = await LoadAccountAsync(profileId, cancellationToken)
@@ -455,9 +518,12 @@ public class MemberDashboardService : IMemberDashboardService
         if (feeCode is "CUSTOM" or "MISC" or "OTHER_FEE") feeCode = "OTHER";
         if (feeCode is "OUTSIDE_FOOD" or "OUTSIDE_CATERING") feeCode = "CORKAGE";
 
+        if (feeCode is "ADVANCE" or "CREDIT" or "PREPAYMENT")
+            return await RecordUninvoicedAdvanceAsync(account, request, actorUserId, cancellationToken);
+
         var allowed = feeCode is "JOINING" or "ANNUAL" or "ACCOMMODATION" or "CORKAGE" or "OTHER";
         if (!allowed)
-            throw new InvalidOperationException("Fee type must be JOINING, ANNUAL, ACCOMMODATION, CORKAGE or OTHER.");
+            throw new InvalidOperationException("Fee type must be JOINING, ANNUAL, ACCOMMODATION, CORKAGE, OTHER or ADVANCE.");
 
         if (feeCode == "ANNUAL" && !account.MembershipType.CanAccessSubscriptions)
             throw new InvalidOperationException("This membership class does not pay subscriptions.");
@@ -465,16 +531,15 @@ public class MemberDashboardService : IMemberDashboardService
         {
             var billYear = request.SubscriptionYear ?? DateTime.UtcNow.Year;
             if (!await HasPublishedInvoiceAsync(account.AccountId, billYear, cancellationToken))
-                throw new InvalidOperationException(
-                    "Finance has not issued an invoice for this year yet. Amounts appear after the invoice is generated.");
+                return await RecordUninvoicedAdvanceAsync(account, request, actorUserId, cancellationToken);
         }
         if (feeCode == "JOINING")
         {
             if (!account.EntranceFeeWaivedFlag
                 && !await HasPublishedJoiningInvoiceAsync(account.AccountId, account.ApplicationId, cancellationToken))
-                throw new InvalidOperationException(
-                    "Finance has not issued an invoice for the joining fee yet. Amounts appear after the invoice is generated.");
+                return await RecordUninvoicedAdvanceAsync(account, request, actorUserId, cancellationToken);
         }
+        decimal? openChargeAmount = null;
         if (feeCode is "ACCOMMODATION" or "CORKAGE" or "OTHER")
         {
             var open = await ListOpenBilledChargesAsync(account.AccountId, cancellationToken);
@@ -485,6 +550,7 @@ public class MemberDashboardService : IMemberDashboardService
                 throw new InvalidOperationException(
                     "No invoice has been issued for this charge yet. Amounts appear after Finance generates the invoice.");
             request.NmChargeId = billed.Id;
+            openChargeAmount = billed.Amount;
         }
 
         var fee = await _db.FeeTypes.FirstOrDefaultAsync(
@@ -548,6 +614,10 @@ public class MemberDashboardService : IMemberDashboardService
             note = string.IsNullOrWhiteSpace(note) ? phoneNote : $"{note} | {phoneNote}";
         }
 
+        var settleAmount = request.Amount;
+        if (openChargeAmount is decimal openAmount && request.Amount > openAmount + 0.009m)
+            settleAmount = openAmount;
+
         var row = await _finance.RecordPaymentAsync(new RecordPaymentRequest(
             account.AccountId,
             account.ApplicationId,
@@ -564,7 +634,8 @@ public class MemberDashboardService : IMemberDashboardService
             request.ChequeDate,
             request.ChequeFileName,
             request.ChequeFileUrl,
-            request.SubscriptionYear), actorUserId, cancellationToken);
+            request.SubscriptionYear,
+            request.CreditOwner), actorUserId, cancellationToken);
 
         var statusCode = (row.StatusCode ?? row.Status ?? "").Trim().ToUpperInvariant().Replace("-", "_").Replace(" ", "_");
         if (statusCode is "PAID" or "SETTLED" or "WAIVED" or "PARTIALLY_PAID"
@@ -575,7 +646,7 @@ public class MemberDashboardService : IMemberDashboardService
                 await _nmBilling.SettleFromMemberPaymentAsync(
                     account.AccountId,
                     feeCode,
-                    request.Amount,
+                    settleAmount,
                     method.Code ?? "CASH",
                     request.MpesaCode ?? request.ChequeNo ?? request.ReferenceNote,
                     request.NmChargeId,
@@ -1852,9 +1923,7 @@ public class MemberDashboardService : IMemberDashboardService
         var sub = await _db.Subscriptions.AsNoTracking()
             .FirstOrDefaultAsync(s => s.AccountId == accountId && s.SubscriptionYear == year, cancellationToken);
         var outstanding = sub is null ? 0 : Math.Max(0, sub.AmountDue - sub.AmountPaid);
-        outstanding += await _db.Subscriptions.AsNoTracking()
-            .Where(s => s.AccountId == accountId && s.SubscriptionYear < year && !s.WaivedFlag && s.AmountPaid < s.AmountDue)
-            .SumAsync(s => s.AmountDue - s.AmountPaid, cancellationToken);
+        outstanding += await InvoicedArrearsAsync(accountId, year, cancellationToken);
 
         // Paid-up members are in good standing even if account status was not yet restored.
         if (outstanding <= 0)
@@ -1868,6 +1937,31 @@ public class MemberDashboardService : IMemberDashboardService
         if (today >= new DateOnly(year, 2, 1))
             return ("Posted", "Reminder: unpaid members are posted after 28 February.");
         return ("InGoodStanding", "Annual subscription is due 1 January.");
+    }
+
+    private async Task<decimal> InvoicedArrearsAsync(long accountId, int beforeYear, CancellationToken cancellationToken)
+    {
+        var invoicedYears = await _db.MembershipInvoices.AsNoTracking()
+            .Where(i => i.AccountId == accountId && i.Year < beforeYear && i.PublishedToMember)
+            .Select(i => i.Year)
+            .ToListAsync(cancellationToken);
+        var billedYears = await _db.BillingDocuments.AsNoTracking()
+            .Where(d =>
+                d.AccountId == accountId
+                && d.Year < beforeYear
+                && d.Kind == "INVOICE"
+                && d.FeeType == "ANNUAL"
+                && (d.Status == "APPROVED" || d.Status == "PUBLISHED"))
+            .Where(d => d.Year != null)
+            .Select(d => d.Year!.Value)
+            .ToListAsync(cancellationToken);
+        var years = invoicedYears.Concat(billedYears).Distinct().ToList();
+        if (years.Count == 0) return 0;
+        var rows = await _db.Subscriptions.AsNoTracking()
+            .Where(s => s.AccountId == accountId && years.Contains(s.SubscriptionYear) && !s.WaivedFlag)
+            .Select(s => new { s.AmountDue, s.AmountPaid })
+            .ToListAsync(cancellationToken);
+        return rows.Sum(s => Math.Max(0, s.AmountDue - s.AmountPaid));
     }
 
     private async Task<bool> HasPublishedInvoiceAsync(long accountId, int year, CancellationToken cancellationToken)

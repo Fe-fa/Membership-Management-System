@@ -13,6 +13,7 @@
   Database,
   FileClock,
   FileText,
+  FolderOpen,
   Globe,
   BookUser,
   CircleAlert,
@@ -36,6 +37,7 @@
   ScrollText,
   Vote,
   Wallet,
+  HandCoins,
   Wine,
   Gavel,
   type LucideIcon,
@@ -112,11 +114,17 @@ function electedMemberModuleNav(pathname: string): AppNavGroup[] {
     });
   }
   if (pathname === "/events" || pathname.startsWith("/events/")) {
-    return memberCardNav("Events", {
-      label: "Events",
-      to: "/events",
-      icon: CalendarDays,
-    });
+    return [
+      {
+        label: "Events",
+        collapsible: true,
+        items: [
+          { label: "Discover", to: "/events", icon: CalendarDays, search: { section: "home" } },
+          { label: "My events", to: "/events", icon: ClipboardList, search: { section: "mine" } },
+          { label: "Calendar", to: "/events", icon: CalendarDays, search: { section: "calendar" } },
+        ],
+      },
+    ];
   }
   if (pathname === "/guests" || pathname.startsWith("/guests/")) {
     return memberCardNav("Guests", {
@@ -372,11 +380,28 @@ const MANAGER_STAGE_NAV: AppNavGroup[] = withDashboard("/members", [
   },
 ], { view: "manager", section: "dashboard" });
 
+const EVENTS_NAV: AppNavGroup[] = withDashboard("/admin", [
+  {
+    label: "Events",
+    collapsible: true,
+    items: [
+      { label: "All events", to: "/events", icon: CalendarDays, search: { section: "home" } },
+      { label: "Create event", to: "/events", icon: Plus, search: { section: "create" } },
+      { label: "Event calendar", to: "/events", icon: CalendarDays, search: { section: "calendar" } },
+      { label: "Registrations", to: "/events", icon: ClipboardList, search: { section: "registrations" } },
+      { label: "Attendance", to: "/events", icon: ClipboardCheck, search: { section: "attendance" } },
+      { label: "Event categories", to: "/events", icon: FolderOpen, search: { section: "categories" } },
+      { label: "Reports", to: "/events", icon: FileText, search: { section: "reports" } },
+    ],
+  },
+]);
+
 const FINANCE_NAV: AppNavGroup[] = withDashboard("/finance", [
   {
     label: "Finance",
     items: [
       { label: "Finance desk", to: "/finance/desk", icon: Wallet, match: ["/finance/desk"] },
+      { label: "Advance credit", to: "/finance/advances", icon: HandCoins, match: ["/finance/advances"] },
       { label: "Invoices", to: "/finance/invoices", icon: FileText, match: ["/finance/invoices"] },
       { label: "Issued invoices", to: "/finance/invoices/issued", icon: FileClock, match: ["/finance/invoices/issued"] },
       {
@@ -483,7 +508,7 @@ const ELECTION_NAV: AppNavGroup[] = withDashboard("/election", [
       { label: "Meeting notice", to: "/election/notice", icon: FileText, exact: true },
       { label: "Officers & ballot", to: "/election/officers", icon: ShieldCheck, exact: true },
       { label: "Live tally", to: "/election/tally", icon: ClipboardList, exact: true },
-      { label: "Lodged proxies", to: "/election/proxies", icon: UsersRound, exact: true },
+      { label: "Proxy appointments", to: "/election/proxies", icon: UsersRound, exact: true },
       { label: "Nominations", to: "/election/nominations", icon: UserPlus, exact: true },
       { label: "Meeting minutes", to: "/election/minutes", icon: ScrollText, exact: true },
     ],
@@ -659,6 +684,7 @@ function staffModuleNav(pathname: string, search?: unknown): AppNavGroup[] {
     return MANAGER_STAGE_NAV;
   }
 
+  if (pathname === "/events" || pathname.startsWith("/events/")) return EVENTS_NAV;
   if (pathname === "/reception" || pathname.startsWith("/reception/")) return RECEPTION_NAV;
   if (isMemberDeskPath(pathname)) return MEMBER_DESK_NAV;
   if (isManageRecordsPath(pathname)) return MANAGE_RECORDS_NAV;

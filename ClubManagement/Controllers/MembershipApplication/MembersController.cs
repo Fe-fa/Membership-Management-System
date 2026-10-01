@@ -1,5 +1,8 @@
+using ClubManagement.Auth;
 using ClubManagement.Data.MembershipApplication;
 using ClubManagement.Entities;
+using ClubManagement.Services.Finance;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,11 +12,44 @@ namespace ClubManagement.Controllers.MembershipApplication;
 [Route("api/members")]
 public class MembersController : ControllerBase
 {
-    private readonly ApplicationModuleDbContext _dbContext;
+    private static readonly string[] FinanceRoles = ["ADMIN", "SUPER_ADMIN", "GENERAL_MANAGER", "TREASURER", "CHAIRMAN"];
 
-    public MembersController(ApplicationModuleDbContext dbContext)
+    private readonly ApplicationModuleDbContext _dbContext;
+    private readonly IPaymentAllocationService _allocations;
+
+    public MembersController(ApplicationModuleDbContext dbContext, IPaymentAllocationService allocations)
     {
         _dbContext = dbContext;
+        _allocations = allocations;
+    }
+
+    [Authorize]
+    [HttpGet("{memberId:long}/financial-summary")]
+    public async Task<ActionResult<MemberFinancialSummaryDto>> FinancialSummary(
+        long memberId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var summary = await _allocations.GetFinancialSummaryAsync(memberId, cancellationToken);
+            if (!await CanReadMemberFinanceAsync(summary.MemberId, cancellationToken))
+                return Forbid();
+            return Ok(summary);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    private async Task<bool> CanReadMemberFinanceAsync(long accountId, CancellationToken cancellationToken)
+    {
+        if (FinanceRoles.Any(role => User.IsInRole(role)))
+            return true;
+        var profileId = User.ProfileId();
+        if (profileId is null) return false;
+        return await _dbContext.Accounts.AsNoTracking()
+            .AnyAsync(a => a.AccountId == accountId && a.ProfileId == profileId && !a.IsDeleted, cancellationToken);
     }
 
     /// <summary>

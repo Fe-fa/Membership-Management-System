@@ -19,7 +19,7 @@ public class FilesController : ControllerBase
 
     private static readonly HashSet<string> AllowedPurposes = new(StringComparer.OrdinalIgnoreCase)
     {
-        "photo", "cv", "license", "idPassport", "cheque", "chequeAnnual", "chequeJoining", "proxy"
+        "photo", "cv", "license", "idPassport", "cheque", "chequeAnnual", "chequeJoining", "proxy", "papers", "eventImage"
     };
 
     private static readonly HashSet<string> AllowedContentTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -81,6 +81,12 @@ public class FilesController : ControllerBase
         if (!AllowedContentTypes.Contains(contentType))
         {
             return BadRequest(new { message = $"Unsupported file type '{contentType}'." });
+        }
+
+        if (string.Equals(purpose, "eventImage", StringComparison.OrdinalIgnoreCase)
+            && !contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { message = "Event images must be a picture file." });
         }
 
         var webRoot = _environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot");

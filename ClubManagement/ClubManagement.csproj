@@ -34,6 +34,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="Services\Finance\New folder\**\*.cs" />
+    <Content Remove="Services\Finance\New folder\**" />
+    <EmbeddedResource Remove="Services\Finance\New folder\**" />
+    <None Remove="Services\Finance\New folder\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Folder Include="Data\MembershipAccount\" />
     <Folder Include="DTOs\MembershipAccount\" />
     <Folder Include="Services\MembershipAccount\" />

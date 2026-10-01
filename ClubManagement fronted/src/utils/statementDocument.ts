@@ -1,6 +1,4 @@
 import { clubLogoUrl } from "./clubLogo";
-
-/** INVOICE = billed charge (Total only). PAYMENT = money into the club. REFUND = refund/reversal out. */
 export type StatementLineKind = "INVOICE" | "PAYMENT" | "REFUND";
 
 export type StatementLine = {
@@ -12,6 +10,8 @@ export type StatementLine = {
   amount: number;
   kind?: StatementLineKind | string | null;
   transactionId?: number | null;
+  /** Shown on the member statement when a company is billed. Does not move the balance. */
+  informational?: boolean;
 };
 
 export type StatementDocument = {
@@ -30,6 +30,8 @@ export type StatementDocument = {
   audience?: string | null;
   applicationId?: number | null;
   email?: string | null;
+  outstanding?: number;
+  availableCredit?: number;
 };
 
 const FALLBACK_CLUB = "Aero Club of East Africa";
@@ -84,16 +86,16 @@ function issuedStamp() {
     minute: "2-digit",
   });
 }
-
-/** Kind is the only classifier. Never place an invoice in Money in or Money out. */
 export function statementLineKind(line: Pick<StatementLine, "kind" | "amount">): StatementLineKind {
   const raw = (line.kind ?? "").trim().toUpperCase();
   if (raw === "PAYMENT" || raw === "INVOICE" || raw === "REFUND") return raw;
-  // Legacy signed lines (no kind): positive = payment in, negative = invoice charge — never a refund.
   return (Number(line.amount) || 0) >= 0 ? "PAYMENT" : "INVOICE";
 }
 
 export function applyStatementLine(running: number, line: StatementLine) {
+  if (line.informational) {
+    return { kind: statementLineKind(line), moneyIn: 0, moneyOut: 0, next: running };
+  }
   const amount = Math.abs(Number(line.amount) || 0);
   const kind = statementLineKind(line);
   if (kind === "PAYMENT") {
@@ -102,11 +104,24 @@ export function applyStatementLine(running: number, line: StatementLine) {
   if (kind === "REFUND") {
     return { kind, moneyIn: 0, moneyOut: amount, next: running + amount };
   }
-  return { kind, moneyIn: 0, moneyOut: 0, next: running + amount };
+  return { kind, moneyIn: 0, moneyOut: amount, next: running + amount };
+}
+
+function balanceText(value: number) {
+  const formatted = money(Math.abs(value));
+  if (Math.abs(value) < 0.005) return "0.00";
+  return value > 0 ? `${formatted} DR` : `${formatted} CR`;
 }
 
 function moneyOrZero(value: number) {
   return money(value || 0);
+}
+
+function lineLabel(line: StatementLine) {
+  const fee = line.fee?.trim() || "—";
+  const receipt = line.receipt?.trim();
+  if (!receipt || fee.includes(receipt)) return fee;
+  return `${fee} · ${receipt}`;
 }
 
 export function buildStatementHtml(doc: StatementDocument) {
@@ -115,13 +130,18 @@ export function buildStatementHtml(doc: StatementDocument) {
   const membershipNo = doc.membershipNo?.trim() || "—";
   const membershipType = doc.membershipType?.trim() || "—";
   const issuedBy = doc.issuedBy?.trim() || "—";
-  const isApplicant = (doc.audience ?? "").toUpperCase() === "APPLICANT";
+  const audience = (doc.audience ?? "").toUpperCase();
+  const isApplicant = audience === "APPLICANT";
+  const isCorporate = audience === "CORPORATE";
   const lines = doc.lines ?? [];
   const title = `Statement ${doc.from ?? ""} to ${doc.to ?? ""}`.trim();
-  const numberLabel = isApplicant ? "Application no." : "Membership no.";
+  const numberLabel = isApplicant ? "Application no." : isCorporate ? "Company code" : "Membership no.";
+  const typeLabel = isCorporate ? "Account" : "Membership type";
   const subtitle = isApplicant
     ? "Applicant statement of invoices"
-    : "Member statement of invoices";
+    : isCorporate
+      ? "Corporate statement of invoices"
+      : "Member statement of invoices";
 
   let running = doc.openingBalance ?? 0;
   const bodyRows: string[] = [
@@ -130,7 +150,7 @@ export function buildStatementHtml(doc: StatementDocument) {
       <td>Opening balance</td>
       <td class="amt">${escapeHtml(moneyOrZero(0))}</td>
       <td class="amt">${escapeHtml(moneyOrZero(0))}</td>
-      <td class="amt">${escapeHtml(money(running))}</td>
+      <td class="amt">${escapeHtml(balanceText(running))}</td>
     </tr>`,
   ];
 
@@ -140,13 +160,15 @@ export function buildStatementHtml(doc: StatementDocument) {
     for (const line of lines) {
       const moved = applyStatementLine(running, line);
       running = moved.next;
+      const moneyIn = line.informational ? "—" : moneyOrZero(moved.moneyIn);
+      const moneyOut = line.informational ? "—" : moneyOrZero(moved.moneyOut);
       bodyRows.push(
         `<tr>
           <td>${escapeHtml(statementDate(line.date))}</td>
-          <td>${escapeHtml(line.fee || "—")}</td>
-          <td class="amt">${escapeHtml(moneyOrZero(moved.moneyIn))}</td>
-          <td class="amt">${escapeHtml(moneyOrZero(moved.moneyOut))}</td>
-          <td class="amt">${escapeHtml(money(running))}</td>
+          <td>${escapeHtml(lineLabel(line))}</td>
+          <td class="amt">${escapeHtml(moneyIn)}</td>
+          <td class="amt">${escapeHtml(moneyOut)}</td>
+          <td class="amt">${escapeHtml(balanceText(running))}</td>
         </tr>`,
       );
     }
@@ -158,10 +180,29 @@ export function buildStatementHtml(doc: StatementDocument) {
       <td>Closing balance</td>
       <td class="amt">${escapeHtml(moneyOrZero(0))}</td>
       <td class="amt">${escapeHtml(moneyOrZero(0))}</td>
-      <td class="amt">${escapeHtml(money(doc.closingBalance ?? running))}</td>
+      <td class="amt">${escapeHtml(balanceText(running))}</td>
     </tr>`,
   );
-
+  const availableCredit = Number(doc.availableCredit || 0);
+  const outstanding = Number(doc.outstanding || 0);
+  if (availableCredit > 0.009 || outstanding > 0.009) {
+    bodyRows.push(
+      `<tr class="close">
+        <td></td>
+        <td>Invoice outstanding</td>
+        <td class="amt">${escapeHtml(moneyOrZero(0))}</td>
+        <td class="amt">${escapeHtml(moneyOrZero(0))}</td>
+        <td class="amt">${escapeHtml(balanceText(outstanding))}</td>
+      </tr>`,
+      `<tr class="close">
+        <td></td>
+        <td>Available advance credit</td>
+        <td class="amt">${escapeHtml(moneyOrZero(0))}</td>
+        <td class="amt">${escapeHtml(moneyOrZero(0))}</td>
+        <td class="amt">${escapeHtml(balanceText(availableCredit > 0.009 ? -availableCredit : 0))}</td>
+      </tr>`,
+    );
+  }
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -201,7 +242,7 @@ export function buildStatementHtml(doc: StatementDocument) {
   <div class="who">
     <p class="name">${escapeHtml(memberName)}</p>
     <p class="row"><span class="label">${escapeHtml(numberLabel)}</span>${escapeHtml(membershipNo)}</p>
-    <p class="row"><span class="label">Membership type</span>${escapeHtml(membershipType)}</p>
+    <p class="row"><span class="label">${escapeHtml(typeLabel)}</span>${escapeHtml(membershipType)}</p>
     <p class="row"><span class="label">Period</span>${escapeHtml(statementPeriod(doc.from, doc.to))}</p>
   </div>
   <table>
@@ -210,7 +251,7 @@ export function buildStatementHtml(doc: StatementDocument) {
         <th colspan="2" class="summary">Detailed invoice summary</th>
         <th class="amt">Money in</th>
         <th class="amt">Money out</th>
-        <th class="amt">Total</th>
+        <th class="amt">Balance</th>
       </tr>
       <tr>
         <th>Date</th>

@@ -81,11 +81,13 @@ public partial class ApplicationModuleDbContext : DbContext
     public DbSet<MGuest> Guests => Set<MGuest>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<MTransaction> Transactions => Set<MTransaction>();
+    public DbSet<MTransactionAllocation> TransactionAllocations => Set<MTransactionAllocation>();
     public DbSet<MReceiptMaster> Receipts => Set<MReceiptMaster>();
     public DbSet<ReversalEntry> ReversalEntries => Set<ReversalEntry>();
     public DbSet<MembershipInvoice> MembershipInvoices => Set<MembershipInvoice>();
     public DbSet<InvoiceCreditNote> InvoiceCreditNotes => Set<InvoiceCreditNote>();
     public DbSet<BillingDocument> BillingDocuments => Set<BillingDocument>();
+    public DbSet<CorporateCompany> CorporateCompanies => Set<CorporateCompany>();
     public DbSet<MembershipTransition> MembershipTransitions => Set<MembershipTransition>();
     public DbSet<FeeWaiver> FeeWaivers => Set<FeeWaiver>();
     public DbSet<MembershipFeeSchedule> MembershipFeeSchedules => Set<MembershipFeeSchedule>();
@@ -119,6 +121,9 @@ public partial class ApplicationModuleDbContext : DbContext
     public DbSet<SupportTicket> SupportTickets => Set<SupportTicket>();
     public DbSet<SupportTicketMessage> SupportTicketMessages => Set<SupportTicketMessage>();
     public DbSet<ClubEvent> ClubEvents => Set<ClubEvent>();
+    public DbSet<EventCategory> EventCategories => Set<EventCategory>();
+    public DbSet<EventRegistration> EventRegistrations => Set<EventRegistration>();
+    public DbSet<EventAttendance> EventAttendances => Set<EventAttendance>();
     public DbSet<CreditFacility> CreditFacilities => Set<CreditFacility>();
     public DbSet<DataSharingConsent> DataSharingConsents => Set<DataSharingConsent>();
     public DbSet<MemberGuarantorship> MemberGuarantorships => Set<MemberGuarantorship>();
@@ -583,6 +588,19 @@ public partial class ApplicationModuleDbContext : DbContext
             entity.HasOne(x => x.FeeType).WithMany(x => x.MTransactions).HasForeignKey(x => x.FeeTypeId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.PaymentMethod).WithMany(x => x.MTransactions).HasForeignKey(x => x.PaymentMethodId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.PaymentStatus).WithMany(x => x.MTransactions).HasForeignKey(x => x.PaymentStatusId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.InvoiceId);
+        });
+
+        modelBuilder.Entity<MTransactionAllocation>(entity =>
+        {
+            entity.HasKey(x => x.AllocationId);
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.ToTable(t => t.HasCheckConstraint("CK_MTransactionAllocation_amount", "[amount] > 0"));
+            entity.HasIndex(x => x.TransactionId);
+            entity.HasIndex(x => x.InvoiceId);
+            entity.HasOne(x => x.Transaction).WithMany(x => x.Allocations).HasForeignKey(x => x.TransactionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Arrears>(entity =>
@@ -842,6 +860,7 @@ public partial class ApplicationModuleDbContext : DbContext
         modelBuilder.Entity<MAccount>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
         modelBuilder.Entity<MApplication>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
         modelBuilder.Entity<MembershipType>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
+        modelBuilder.Entity<CorporateCompany>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
         modelBuilder.Entity<ClubSetting>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
         modelBuilder.Entity<Committee>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
         modelBuilder.Entity<SupportTicket>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == 0 || e.TenantId == CurrentTenantId);

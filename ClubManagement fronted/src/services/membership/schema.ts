@@ -238,11 +238,24 @@ export const aviationSchema = z
     }
   });
 
-export const membershipSchema = z.object({
-  membershipType: req("Membership type", 80),
-  applicantSignature: req("Signature", 160),
-  signatureDate: req("Date", 10),
-});
+export const membershipSchema = z
+  .object({
+    membershipType: req("Membership type", 80),
+    applicantSignature: req("Signature", 160),
+    signatureDate: req("Date", 10),
+    invoiceTo: z.enum(["INDIVIDUAL", "CORPORATE", "BOTH"]).optional(),
+    corporateCompanyId: z.coerce.number().int().positive().optional().nullable(),
+    corporateCompanyName: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if ((value.invoiceTo === "CORPORATE" || value.invoiceTo === "BOTH") && !value.corporateCompanyId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["corporateCompanyId"],
+        message: "Select the corporate company to invoice",
+      });
+    }
+  });
 
 const supporterSchema = z.object({
   memberProfileId: req("Select a club member", 40),

@@ -66,6 +66,7 @@ import { Route as ExistingMembersIndexRouteImport } from './routes/existing-memb
 import { Route as ExistingMembersAccountIdRouteImport } from './routes/existing-members.$accountId'
 import { Route as ExistingMembersPrivilegesRouteImport } from './routes/existing-members.privileges'
 import { Route as FinanceIndexRouteImport } from './routes/finance.index'
+import { Route as FinanceAdvancesRouteImport } from './routes/finance.advances'
 import { Route as FinanceApprovalsRouteImport } from './routes/finance.approvals'
 import { Route as FinanceDeskRouteImport } from './routes/finance.desk'
 import { Route as FinanceInvoicesRouteImport } from './routes/finance.invoices'
@@ -398,6 +399,11 @@ const FinanceIndexRoute = FinanceIndexRouteImport.update({
   path: '/',
   getParentRoute: () => FinanceRoute,
 } as any)
+const FinanceAdvancesRoute = FinanceAdvancesRouteImport.update({
+  id: '/advances',
+  path: '/advances',
+  getParentRoute: () => FinanceRoute,
+} as any)
 const FinanceApprovalsRoute = FinanceApprovalsRouteImport.update({
   id: '/approvals',
   path: '/approvals',
@@ -666,6 +672,7 @@ export interface FileRoutesByFullPath {
   '/election/vote': typeof ElectionVoteRoute
   '/existing-members/$accountId': typeof ExistingMembersAccountIdRoute
   '/existing-members/privileges': typeof ExistingMembersPrivilegesRouteWithChildren
+  '/finance/advances': typeof FinanceAdvancesRoute
   '/finance/approvals': typeof FinanceApprovalsRoute
   '/finance/desk': typeof FinanceDeskRoute
   '/finance/invoices': typeof FinanceInvoicesRouteWithChildren
@@ -754,6 +761,7 @@ export interface FileRoutesByTo {
   '/election/tally': typeof ElectionTallyRoute
   '/election/vote': typeof ElectionVoteRoute
   '/existing-members/$accountId': typeof ExistingMembersAccountIdRoute
+  '/finance/advances': typeof FinanceAdvancesRoute
   '/finance/approvals': typeof FinanceApprovalsRoute
   '/finance/desk': typeof FinanceDeskRoute
   '/finance/statements': typeof FinanceStatementsRoute
@@ -852,6 +860,7 @@ export interface FileRoutesById {
   '/election/vote': typeof ElectionVoteRoute
   '/existing-members/$accountId': typeof ExistingMembersAccountIdRoute
   '/existing-members/privileges': typeof ExistingMembersPrivilegesRouteWithChildren
+  '/finance/advances': typeof FinanceAdvancesRoute
   '/finance/approvals': typeof FinanceApprovalsRoute
   '/finance/desk': typeof FinanceDeskRoute
   '/finance/invoices': typeof FinanceInvoicesRouteWithChildren
@@ -953,6 +962,7 @@ export interface FileRouteTypes {
     | '/election/vote'
     | '/existing-members/$accountId'
     | '/existing-members/privileges'
+    | '/finance/advances'
     | '/finance/approvals'
     | '/finance/desk'
     | '/finance/invoices'
@@ -1041,6 +1051,7 @@ export interface FileRouteTypes {
     | '/election/tally'
     | '/election/vote'
     | '/existing-members/$accountId'
+    | '/finance/advances'
     | '/finance/approvals'
     | '/finance/desk'
     | '/finance/statements'
@@ -1138,6 +1149,7 @@ export interface FileRouteTypes {
     | '/election/vote'
     | '/existing-members/$accountId'
     | '/existing-members/privileges'
+    | '/finance/advances'
     | '/finance/approvals'
     | '/finance/desk'
     | '/finance/invoices'
@@ -1621,6 +1633,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FinanceIndexRouteImport
       parentRoute: typeof FinanceRoute
     }
+    '/finance/advances': {
+      id: '/finance/advances'
+      path: '/advances'
+      fullPath: '/finance/advances'
+      preLoaderRoute: typeof FinanceAdvancesRouteImport
+      parentRoute: typeof FinanceRoute
+    }
     '/finance/approvals': {
       id: '/finance/approvals'
       path: '/approvals'
@@ -2043,6 +2062,7 @@ const FinanceInvoicesRouteWithChildren = FinanceInvoicesRoute._addFileChildren(
 )
 
 interface FinanceRouteChildren {
+  FinanceAdvancesRoute: typeof FinanceAdvancesRoute
   FinanceApprovalsRoute: typeof FinanceApprovalsRoute
   FinanceDeskRoute: typeof FinanceDeskRoute
   FinanceInvoicesRoute: typeof FinanceInvoicesRouteWithChildren
@@ -2054,6 +2074,7 @@ interface FinanceRouteChildren {
 }
 
 const FinanceRouteChildren: FinanceRouteChildren = {
+  FinanceAdvancesRoute: FinanceAdvancesRoute,
   FinanceApprovalsRoute: FinanceApprovalsRoute,
   FinanceDeskRoute: FinanceDeskRoute,
   FinanceInvoicesRoute: FinanceInvoicesRouteWithChildren,

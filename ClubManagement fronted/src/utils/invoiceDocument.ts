@@ -263,15 +263,7 @@ function wrapInvoiceEmailHtml(invoiceSheetHtml: string, payUrl: string) {
   <style>${INVOICE_CSS}</style>
 </head>
 <body style="margin:0;padding:24px 16px;background:#f4f4f5;font-family:'Segoe UI',Tahoma,sans-serif;color:#1f2554;">
-  <table data-acea-pay-now="1" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:760px;margin:0 auto 20px;">
-    <tr>
-      <td style="background:#ffffff;border:1px solid #e4d7bf;border-radius:10px;padding:20px 18px;text-align:center;">
-        <p style="margin:0 0 12px;font-size:15px;font-weight:700;">Your Aero Club invoice is below.</p>
-        <a href="${escapeHtml(url)}" style="display:inline-block;background:#1f2554;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;letter-spacing:0.04em;padding:12px 28px;border-radius:8px;">Pay now</a>
-        <p style="margin:12px 0 0;font-size:12px;color:#5b6472;line-height:1.5;">Sign in to confirm you are a member, then complete payment on your Payment page.</p>
-      </td>
-    </tr>
-  </table>
+
   ${invoiceSheetHtml}
 </body>
 </html>`;

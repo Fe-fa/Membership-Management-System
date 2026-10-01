@@ -202,6 +202,26 @@ public class ElectionsController : ControllerBase
         }
     }
 
+    [HttpPost("meetings/{meetingId:long}/proxies/{proxyId:long}/respond")]
+    public async Task<IActionResult> RespondToProxy(
+        long meetingId,
+        long proxyId,
+        [FromBody] ReviewProxyRequest request,
+        CancellationToken cancellationToken)
+    {
+        var profileId = User.ProfileId();
+        if (profileId is null) return Unauthorized();
+        try
+        {
+            await _elections.RespondToProxyAsync(meetingId, proxyId, profileId.Value, request, cancellationToken);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpPost("meetings/{meetingId:long}/proxies/{proxyId:long}/review")]
     public async Task<ActionResult<ElectionDeskDto>> ReviewProxy(
         long meetingId,

@@ -14,11 +14,16 @@ public class FinanceController : ControllerBase
 {
     private readonly IFinanceService _finance;
     private readonly IManagerStageService _managerStage;
+    private readonly IPaymentAllocationService _allocations;
 
-    public FinanceController(IFinanceService finance, IManagerStageService managerStage)
+    public FinanceController(
+        IFinanceService finance,
+        IManagerStageService managerStage,
+        IPaymentAllocationService allocations)
     {
         _finance = finance;
         _managerStage = managerStage;
+        _allocations = allocations;
     }
 
     [AllowAnonymous]
@@ -38,6 +43,15 @@ public class FinanceController : ControllerBase
     public async Task<ActionResult<object>> NextReceipt(CancellationToken cancellationToken) =>
         Ok(new { receiptNumber = await _finance.PeekNextReceiptNumberAsync(cancellationToken) });
 
+    [HttpGet("advances")]
+    public async Task<ActionResult<AdvanceCreditPageDto>> Advances(
+        [FromQuery] string? search,
+        [FromQuery] int? year,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25,
+        CancellationToken cancellationToken = default) =>
+        Ok(await _allocations.ListUnusedAdvancesAsync(search, year, page, pageSize, cancellationToken));
+
     [HttpGet("payments")]
     public async Task<ActionResult<PagedResult<PaymentRowDto>>> Payments(
         [FromQuery] PagedRequest paging,
@@ -53,6 +67,91 @@ public class FinanceController : ControllerBase
             new PaymentListFilter(accountId, status, method, feeType, search, year, membershipType),
             paging,
             cancellationToken));
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpPost("payments/receive")]
+    public async Task<ActionResult<AdvancePaymentResult>> ReceiveAdvance(
+        [FromBody] ReceiveAdvancePaymentRequest request,
+        CancellationToken cancellationToken)
+    {
+        try { return Ok(await _allocations.ReceiveAdvancePaymentAsync(request, User.UserId(), cancellationToken)); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpPost("invoices/{invoiceId:long}/allocate")]
+    public async Task<ActionResult<PaymentAllocationResult>> AllocateToInvoice(
+        long invoiceId,
+        [FromBody] AllocateInvoicePaymentRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _allocations.AllocatePaymentToInvoiceAsync(
+                request.TransactionId,
+                invoiceId,
+                request.Amount,
+                User.UserId(),
+                cancellationToken));
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpPost("invoices/{invoiceId:long}/apply-credit")]
+    public async Task<ActionResult<ApplyCreditResult>> ApplyCredit(
+        long invoiceId,
+        [FromBody] ApplyCreditRequest? request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _allocations.ApplyAvailableCreditAsync(
+                invoiceId,
+                request?.Amount,
+                User.UserId(),
+                cancellationToken));
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpGet("accounts/{accountId:long}/advance-credit")]
+    public async Task<ActionResult<AdvanceCreditPositionDto>> AccountCredit(
+        long accountId,
+        CancellationToken cancellationToken)
+    {
+        try { return Ok(await _allocations.GetAdvanceCreditPositionAsync(accountId, cancellationToken)); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpGet("advance-credit/report")]
+    public async Task<ActionResult<AdvanceCreditReportDto>> CreditReport(
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
+        CancellationToken cancellationToken) =>
+        Ok(await _allocations.GetAdvanceCreditReportAsync(from, to, cancellationToken));
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpGet("companies/{companyId:long}/advance-credit")]
+    public async Task<ActionResult<CorporateCreditPositionDto>> CompanyCredit(
+        long companyId,
+        CancellationToken cancellationToken)
+    {
+        try { return Ok(await _allocations.GetCorporateCreditAsync(companyId, cancellationToken)); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [Authorize(Roles = "ADMIN,GENERAL_MANAGER,TREASURER,CHAIRMAN")]
+    [HttpPost("billing-runs/{year:int}")]
+    public async Task<ActionResult<AnnualBillingRunResult>> RunAnnualBilling(
+        int year,
+        CancellationToken cancellationToken)
+    {
+        try { return Ok(await _allocations.ProcessAnnualBillingRunAsync(year, User.UserId(), cancellationToken)); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
 
     [Authorize(Roles = "GENERAL_MANAGER,TREASURER,CHAIRMAN,APPLICANT,MEMBER")]
     [HttpPost("payments")]

@@ -20,6 +20,23 @@ function mediaUrl(url?: string | null) {
   return `${API_BASE}${url.startsWith("/") ? url : `/${url}`}`;
 }
 
+function ProfileFinanceBadge() {
+  const member = useMemberDashboard();
+  const due = Math.max(0, Number(member.data?.outstandingBalance || 0));
+  const credit = Math.max(0, Number(member.data?.availableCredit || 0));
+  const label = due > 0.009
+    ? "Amount due"
+    : credit > 0.009
+      ? `Advance credit: KES ${credit.toLocaleString("en-KE", { maximumFractionDigits: 0 })}`
+      : "Account settled";
+  const tone = due > 0.009
+    ? "bg-amber-100 text-amber-950"
+    : credit > 0.009
+      ? "bg-emerald-100 text-emerald-950"
+      : "bg-slate-100 text-slate-700";
+  return <p className={`mt-1 w-fit rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${tone}`}>{label}</p>;
+}
+
 function Field({
   label,
   value,
@@ -135,6 +152,7 @@ function MemberProfileEditor() {
             <p className="text-lg font-semibold">{form.fullName}</p>
             <p>{form.membershipNo}</p>
             <p className="text-muted-foreground">{g.membershipTypeName}</p>
+            <ProfileFinanceBadge />
           </div>
         </CardContent>
       </Card>

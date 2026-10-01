@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Loader2, Pencil, Send, X } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Loader2, Paperclip, Pencil, Send, Upload, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -51,18 +51,25 @@ import {
   type MemberHit,
   type Nomination,
 } from "@/pages/admin/electionDeskShared";
-import { kenyaTodayISO } from "@/utils/kenyaDate";
+import { formatKenyaDate, kenyaTodayISO } from "@/utils/kenyaDate";
 import { cn } from "@/utils/cn";
-import { apiRequest, extractErrorMessage } from "@/services/membership/api";
+import { apiRequest, extractErrorMessage, uploadFile } from "@/services/membership/api";
+
+function localDateTimeInput(value: string) {
+  const date = new Date(value.length === 10 ? `${value}T00:00:00` : value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 function PersonChip({
   name,
   photoUrl,
   role,
 }: {
-  name?: string | null;
-  photoUrl?: string | null;
-  role?: string | null;
+  name?: string | null | undefined;
+  photoUrl?: string | null | undefined;
+  role?: string | null | undefined;
 }) {
   if (!name) return <span className="text-muted-foreground">Select</span>;
   return (
@@ -90,13 +97,14 @@ function OfficerSelect({
   value: string;
   onChange: (value: string) => void;
   officers: CommitteeMember[];
-  fallbackName?: string | null;
+  fallbackName: string | null | undefined;
 }) {
   const selected = officers.find((m) => String(m.profileId) === value);
+  const selectValue = value ? value : undefined;
   return (
     <label className="grid gap-1 text-sm">
       <Label>{label}</Label>
-      <Select value={value || undefined} onValueChange={onChange}>
+      <Select {...(selectValue ? { value: selectValue } : {})} onValueChange={onChange}>
         <SelectTrigger>
           <span className="min-w-0 truncate text-left">
             {selected ? `${selected.profileName} · ${selected.roleName}` : fallbackName || "Select"}
@@ -140,23 +148,77 @@ export function ElectionDeskPage() {
   return <MeetingNoticeDeskPage />;
 }
 
-const emptyNoticeForm = () => ({
-  meetingType: "AGM",
-  meetingDate: kenyaTodayISO(),
-  noticeSentDate: kenyaTodayISO(),
-  venue: "Clubhouse, Wilson Airport, Nairobi",
-  agenda: "",
-  papersUrl: "",
-});
+function fileNameFromUrl(url?: string | null) {
+  if (!url) return "";
+  try {
+    const path = new URL(url, window.location.origin).pathname;
+    return decodeURIComponent(path.split("/").filter(Boolean).at(-1) ?? "");
+  } catch {
+    return "";
+  }
+}
+
+function requiredClearDays(meetingType: string) {
+  return meetingType === "EGM" ? 21 : 14;
+}
+
+function isoDayNumber(iso: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  const year = Number(iso.slice(0, 4));
+  const month = Number(iso.slice(5, 7));
+  const day = Number(iso.slice(8, 10));
+  return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000);
+}
+
+function addIsoDays(iso: string, days: number) {
+  const dayNumber = isoDayNumber(iso);
+  if (dayNumber == null) return iso;
+  const shifted = new Date((dayNumber + days) * 86_400_000);
+  const year = shifted.getUTCFullYear();
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(shifted.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** Clear days exclude both the notice day and the meeting day (Article 52). */
+function noticePeriodIssue(notice: { meetingType: string; meetingDate: string; noticeSentDate: string }) {
+  const required = requiredClearDays(notice.meetingType);
+  const meeting = isoDayNumber(notice.meetingDate);
+  const sent = isoDayNumber(notice.noticeSentDate);
+  if (meeting == null || sent == null) return "Meeting date and notice sent date are required.";
+  const clear = meeting - sent - 1;
+  if (clear >= required) return null;
+  const earliest = formatKenyaDate(addIsoDays(notice.noticeSentDate, required + 1));
+  if (clear < 0) {
+    return `Notice sent (${formatKenyaDate(notice.noticeSentDate)}) is after the meeting (${formatKenyaDate(notice.meetingDate)}). An ${notice.meetingType} needs at least ${required} clear days, so the meeting must be ${earliest} or later.`;
+  }
+  return `An ${notice.meetingType} needs at least ${required} clear days. These dates give ${clear}. Move the meeting to ${earliest} or later.`;
+}
+
+const emptyNoticeForm = () => {
+  const noticeSentDate = kenyaTodayISO();
+  return {
+    meetingType: "AGM",
+    meetingDate: addIsoDays(noticeSentDate, requiredClearDays("AGM") + 1),
+    noticeSentDate,
+    venue: "Clubhouse, Wilson Airport, Nairobi",
+    agenda: "",
+    papersUrl: "",
+  };
+};
 
 export function MeetingNoticeDeskPage() {
   const { desk, meetings, current, invalidate } = useElectionDesk();
   const [editingId, setEditingId] = useState<number | null>(null);
   const [notice, setNotice] = useState(emptyNoticeForm);
+  const [papersName, setPapersName] = useState("");
+  const [papersBusy, setPapersBusy] = useState(false);
+  const papersInputRef = useRef<HTMLInputElement>(null);
 
   const resetForm = () => {
     setEditingId(null);
     setNotice(emptyNoticeForm());
+    setPapersName("");
   };
 
   const startEdit = (row: Desk) => {
@@ -169,8 +231,37 @@ export function MeetingNoticeDeskPage() {
       agenda: row.meeting.agenda || "",
       papersUrl: row.meeting.papersUrl || "",
     });
+    setPapersName(fileNameFromUrl(row.meeting.papersUrl));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  async function acceptPapers(file?: File | null) {
+    if (!file) return;
+    const ok = /\.(pdf|docx?|png|jpe?g|webp|gif)$/i.test(file.name);
+    if (!ok) {
+      toast.error("Upload a PDF, Word document, or image.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File must be 10 MB or smaller.");
+      return;
+    }
+    setPapersBusy(true);
+    try {
+      const uploaded = await uploadFile(file, "papers");
+      if (!uploaded.url) {
+        toast.error("The file was stored without a link.");
+        return;
+      }
+      setNotice((n) => ({ ...n, papersUrl: uploaded.url ?? "" }));
+      setPapersName(uploaded.fileName || file.name);
+    } catch (e) {
+      toast.error(extractErrorMessage(e));
+    } finally {
+      setPapersBusy(false);
+      if (papersInputRef.current) papersInputRef.current.value = "";
+    }
+  }
 
   const publish = useMutation({
     mutationFn: () =>
@@ -202,6 +293,16 @@ export function MeetingNoticeDeskPage() {
 
   const saving = publish.isPending || update.isPending;
   const isEditing = editingId != null;
+  const periodIssue = useMemo(() => noticePeriodIssue(notice), [notice]);
+
+  const submitNotice = () => {
+    if (periodIssue) {
+      toast.error(periodIssue);
+      return;
+    }
+    if (isEditing) update.mutate();
+    else publish.mutate();
+  };
 
   return (
     <div className="grid gap-4">
@@ -247,6 +348,13 @@ export function MeetingNoticeDeskPage() {
               />
             </label>
           </div>
+          {periodIssue ? (
+            <p className="text-sm text-destructive">{periodIssue}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {notice.meetingType === "EGM" ? "21" : "14"} clear days between notice and meeting.
+            </p>
+          )}
           <label className="grid gap-1 text-sm">
             <FieldLabel>Venue</FieldLabel>
             <Input value={notice.venue} onChange={(e) => setNotice((n) => ({ ...n, venue: e.target.value }))} />
@@ -259,19 +367,47 @@ export function MeetingNoticeDeskPage() {
             />
             <span className="text-xs text-muted-foreground">{notice.agenda.length} characters</span>
           </label>
-          <label className="grid gap-1 text-sm">
-            <FieldLabel>Papers URL</FieldLabel>
+          <div className="grid gap-1.5 text-sm">
+            <FieldLabel>Papers</FieldLabel>
             <Input
               value={notice.papersUrl}
-              onChange={(e) => setNotice((n) => ({ ...n, papersUrl: e.target.value }))}
-              placeholder="https://…"
+              onChange={(e) => {
+                setPapersName("");
+                setNotice((n) => ({ ...n, papersUrl: e.target.value }));
+              }}
+              placeholder="https://… or upload a file"
             />
-          </label>
+            <input
+              ref={papersInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,.gif,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*"
+              className="hidden"
+              onChange={(e) => void acceptPapers(e.target.files?.[0])}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={papersBusy}
+                onClick={() => papersInputRef.current?.click()}
+              >
+                {papersBusy ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+                Upload PDF, Word or image
+              </Button>
+              {papersName ? (
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <Paperclip className="size-3.5" />
+                  {papersName}
+                </span>
+              ) : null}
+            </div>
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
-              disabled={saving}
-              onClick={() => (isEditing ? update.mutate() : publish.mutate())}
+              disabled={saving || Boolean(periodIssue)}
+              onClick={submitNotice}
             >
               {saving ? <Loader2 className="size-4 animate-spin" /> : isEditing ? <Pencil className="size-4" /> : <Send className="size-4" />}
               {isEditing ? "Save changes" : "Publish notice"}
@@ -372,12 +508,25 @@ export function OfficersBallotDeskPage() {
   const [conductorId, setConductorId] = useState("");
   const [scrutineer1, setScrutineer1] = useState("");
   const [scrutineer2, setScrutineer2] = useState("");
+  const [opensAt, setOpensAt] = useState("");
+  const [closesAt, setClosesAt] = useState("");
 
   useEffect(() => {
     if (!current) return;
     if (current.conductorProfileId) setConductorId(String(current.conductorProfileId));
     if (current.scrutineer1ProfileId) setScrutineer1(String(current.scrutineer1ProfileId));
     if (current.scrutineer2ProfileId) setScrutineer2(String(current.scrutineer2ProfileId));
+    const open = current.ballotOpensAt ? localDateTimeInput(current.ballotOpensAt) : localDateTimeInput(new Date().toISOString());
+    const statutory = ballotCloseAt(current.meeting.meetingDate);
+    const storedClose = current.ballotClosesAt ?? statutory;
+    const openDate = new Date(open);
+    const closeDate = storedClose ? new Date(storedClose) : null;
+    const close =
+      closeDate && !Number.isNaN(closeDate.getTime()) && closeDate > openDate
+        ? localDateTimeInput(closeDate.toISOString())
+        : localDateTimeInput(new Date(openDate.getTime() + 48 * 60 * 60 * 1000).toISOString());
+    setOpensAt(open);
+    setClosesAt(close);
   }, [current]);
 
   const setWindow = useMutation({
@@ -389,6 +538,8 @@ export function OfficersBallotDeskPage() {
           conductorProfileId: open
             ? Number(conductorId) || current?.conductorProfileId || undefined
             : undefined,
+          opensAt: open && opensAt ? new Date(opensAt).toISOString() : undefined,
+          closesAt: open && closesAt ? new Date(closesAt).toISOString() : undefined,
         }),
       }),
     onSuccess: (_d, open) => {
@@ -490,20 +641,14 @@ export function OfficersBallotDeskPage() {
             </CardHeader>
             <CardContent className="grid gap-3">
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="grid gap-1 text-sm">
+                <label className="grid gap-1 text-sm">
                   <span className="font-medium">Start time</span>
-                  <p className="rounded-md border border-input bg-muted/40 px-3 py-2">
-                    {current.ballotOpensAt
-                      ? formatWhen(current.ballotOpensAt)
-                      : "Set automatically when the window is opened"}
-                  </p>
-                </div>
-                <div className="grid gap-1 text-sm">
+                  <Input type="datetime-local" value={opensAt} onChange={(e) => setOpensAt(e.target.value)} />
+                </label>
+                <label className="grid gap-1 text-sm">
                   <span className="font-medium">Close time</span>
-                  <p className="rounded-md border border-input bg-muted/40 px-3 py-2">
-                    {formatWhen(current.ballotClosesAt ?? ballotCloseAt(current.meeting.meetingDate))}
-                  </p>
-                </div>
+                  <Input type="datetime-local" value={closesAt} onChange={(e) => setClosesAt(e.target.value)} />
+                </label>
               </div>
               <p className="text-sm text-muted-foreground">
                 Returning officer {current.conductorName ?? "not appointed"} · closes 48 hours before the meeting
@@ -731,8 +876,8 @@ export function LodgedProxiesDeskPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              Lodged proxies
-              <InfoTip text="A proxy must reach the Returning Officer at least 48 hours before the meeting, or 24 hours for a poll (Article 65). On-time instruments await Returning Officer review before they count toward quorum or the tally." />
+              Proxy appointments
+              <InfoTip text="The appointed member accepts or rejects first. A rejection returns the proxy to the appointer. An acceptance is approved by an admin or general manager at least 48 hours before the meeting, or 24 hours before a poll. An active holder's voting weight is 1 plus each approved proxy." />
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -764,7 +909,10 @@ export function LodgedProxiesDeskPage() {
                             <span className="text-muted-foreground"> · {row.proxyMembershipNo}</span>
                           ) : null}
                           {row.linkedMember ? (
-                            <p className="text-xs text-muted-foreground">Linked member</p>
+                            <p className="text-xs text-muted-foreground">
+                              Linked member
+                              {row.votingWeight ? ` · weight 1 + ${Math.max(0, row.votingWeight - 1)}` : ""}
+                            </p>
                           ) : null}
                         </TableCell>
                         <TableCell>{instructionLabel(row)}</TableCell>

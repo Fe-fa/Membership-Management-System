@@ -158,8 +158,10 @@ public class DeskProxyDto
     public DateTime? InstrumentReceivedAt { get; set; }
     public bool DepositedOnTime { get; set; }
     public bool IsValid { get; set; }
-    /// <summary>PENDING | APPROVED | REJECTED | LATE</summary>
+    /// <summary>AWAITING_HOLDER | PENDING | APPROVED | REJECTED | RETURNED | LATE</summary>
     public string ReviewStatus { get; set; } = "PENDING";
+    /// <summary>1 own vote + N approved proxies held by this member.</summary>
+    public int VotingWeight { get; set; }
     public string? ReviewReason { get; set; }
 }
 
@@ -259,7 +261,7 @@ public class MemberProxyDto
     public string? SignedFormUrl { get; set; }
     public DateTime? InstrumentReceivedAt { get; set; }
     public bool DepositedOnTime { get; set; }
-    /// <summary>PENDING | APPROVED | REJECTED | LATE</summary>
+    /// <summary>AWAITING_HOLDER | PENDING | APPROVED | REJECTED | RETURNED | LATE</summary>
     public string? ReviewStatus { get; set; }
     public string? ReviewReason { get; set; }
 }
@@ -277,7 +279,10 @@ public class ProxyHeldDto
     public string? VoteInstruction { get; set; }
     public bool LeaveToDiscretion { get; set; }
     public string InstructionLabel { get; set; } = string.Empty;
+    public string? Notes { get; set; }
     public string? ReviewStatus { get; set; }
+    public string? ReviewReason { get; set; }
+    public int VotingWeight { get; set; }
     public DateTime? ProxyDeadlineAt { get; set; }
     public DateTime? InstrumentReceivedAt { get; set; }
     public IReadOnlyList<string> Resolutions { get; set; } = [];

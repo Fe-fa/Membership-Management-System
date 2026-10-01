@@ -22,6 +22,10 @@ public class MemberProfileDto
     public MemberClubsDto Clubs { get; set; } = new();
     public MemberConsentDto Consent { get; set; } = new();
     public MemberGovernanceDto Governance { get; set; } = new();
+    /// <summary>INDIVIDUAL | CORPORATE | BOTH</summary>
+    public string InvoiceTo { get; set; } = "INDIVIDUAL";
+    public long? CorporateCompanyId { get; set; }
+    public string? CorporateCompanyName { get; set; }
 }
 
 public class MemberIdentityDto
@@ -186,4 +190,7 @@ public class UpdateMemberProfileRequest
     public MemberConsentDto? Consent { get; set; }
     public long MembershipTypeId { get; set; }
     public string? ChangeReason { get; set; }
+    /// <summary>INDIVIDUAL | CORPORATE | BOTH</summary>
+    public string? InvoiceTo { get; set; }
+    public long? CorporateCompanyId { get; set; }
 }

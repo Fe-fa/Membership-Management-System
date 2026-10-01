@@ -1,9 +1,11 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import {
   AlertTriangle,
   Ban,
   Banknote,
+  Building2,
   Check,
   Download,
   Loader2,
@@ -19,6 +21,7 @@ import {
 import { toast } from "sonner";
 
 import { ListPagination } from "@/components/common/ListPagination";
+import { CorporateCompaniesDialog } from "@/components/finance/CorporateCompaniesDialog";
 import { DirectSettlementModal } from "@/components/finance/DirectSettlementModal";
 import { MembershipReceiptDialog } from "@/components/finance/MembershipReceipt";
 import { MemberStatementDialog } from "@/components/finance/MemberStatementDialog";
@@ -110,6 +113,8 @@ type SubRow = {
   status: string;
   accountStatus?: string | null;
   accountStatusCode?: string | null;
+  availableCredit?: number;
+  financialStatus?: string | null;
 };
 
 type DeskSummary = {
@@ -161,6 +166,12 @@ function needsClearance(row: PaymentRow) {
     || key.includes("MPESA")
     || key.includes("BANK")
   );
+}
+
+function isAdvanceReceipt(row: PaymentRow) {
+  const code = (row.feeTypeCode ?? "").trim().toUpperCase();
+  const name = (row.feeType ?? "").trim().toLowerCase();
+  return code === "ADVANCE" || name.includes("advance");
 }
 
 function isPendingStatus(status?: string | null) {
@@ -255,8 +266,9 @@ const ARREARS_EXPORT_COLS = [
   { id: "member", header: "Member", value: (r: SubRow) => r.memberName },
   { id: "membershipType", header: "Membership type", value: (r: SubRow) => r.membershipType || r.membershipTypeCode || "" },
   { id: "year", header: "Year", value: (r: SubRow) => r.year },
-  { id: "due", header: "Due (Ksh)", value: (r: SubRow) => r.amountDue },
+  { id: "due", header: "Balance due (Ksh)", value: (r: SubRow) => r.arrearsAmount },
   { id: "paid", header: "Paid (Ksh)", value: (r: SubRow) => r.amountPaid },
+  { id: "advance", header: "Advance credit (Ksh)", value: (r: SubRow) => r.availableCredit ?? 0 },
   { id: "arrears", header: "Arrears (Ksh)", value: (r: SubRow) => r.arrearsAmount },
   { id: "status", header: "Status", value: (r: SubRow) => r.status },
 ];
@@ -331,6 +343,7 @@ export function FinancePage() {
   const [renewalBusy, setRenewalBusy] = useState(false);
   const [lastRenewal, setLastRenewal] = useState<RenewalRunResult | null>(null);
   const [renewalStep, setRenewalStep] = useState<0 | 1 | 2>(0);
+  const [companiesOpen, setCompaniesOpen] = useState(false);
   const [proofRow, setProofRow] = useState<PaymentRow | null>(null);
 
   const yearNum = Number(year) || currentYear;
@@ -403,7 +416,7 @@ export function FinancePage() {
           page: subPage,
           pageSize: subPageSize,
           search: appliedSearch || undefined,
-          arrearsOnly: true,
+          arrearsOnly: appliedSearch ? undefined : true,
           membershipType: membershipTypeFilter || undefined,
         })}`,
       ),
@@ -427,6 +440,10 @@ export function FinancePage() {
 
   const pendingPageData = pending.data ?? emptyPage<PaymentRow>(paymentPage, paymentPageSize);
   const settledPageData = settled.data ?? emptyPage<PaymentRow>(paymentPage, paymentPageSize);
+  const settledBillRows = useMemo(
+    () => settledPageData.items.filter((row) => !isAdvanceReceipt(row)),
+    [settledPageData.items],
+  );
   const subPageData = subs.data ?? emptyPage<SubRow>(subPage, subPageSize);
   const joiningPageData = joining.data ?? emptyPage<JoiningRow>(subPage, subPageSize);
 
@@ -588,7 +605,7 @@ export function FinancePage() {
     if (status === "PENDING") {
       return result.items.filter((row) => needsClearance(row) && isPendingStatus(row.status ?? row.statusCode));
     }
-    return result.items;
+    return result.items.filter((row) => !isAdvanceReceipt(row));
   }
 
   async function fetchAllArrearsForExport() {
@@ -598,7 +615,7 @@ export function FinancePage() {
         page: 1,
         pageSize: 5000,
         search: appliedSearch || undefined,
-        arrearsOnly: true,
+        arrearsOnly: appliedSearch ? undefined : true,
         membershipType: membershipTypeFilter || undefined,
       })}`,
     );
@@ -713,12 +730,12 @@ export function FinancePage() {
     {
       id: "arrears",
       label: "Annual subscriptions",
-      hint: String(summary.data?.membersInArrears ?? "…"),
+      // hint: String(summary.data?.membersInArrears ?? "…"),
     },
     {
       id: "joining",
       label: "Joining",
-      hint: String(summary.data?.joiningInArrears ?? joiningPageData.totalCount ?? "…"),
+      // hint: String(summary.data?.joiningInArrears ?? joiningPageData.totalCount ?? "…"),
     },
   ];
 
@@ -726,23 +743,29 @@ export function FinancePage() {
 
   return (
     <TooltipProvider delayDuration={200}>
+    <CorporateCompaniesDialog open={companiesOpen} onOpenChange={setCompaniesOpen} />
     <PageFrame width="lg" className="space-y-5 bg-[#F8FAFC] p-4 sm:p-5 -mx-4 sm:-mx-6 lg:-mx-8 sm:px-6 lg:px-8">
       <PageHeader
         title=""
-        description="Verify payments, issue official membership receipts, and track arrears. The club carries balances forward, so unpaid or overpaid amounts roll into the next period. Invoices can be reversed by issuing a credit note."
         actions={
-          canRunPosting ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="border-amber-300 text-amber-900 hover:bg-amber-50"
-              disabled={renewalBusy}
-              onClick={() => setRenewalStep(1)}
-            >
-              {renewalBusy ? <Loader2 className="size-4 animate-spin" /> : <AlertTriangle className="size-4" />}
-              Run annual renewal · {yearNum}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" onClick={() => setCompaniesOpen(true)}>
+              <Building2 className="size-4" />
+              Corporate companies
             </Button>
-          ) : undefined
+            {canRunPosting ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="border-amber-300 text-amber-900 hover:bg-amber-50"
+                disabled={renewalBusy}
+                onClick={() => setRenewalStep(1)}
+              >
+                {renewalBusy ? <Loader2 className="size-4 animate-spin" /> : <AlertTriangle className="size-4" />}
+                Run annual renewal · {yearNum}
+              </Button>
+            ) : null}
+          </div>
         }
       />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -979,24 +1002,31 @@ export function FinancePage() {
 
       {desk === "settled" ? (
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="mb-3 text-sm text-muted-foreground">
+            Settled bills are payments applied to an invoice. Unused cash is on{" "}
+            <Link to="/finance/advances" className="font-medium text-foreground underline underline-offset-2">
+              Advance credit
+            </Link>
+            .
+          </p>
           {settled.isLoading ? (
             <PageBodyLoading label="Loading settled payments…" minHeightClassName="min-h-[14rem]" />
-          ) : settledPageData.items.length === 0 ? (
+          ) : settledBillRows.length === 0 ? (
             <p className="text-sm text-muted-foreground">No settled payments match these filters.</p>
           ) : (
             <>
               <SettledTable
                 showCol={showCol}
-                rows={settledPageData.items}
+                rows={settledBillRows}
                 busyId={busyId}
                 selectedIds={selectedPaymentIds}
                 onToggleSelect={(id, checked) => {
-                  const row = settledPageData.items.find((r) => r.transactionId === id);
+                  const row = settledBillRows.find((r) => r.transactionId === id);
                   setSelectedPayments((prev) => setRecordEntry(prev, id, row, checked));
                 }}
                 onToggleSelectAll={(checked) => {
                   setSelectedPayments((prev) =>
-                    setRecordPage(prev, settledPageData.items, (r) => r.transactionId, checked),
+                    setRecordPage(prev, settledBillRows, (r) => r.transactionId, checked),
                   );
                 }}
                 onViewProof={(row) => setProofRow(row)}
@@ -1069,7 +1099,7 @@ export function FinancePage() {
                     <tr>
                       {showCol("member") || showCol("membershipNo") ? <th className="p-2">Member</th> : null}
                       {showCol("membershipType") ? <th className="p-2">Membership type</th> : null}
-                      {showCol("due") ? <th className="p-2">Due</th> : null}
+                      {showCol("due") ? <th className="p-2">Balance due</th> : null}
                       {showCol("paid") ? <th className="p-2">Paid</th> : null}
                       {showCol("arrears") ? <th className="p-2">Arrears</th> : null}
                       {showCol("status") ? <th className="p-2">Status</th> : null}
@@ -1084,12 +1114,17 @@ export function FinancePage() {
                             {[showCol("membershipNo") ? row.membershipNo : "", showCol("member") ? row.memberName : ""]
                               .filter(Boolean)
                               .join(" · ")}
+                            {Number(row.availableCredit || 0) > 0.009 ? (
+                              <p className="text-xs font-medium text-emerald-800">
+                                Advance credit {formatKes(Number(row.availableCredit))}
+                              </p>
+                            ) : null}
                           </td>
                         ) : null}
                         {showCol("membershipType") ? (
                           <td className="p-2">{row.membershipNo ? (row.membershipType || row.membershipTypeCode || "—") : "—"}</td>
                         ) : null}
-                        {showCol("due") ? <td className="p-2">{formatKes(row.amountDue)}</td> : null}
+                        {showCol("due") ? <td className="p-2">{formatKes(row.arrearsAmount)}</td> : null}
                         {showCol("paid") ? <td className="p-2">{formatKes(row.amountPaid)}</td> : null}
                         {showCol("arrears") ? (
                           <td className={cn("p-2", row.arrearsAmount > 0 ? "font-medium text-amber-800" : "")}>

@@ -52,6 +52,7 @@ builder.Services.AddHostedService<SubscriptionLifecycleWorker>();
 builder.Services.AddScoped<IEmailSender, EmailSender>();
 builder.Services.AddScoped<IEmailVerificationService, EmailVerificationService>();
 builder.Services.AddScoped<ClubManagement.Services.Engagement.IClubEventService, ClubManagement.Services.Engagement.ClubEventService>();
+builder.Services.AddHostedService<ClubManagement.Services.Engagement.EventReminderWorker>();
 builder.Services.AddScoped<IApplicationDecisionNotifier, ApplicationDecisionNotifier>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
@@ -69,6 +70,8 @@ builder.Services.AddScoped<IInterviewConductService, InterviewConductService>();
 builder.Services.AddScoped<ICommitteeBallotService, CommitteeBallotService>();
 builder.Services.AddScoped<ClubManagement.Services.Governance.IElectionService, ClubManagement.Services.Governance.ElectionService>();
 builder.Services.AddScoped<IFinanceService, FinanceService>();
+builder.Services.AddScoped<IPaymentAllocationService, PaymentAllocationService>();
+builder.Services.AddScoped<ICorporateCompanyService, CorporateCompanyService>();
 builder.Services.AddScoped<INonMembershipBillingService, NonMembershipBillingService>();
 builder.Services.AddScoped<ILookupAdminService, LookupAdminService>();
 builder.Services.AddScoped<IClubSetupService, ClubSetupService>();
@@ -145,6 +148,8 @@ using (var scope = app.Services.CreateScope())
     var userManagement = scope.ServiceProvider.GetRequiredService<IUserManagementService>();
     try
     {
+        var paymentAllocations = scope.ServiceProvider.GetRequiredService<IPaymentAllocationService>();
+        await paymentAllocations.EnsureSchemaAsync(CancellationToken.None);
         await userManagement.EnsureSchemaAsync(CancellationToken.None);
         var emailVerification = scope.ServiceProvider.GetRequiredService<IEmailVerificationService>();
         await emailVerification.EnsureSchemaAsync(CancellationToken.None);
@@ -163,10 +168,14 @@ using (var scope = app.Services.CreateScope())
         await nmBilling.EnsureSchemaAsync(CancellationToken.None);
         var finance = scope.ServiceProvider.GetRequiredService<IFinanceService>();
         await finance.EnsureSchemaAsync(CancellationToken.None);
+        var companies = scope.ServiceProvider.GetRequiredService<ICorporateCompanyService>();
+        await companies.EnsureSchemaAsync(CancellationToken.None);
         var transitions = scope.ServiceProvider.GetRequiredService<IMembershipTransitionService>();
         await transitions.EnsureSchemaAsync(CancellationToken.None);
         var supportDesk = scope.ServiceProvider.GetRequiredService<ISupportService>();
         await supportDesk.EnsureSchemaAsync(CancellationToken.None);
+        var clubEvents = scope.ServiceProvider.GetRequiredService<ClubManagement.Services.Engagement.IClubEventService>();
+        await clubEvents.EnsureSchemaAsync(CancellationToken.None);
         await db.Database.ExecuteSqlRawAsync(@"
 IF COL_LENGTH(N'dbo.Aplication_document', N'is_verified') IS NULL
     ALTER TABLE dbo.Aplication_document ADD is_verified BIT NOT NULL CONSTRAINT DF_appdoc_is_verified DEFAULT(0);");
@@ -327,6 +336,8 @@ if (app.Environment.IsDevelopment())
     var users = scope.ServiceProvider.GetRequiredService<IUserManagementService>();
     try
     {
+        var paymentAllocations = scope.ServiceProvider.GetRequiredService<IPaymentAllocationService>();
+        await paymentAllocations.EnsureSchemaAsync(CancellationToken.None);
         await users.EnsureSchemaAsync(CancellationToken.None);
         var guestService = scope.ServiceProvider.GetRequiredService<IGuestService>();
         await guestService.EnsureSchemaAsync(CancellationToken.None);
@@ -342,6 +353,8 @@ if (app.Environment.IsDevelopment())
         await nmBilling.EnsureSchemaAsync(CancellationToken.None);
         var finance = scope.ServiceProvider.GetRequiredService<IFinanceService>();
         await finance.EnsureSchemaAsync(CancellationToken.None);
+        var companies = scope.ServiceProvider.GetRequiredService<ICorporateCompanyService>();
+        await companies.EnsureSchemaAsync(CancellationToken.None);
         var transitions = scope.ServiceProvider.GetRequiredService<IMembershipTransitionService>();
         await transitions.EnsureSchemaAsync(CancellationToken.None);
         var supportDesk = scope.ServiceProvider.GetRequiredService<ISupportService>();

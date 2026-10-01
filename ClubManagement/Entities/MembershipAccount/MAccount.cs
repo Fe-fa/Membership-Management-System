@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using ClubManagement.Entities.Finance;
 using ClubManagement.Entities.Lookups;
 using ClubManagement.Entities.Subscriptions;
 using ClubManagement.Entities.Facilities;
@@ -30,6 +31,14 @@ namespace ClubManagement.Entities.MembershipAccount
 
         [Column("membership_type_id")]
         public long MembershipTypeId { get; set; }
+
+        /// <summary>INDIVIDUAL | CORPORATE | BOTH</summary>
+        [Column("invoice_to")]
+        [MaxLength(20)]
+        public string InvoiceTo { get; set; } = "INDIVIDUAL";
+
+        [Column("corporate_company_id")]
+        public long? CorporateCompanyId { get; set; }
 
         [Column("election_type_id")]
         public long ElectionTypeId { get; set; }
@@ -75,6 +84,8 @@ namespace ClubManagement.Entities.MembershipAccount
         public virtual MApplication? Application { get; set; }
 
         public virtual MembershipType MembershipType { get; set; } = null!;
+
+        public virtual CorporateCompany? CorporateCompany { get; set; }
 
         public virtual ElectionType ElectionType { get; set; } = null!;
 

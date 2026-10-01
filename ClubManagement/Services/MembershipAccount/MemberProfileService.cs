@@ -115,6 +115,9 @@ public class MemberProfileService : IMemberProfileService
             account.StartDate = request.JoinedDate;
         }
 
+        if (!string.IsNullOrWhiteSpace(request.InvoiceTo) || request.CorporateCompanyId is not null)
+            await ApplyInvoiceRoutingAsync(account, request.InvoiceTo, request.CorporateCompanyId, cancellationToken);
+
         if (request.Consent is not null)
         {
             profile.DataConsentGiven = request.Consent.PrivacyPolicyAccepted || request.Consent.DeclarationAccepted;
@@ -308,6 +311,30 @@ public class MemberProfileService : IMemberProfileService
         return entries.OrderByDescending(e => e.At).Take(100).ToList();
     }
 
+    private async Task ApplyInvoiceRoutingAsync(
+        MAccount account,
+        string? invoiceTo,
+        long? corporateCompanyId,
+        CancellationToken cancellationToken)
+    {
+        var target = (invoiceTo ?? account.InvoiceTo ?? "INDIVIDUAL").Trim().ToUpperInvariant();
+        target = target is "CORPORATE" or "BOTH" ? target : "INDIVIDUAL";
+        if (target is "CORPORATE" or "BOTH")
+        {
+            if (corporateCompanyId is not > 0)
+                throw new InvalidOperationException("Select the corporate company that should receive this member's invoices.");
+            var company = await _db.CorporateCompanies.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.CorporateCompanyId == corporateCompanyId && c.IsActive, cancellationToken)
+                ?? throw new InvalidOperationException("That corporate company is not active.");
+            account.CorporateCompanyId = company.CorporateCompanyId;
+        }
+        else
+        {
+            account.CorporateCompanyId = null;
+        }
+        account.InvoiceTo = target;
+    }
+
     private async Task<MAccount?> LoadAsync(long accountId, CancellationToken cancellationToken) =>
         await _db.Accounts
             .Include(a => a.Profile).ThenInclude(p => p.Gender)
@@ -323,6 +350,7 @@ public class MemberProfileService : IMemberProfileService
             .Include(a => a.Profile).ThenInclude(p => p.MemberAircrafts).ThenInclude(x => x.AircraftType)
             .Include(a => a.Profile).ThenInclude(p => p.MemberClubAffiliations).ThenInclude(c => c.Club)
             .Include(a => a.MembershipType)
+            .Include(a => a.CorporateCompany)
             .Include(a => a.CurrentMemberStatus)
             .Include(a => a.Application).ThenInclude(app => app!.Proposer)
             .Include(a => a.Application).ThenInclude(app => app!.Seconder)
@@ -373,6 +401,9 @@ public class MemberProfileService : IMemberProfileService
             JoinedDate = account.JoinedDate,
             StartDate = account.StartDate,
             OutstandingArrears = arrears,
+            InvoiceTo = string.IsNullOrWhiteSpace(account.InvoiceTo) ? "INDIVIDUAL" : account.InvoiceTo,
+            CorporateCompanyId = account.CorporateCompanyId,
+            CorporateCompanyName = account.CorporateCompany?.Name,
             Identity = new MemberIdentityDto
             {
                 Title = profile.Title,

@@ -23,6 +23,7 @@ import type { MemberDashboard } from "@/services/member/dashboard";
 import { apiRequest, extractErrorMessage } from "@/services/membership/api";
 import { formatMembershipDate } from "@/services/admin/membershipDesk";
 import { printHtmlDocument } from "@/utils/financeExport";
+import { formatKes } from "@/utils/format";
 
 type LifeLetter = {
   membershipTransitionId: number;
@@ -135,7 +136,7 @@ export function MemberHomePage({ me }: { me: MemberDashboard }) {
     {
       id: "events",
       title: "Events",
-      description: "Current, upcoming and past club events.",
+      description: "Discover upcoming club events, register, and stay connected with the club community.",
       to: "/events",
       icon: CalendarDays,
       tone: "emerald" as const,
@@ -161,8 +162,21 @@ export function MemberHomePage({ me }: { me: MemberDashboard }) {
   const letter = useQuery({
     queryKey: ["member-life-letter", me.profileId],
     enabled: me.profileId > 0,
-    queryFn: () => apiRequest<LifeLetter | undefined>("/api/members/me/life-letter"),
+    queryFn: async () => (await apiRequest<LifeLetter | null>("/api/members/me/life-letter")) ?? null,
   });
+  const advanceLeft = Math.max(0, Number(me.availableCredit || 0));
+  const amountDue = Math.max(0, Number(me.outstandingBalance || 0));
+  const accountFinancialStatus = (me.accountFinancialStatus || "").toUpperCase();
+  const accountFinancialLabel =
+    accountFinancialStatus === "ADVANCE_CREDIT"
+      ? "Advance credit"
+      : accountFinancialStatus === "PARTIALLY_PAID"
+        ? "Partially paid"
+        : accountFinancialStatus === "PAID"
+          ? "Paid"
+          : accountFinancialStatus === "UNPAID"
+            ? "Unpaid"
+            : "";
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
@@ -179,6 +193,38 @@ export function MemberHomePage({ me }: { me: MemberDashboard }) {
           Member dashboard
         </h1>
       </section>
+      {/* <section className="rounded-xl border bg-card px-4 py-4">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Account position</p>
+            <p className="mt-1 text-sm text-muted-foreground">{accountFinancialLabel || me.standingDetail}</p>
+          </div>
+        </div>
+        <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div>
+            <dt className="text-xs text-muted-foreground">Annual subscription</dt>
+            <dd className="text-lg font-semibold tabular-nums">{formatKes(Number(me.annualSubscription || 0))}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Amount paid</dt>
+            <dd className="text-lg font-semibold tabular-nums">{formatKes(Number(me.annualPaid || 0))}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Balance due</dt>
+            <dd className="text-lg font-semibold tabular-nums">{formatKes(amountDue)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Advance credit</dt>
+            <dd className="text-lg font-semibold tabular-nums">
+              {advanceLeft > 0.009 ? `${formatKes(advanceLeft)} CR` : formatKes(0)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Account status</dt>
+            <dd className="text-lg font-semibold">{accountFinancialLabel || "—"}</dd>
+          </div>
+        </dl>
+      </section> */}
       {me.childrenRequiringOwnMembership > 0 ? (
         <p className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           {me.childrenRequiringOwnMembership} child record(s) are 21 or over and should take out their own
@@ -217,8 +263,10 @@ export function MemberHomePage({ me }: { me: MemberDashboard }) {
               icon={card.icon}
               to={card.to}
               tone={card.tone}
-              locked={card.locked}
-              badgeCount={"badgeCount" in card ? card.badgeCount : undefined}
+              {...(card.locked !== undefined ? { locked: card.locked } : {})}
+              {...("badgeCount" in card && card.badgeCount !== undefined
+                ? { badgeCount: card.badgeCount }
+                : {})}
             />
           ))}
       </section>

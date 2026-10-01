@@ -13,6 +13,11 @@ const dash = (v: unknown) => {
   const s = v === null || v === undefined ? "" : String(v);
   return s.trim() === "" ? "—" : s;
 };
+const invoiceToLabel = (value?: string | null) => {
+  if (value === "CORPORATE") return "Corporate company";
+  if (value === "BOTH") return "Member and corporate company";
+  return "Individual";
+};
 
 function ReviewBlock({
   step,
@@ -206,10 +211,18 @@ export const StepReview = memo(function StepReview({
         rows: omitSupporters
           ? [
               { label: "Membership type", value: dash(m.membershipType) },
+              { label: "Invoice to", value: invoiceToLabel(m.invoiceTo) },
+              ...(m.invoiceTo === "CORPORATE" || m.invoiceTo === "BOTH"
+                ? [{ label: "Corporate company", value: dash(m.corporateCompanyName) }]
+                : []),
               { label: "Joining date", value: formatKenyaDate(m.signatureDate) },
             ]
           : [
               { label: "Membership type", value: dash(m.membershipType) },
+              { label: "Invoice to", value: invoiceToLabel(m.invoiceTo) },
+              ...(m.invoiceTo === "CORPORATE" || m.invoiceTo === "BOTH"
+                ? [{ label: "Corporate company", value: dash(m.corporateCompanyName) }]
+                : []),
               {
                 label: "Signature / date",
                 value: `${dash(m.applicantSignature)} · ${formatKenyaDate(m.signatureDate)}`,

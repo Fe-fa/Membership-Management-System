@@ -44,7 +44,8 @@ public record RecordPaymentRequest(
     DateOnly? ChequeDate = null,
     string? ChequeFileName = null,
     string? ChequeFileUrl = null,
-    int? SubscriptionYear = null);
+    int? SubscriptionYear = null,
+    string? CreditOwner = null);
 public record PaymentRowDto(
     long TransactionId,
     string? ReceiptNumber,
@@ -92,7 +93,9 @@ public record SubscriptionRowDto(
     string? MembershipType = null,
     string? MembershipTypeCode = null,
     string? AccountStatus = null,
-    string? AccountStatusCode = null);
+    string? AccountStatusCode = null,
+    decimal AvailableCredit = 0,
+    string? FinancialStatus = null);
 public record InvoiceQueueRowDto(
     long AccountId,
     long SubscriptionId,
@@ -371,7 +374,8 @@ public record StatementLineDto(
     string? Status,
     decimal Amount,
     string Kind,
-    long? TransactionId = null);
+    long? TransactionId = null,
+    bool Informational = false);
 public record StatementDocumentDto(
     long AccountId,
     string MemberName,
@@ -385,7 +389,9 @@ public record StatementDocumentDto(
     IReadOnlyList<StatementLineDto> Lines,
     long? ApplicationId = null,
     string Audience = "MEMBER",
-    string? Email = null);
+    string? Email = null,
+    decimal Outstanding = 0,
+    decimal AvailableCredit = 0);
 public record StatementPartyRowDto(
     string RowKey,
     string Audience,
@@ -598,6 +604,11 @@ public interface IFinanceService
         CancellationToken cancellationToken);
     Task<StatementDocumentDto> GetApplicantStatementAsync(
         long applicationId,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken);
+    Task<StatementDocumentDto> GetCorporateStatementAsync(
+        long companyId,
         DateOnly from,
         DateOnly to,
         CancellationToken cancellationToken);
@@ -1260,6 +1271,7 @@ END
                 ChequeDocumentId = chequeDocumentId,
                 MpesaCode = sliceRequest.MpesaCode,
                 ReferenceNote = sliceRequest.ReferenceNote,
+                CreditOwner = NormalizeCreditOwner(sliceRequest.CreditOwner),
                 CreatedAt = DateTime.UtcNow,
                 CreatedByUserId = actorUserId
             };
@@ -1278,7 +1290,7 @@ END
                         .Where(f => f.FeeTypeId == sliceRequest.FeeTypeId)
                         .Select(f => f.Code)
                         .FirstOrDefaultAsync(cancellationToken);
-                    if (IsAnnualFee(feeCode))
+                    if (IsAnnualFee(feeCode) || string.Equals(feeCode, "ADVANCE", StringComparison.OrdinalIgnoreCase))
                         await ReconcileAccountDuesAsync(paidAccountId, cancellationToken);
                     else
                         await TryRestoreActiveMembershipAsync(paidAccountId, actorUserId, cancellationToken);
@@ -1424,9 +1436,9 @@ END
         await _db.SaveChangesAsync(cancellationToken);
         tx.PaymentStatus = paidStatus;
 
-        if (tx.AccountId is long accountId && IsAnnualFee(tx.FeeType?.Code))
+        if (tx.AccountId is long accountId && (IsAnnualFee(tx.FeeType?.Code) || IsAdvanceFee(tx.FeeType?.Code)))
         {
-            if (tx.SubscriptionId is null)
+            if (IsAnnualFee(tx.FeeType?.Code) && tx.SubscriptionId is null)
             {
                 var bindYear = tx.PaymentDate?.Year ?? DateTime.UtcNow.Year;
                 tx.SubscriptionId = await _db.Subscriptions.AsNoTracking()
@@ -1756,6 +1768,7 @@ END
 
     public async Task<FinanceDeskSummaryDto> GetDeskSummaryAsync(int year, CancellationToken cancellationToken)
     {
+        await SettleAdvanceAgainstOpenInvoicesAsync(cancellationToken);
         await SyncPendingChequeDocumentsAsync(cancellationToken);
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -2098,6 +2111,9 @@ END
         return code is "ANNUAL" or "SUBSCRIPTION" or "ANNUAL_SUBSCRIPTION";
     }
 
+    private static bool IsAdvanceFee(string? feeCode) =>
+        string.Equals((feeCode ?? "").Trim(), "ADVANCE", StringComparison.OrdinalIgnoreCase);
+
     private static bool IsNmFee(string? feeCode)
     {
         var code = (feeCode ?? "").Trim().ToUpperInvariant().Replace("-", "_").Replace(" ", "_");
@@ -2303,8 +2319,8 @@ END
             tx.ChequeBankCode,
             tx.MpesaCode,
             tx.ReferenceNote,
-            receipt.Amount > 0 ? receipt.Amount : tx.Amount,
-            AmountToWordsKes(receipt.Amount > 0 ? receipt.Amount : tx.Amount),
+            tx.Amount,
+            AmountToWordsKes(tx.Amount),
             "KES",
             ReceiptDisplayStatus(statusCode, tx.PaymentStatus?.Name),
             issuedBy,
@@ -2399,6 +2415,9 @@ END
                     && !_db.Receipts.Any(r => r.TransactionId == t.TransactionId));
             else
                 query = query.Where(t => t.PaymentStatus.Code == status || t.PaymentStatus.Name == filter.Status);
+            // An advance receipt has not settled a bill. It stays on the Advance credit page until it is used.
+            if (status is "SETTLED")
+                query = query.Where(t => t.FeeType == null || t.FeeType.Code != "ADVANCE");
         }
         if (!string.IsNullOrWhiteSpace(filter.Method))
         {
@@ -2661,6 +2680,7 @@ END
         PagedRequest paging,
         CancellationToken cancellationToken)
     {
+        await SettleAdvanceAgainstOpenInvoicesAsync(cancellationToken);
         var y = filter.Year ?? DateTime.UtcNow.Year;
         var query = _db.Subscriptions.AsNoTracking().Where(s => s.SubscriptionYear == y);
         if (filter.ArrearsOnly)
@@ -2789,6 +2809,19 @@ END
             var applicantSkip = paging.Skip - total;
             pageItems = applicantRows.Skip(applicantSkip).Take(paging.PageSize).ToList();
         }
+
+        var creditByAccount = await MemberAdvanceCreditAsync(
+            pageItems.Select(row => row.AccountId).Where(id => id > 0).Distinct().ToList(),
+            cancellationToken);
+        pageItems = pageItems.Select(row =>
+        {
+            creditByAccount.TryGetValue(row.AccountId, out var credit);
+            return row with
+            {
+                AvailableCredit = credit,
+                FinancialStatus = AccountFinancialStatus(row.ArrearsAmount, credit, row.AmountPaid)
+            };
+        }).ToList();
 
         return Paging.Create(pageItems, paging, combinedTotal);
     }
@@ -2978,8 +3011,11 @@ END
 
         var paymentDate = request.PaymentDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
         var methodCode = NormalizeSettlementMethodCode(request.PaymentMethodCode);
-        if (methodCode is not "CASH" && string.IsNullOrWhiteSpace(request.ReferenceCode))
-            throw new InvalidOperationException("Transaction / reference code is required for this payment method.");
+        var reference = request.ReferenceCode?.Trim() ?? "";
+        if (methodCode == "MPESA" && !System.Text.RegularExpressions.Regex.IsMatch(reference, "^[A-Za-z0-9]{10}$"))
+            throw new InvalidOperationException("M-Pesa reference must be 10 letters or numbers, for example SAB1234567.");
+        if (methodCode != "CASH" && methodCode != "MPESA" && reference.Length == 0)
+            throw new InvalidOperationException("Enter the cheque, EFT, or card reference.");
 
         var account = await _db.Accounts
             .Include(a => a.Profile)

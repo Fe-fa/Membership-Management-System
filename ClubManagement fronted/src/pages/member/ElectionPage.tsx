@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarDays,
+  BadgeCheck,
   CheckCircle2,
   Clock3,
   ClipboardList,
   CloudUpload,
   FileText,
+  Eye,
   Gavel,
   Lock,
   MapPin,
@@ -15,6 +17,7 @@ import {
   ThumbsDown,
   ThumbsUp,
   UserPlus,
+  UserRound,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -78,7 +81,10 @@ type ProxyHeld = {
   voteInstruction?: string | null;
   leaveToDiscretion?: boolean;
   instructionLabel: string;
+  notes?: string | null;
   reviewStatus?: string | null;
+  reviewReason?: string | null;
+  votingWeight?: number;
   proxyDeadlineAt?: string | null;
   instrumentReceivedAt?: string | null;
   resolutions: string[];
@@ -414,11 +420,7 @@ function useMemberElection() {
         }),
       }),
     onSuccess: () => {
-      toast.success(
-        proxy.proxyProfileId
-          ? "Proxy lodged. The named member has been notified."
-          : "Proxy lodged. No member account was linked — staff may need to contact them manually.",
-      );
+      toast.success("Proxy lodged. The appointed member can accept it or send it back.");
       void queryClient.invalidateQueries({ queryKey: ["elections", "mine"] });
       void queryClient.invalidateQueries({ queryKey: ["member-me"] });
     },
@@ -499,7 +501,7 @@ function MemberElectionCards() {
     <PageFrame width="lg">
       {staff ? <PageBackLink to="/admin" label="Back to admin dashboard" /> : null}
       {notice ? (
-        <CountdownBanner notice={notice} deadline={data?.proxyDeadlineAt} countdown={countdown} />
+        <CountdownBanner notice={notice} deadline={data?.ballotClosesAt ?? data?.proxyDeadlineAt} countdown={countdown} />
       ) : null}
 
       <div className="grid gap-5">
@@ -509,9 +511,6 @@ function MemberElectionCards() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h2 className="font-display text-xl font-semibold">Electronic ballot &amp; proxy</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                One vote per resolution; it cannot be recast.
-              </p>
             </div>
             {items.length > 0 ? (
               <div className="min-w-[140px]">
@@ -609,10 +608,16 @@ function MemberElectionCyclePage({ cycle }: { cycle: ElectionCycle }) {
       <PageBackLink to="/election" label="Back to election" />
       <PageHeader title={current.label} description={current.description} />
       {notice && cycle !== "audit" ? (
-        <CountdownBanner notice={notice} deadline={data?.proxyDeadlineAt} countdown={countdown} />
+        <CountdownBanner notice={notice} deadline={data?.ballotClosesAt ?? data?.proxyDeadlineAt} countdown={countdown} />
       ) : null}
 
       <section className="rounded-2xl border border-border bg-card p-5 shadow-[var(--shadow-card)] sm:p-6">
+        {cycle === "proxy" ? (
+          <div className="mb-5">
+            <ProxiesHeldSection rows={data?.proxiesHeld ?? []} loading={mine.isLoading} />
+          </div>
+        ) : null}
+
         {cycle === "vote" && items.length > 0 ? (
           <div className="mb-5 min-w-[140px] sm:ml-auto sm:w-40">
             <p className="text-right text-xs font-medium text-muted-foreground">
@@ -629,12 +634,14 @@ function MemberElectionCyclePage({ cycle }: { cycle: ElectionCycle }) {
 
         {mine.isLoading ? (
           <p className="text-sm text-muted-foreground">Loading ballot…</p>
+        ) : mine.isError ? (
+          <p className="text-sm text-destructive">{extractErrorMessage(mine.error)}</p>
         ) : cycle === "vote" ? (
           <VoteTab
             eligible={eligible}
             windowOpen={windowOpen}
             noVoteReason={data?.noVoteReason ?? null}
-            subscriptionsPaidUp={data?.subscriptionsPaidUp ?? false}
+            subscriptionsPaidUp={data?.subscriptionsPaidUp}
             items={items}
             nominees={nominees}
             receipt={receipt}
@@ -799,10 +806,10 @@ function VoteTab({
     <div className="space-y-6">
       {!eligible ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-          {noVoteReason ?? "You are not eligible to vote."}
-          {!subscriptionsPaidUp
-            ? " Settle the current subscription to restore voting rights (Article 62)."
-            : ""}
+          {noVoteReason
+            ?? (subscriptionsPaidUp === false
+              ? "Voting is blocked because your subscription is not paid up (Article 62)."
+              : "You are not eligible to vote.")}
         </p>
       ) : null}
 
@@ -985,6 +992,30 @@ function NomineeCard({ nominee }: { nominee: Nomination }) {
 }
 
 function ProxiesHeldSection({ rows, loading }: { rows: ProxyHeld[]; loading: boolean }) {
+  const queryClient = useQueryClient();
+  const [rejecting, setRejecting] = useState<ProxyHeld | null>(null);
+  const [reason, setReason] = useState("");
+  const respond = useMutation({
+    mutationFn: (payload: { row: ProxyHeld; decision: "ACCEPT" | "REJECT"; reason?: string }) =>
+      apiRequest(`/api/elections/meetings/${payload.row.generalMeetingId}/proxies/${payload.row.proxyId}/respond`, {
+        method: "POST",
+        body: JSON.stringify({
+          decision: payload.decision,
+          reason: payload.reason?.trim() || null,
+        }),
+      }),
+    onSuccess: (_data, payload) => {
+      setRejecting(null);
+      setReason("");
+      toast.success(
+        payload.decision === "ACCEPT"
+          ? "Proxy accepted. It now awaits admin or general manager approval."
+          : "Proxy returned to the appointing member.",
+      );
+      void queryClient.invalidateQueries({ queryKey: ["elections", "mine"] });
+    },
+    onError: (e) => toast.error(extractErrorMessage(e)),
+  });
   if (loading || rows.length === 0) return null;
   return (
     <section className="rounded-2xl border border-border bg-card p-5 shadow-[var(--shadow-card)] sm:p-6">
@@ -992,7 +1023,7 @@ function ProxiesHeldSection({ rows, loading }: { rows: ProxyHeld[]; loading: boo
         <div>
           <h2 className="font-display text-xl font-semibold">Appointments to you</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Members who named you as their proxy. Authority ends at the lodging deadline shown for each meeting.
+            Accept a proxy to send it to an admin or general manager. Reject it and it returns to the appointing member.
           </p>
         </div>
         <span className="rounded-full bg-sky-700 px-2.5 py-0.5 text-xs font-semibold text-white">
@@ -1021,7 +1052,55 @@ function ProxiesHeldSection({ rows, loading }: { rows: ProxyHeld[]; loading: boo
             </div>
             <p className="mt-3 text-sm">
               <span className="font-medium">Instruction:</span> {row.instructionLabel}
+              {row.votingWeight ? ` · Your voting weight is 1 + ${Math.max(0, row.votingWeight - 1)}` : ""}
             </p>
+            {row.notes ? (
+              <p className="mt-1 text-sm text-muted-foreground">Notes: {row.notes}</p>
+            ) : null}
+            {(row.reviewStatus ?? "").toUpperCase() === "AWAITING_HOLDER" ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-teal-800 hover:bg-teal-900"
+                  disabled={respond.isPending}
+                  onClick={() => respond.mutate({ row, decision: "ACCEPT" })}
+                >
+                  Accept
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={respond.isPending}
+                  onClick={() => {
+                    setReason("");
+                    setRejecting(row);
+                  }}
+                >
+                  Reject
+                </Button>
+              </div>
+            ) : null}
+            {rejecting?.proxyId === row.proxyId ? (
+              <div className="mt-3 grid gap-2">
+                <Textarea
+                  rows={2}
+                  value={reason}
+                  placeholder="Reason for sending this back"
+                  onChange={(e) => setReason(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={respond.isPending}
+                  onClick={() => respond.mutate({ row, decision: "REJECT", reason })}
+                >
+                  Send back to appointing member
+                </Button>
+              </div>
+            ) : null}
             {row.resolutions.length > 0 ? (
               <ul className="mt-2 list-inside list-disc text-sm text-muted-foreground">
                 {row.resolutions.map((subject) => (
@@ -1078,15 +1157,25 @@ function ProxyTab({
     queryFn: () => apiRequest<MemberHit[]>(`/api/elections/members?search=${encodeURIComponent(search)}`),
     enabled: search.trim().length >= 2,
   });
+  const [customMember, setCustomMember] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
   const deadlinePassed = Boolean(
     data?.proxyDeadlineAt && new Date(data.proxyDeadlineAt).getTime() <= Date.now(),
   );
   const reviewStatus = (data?.proxy?.reviewStatus ?? "").toUpperCase();
-  const lockedReview = reviewStatus === "APPROVED" || reviewStatus === "REJECTED" || reviewStatus === "LATE";
+  const lockedReview =
+    reviewStatus === "APPROVED" ||
+    reviewStatus === "REJECTED" ||
+    reviewStatus === "LATE" ||
+    reviewStatus === "AWAITING_HOLDER" ||
+    reviewStatus === "PENDING";
+  const verified = Boolean(proxy.proxyProfileId);
   const canSubmit =
     Boolean(meetingId) &&
     eligible &&
+    !deadlinePassed &&
     !lockedReview &&
+    verified &&
     proxy.proxyName.trim().length >= 2 &&
     !pending &&
     !uploadBusy;
@@ -1130,7 +1219,33 @@ function ProxyTab({
       proxyName: hit.name,
       proxyMembershipNo: hit.membershipNo || "",
     }));
+    setCustomMember("");
     setSearch("");
+    setShowSearch(false);
+  };
+
+  const verifyCustom = async () => {
+    const query = customMember.trim();
+    if (query.length < 2) return;
+    try {
+      const rows = await apiRequest<MemberHit[]>(
+        `/api/elections/members?search=${encodeURIComponent(query)}`,
+      );
+      const needle = query.toLowerCase();
+      const match = rows.find(
+        (hit) =>
+          hit.membershipNo?.toLowerCase() === needle ||
+          hit.name.toLowerCase() === needle ||
+          `${hit.name} ${hit.membershipNo ?? ""}`.toLowerCase().includes(needle),
+      );
+      if (!match) {
+        toast.error("No current member matched those details.");
+        return;
+      }
+      pickMember(match);
+    } catch (e) {
+      toast.error(extractErrorMessage(e));
+    }
   };
 
   return (
@@ -1144,17 +1259,33 @@ function ProxyTab({
         <p className="text-sm text-amber-800">{data.noVoteReason}</p>
       ) : null}
 
-      <div className="grid gap-3">
+      <div className="grid gap-4">
         <label className="grid gap-1.5 text-sm font-medium">
-          Search club member (recommended)
-          <Input
-            placeholder="Name or membership number"
-            value={search}
-            disabled={lockedReview}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+          Search member to appoint
+          <span className="flex items-center gap-2 rounded-xl border border-teal-700/40 px-3">
+            <Lock className="size-4 shrink-0 text-teal-800" />
+            <Input
+              placeholder="Member name or Membership no"
+              value={search}
+              disabled={lockedReview}
+              onFocus={() => setShowSearch(true)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setShowSearch(true);
+              }}
+              className="border-0 px-0 shadow-none focus-visible:ring-0"
+            />
+            <button
+              type="button"
+              className="text-teal-800"
+              aria-label="Show member search"
+              onClick={() => setShowSearch((open) => !open)}
+            >
+              <Eye className="size-4" />
+            </button>
+          </span>
         </label>
-        {search.trim().length >= 2 ? (
+        {showSearch && search.trim().length >= 2 ? (
           <div className="max-h-48 overflow-y-auto rounded-xl border border-border">
             {hits.isLoading ? (
               <p className="px-3 py-2 text-sm text-muted-foreground">Searching…</p>
@@ -1177,50 +1308,68 @@ function ProxyTab({
             )}
           </div>
         ) : null}
-        {/* {proxy.proxyProfileId ? (
-          <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-            Linked member selected — they will be notified by email and in-app when you lodge this proxy.
+
+        {/* <label className="grid gap-1.5 text-sm font-medium">
+          Or specify a custom member
+          <span className="flex items-center gap-2 rounded-xl border border-border px-3">
+            <UserRound className="size-4 shrink-0 text-muted-foreground" />
+            <Input
+              placeholder="Enter Member Details (Name / ID)"
+              value={customMember}
+              disabled={lockedReview}
+              onChange={(e) => setCustomMember(e.target.value)}
+              className="border-0 px-0 shadow-none focus-visible:ring-0"
+            />
             <button
               type="button"
-              className="ml-2 font-medium underline"
-              disabled={lockedReview}
-              onClick={() =>
-                setProxy((p) => ({ ...p, proxyProfileId: null, proxyName: "", proxyMembershipNo: "" }))
-              }
+              className="text-muted-foreground"
+              disabled={lockedReview || customMember.trim().length < 2}
+              aria-label="Verify typed member"
+              onClick={verifyCustom}
             >
-              Clear
+              <BadgeCheck className="size-4" />
             </button>
-          </p>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            Or type a name below for a guest / non-member. Staff will see that this person could not be
-            auto-notified.
-          </p>
-        )} */}
+          </span>
+        </label> */}
+
+        <div className="grid gap-1.5 text-sm font-medium">
+          Verify selected member
+          <div className="flex items-center gap-2 rounded-xl border border-border px-3 py-2">
+            <BadgeCheck className={cn("size-4 shrink-0", verified ? "text-emerald-700" : "text-muted-foreground")} />
+            <p className="min-w-0 flex-1 truncate text-sm font-normal text-muted-foreground">
+              {verified
+                ? `${proxy.proxyName}${proxy.proxyMembershipNo ? ` · ${proxy.proxyMembershipNo}` : ""}`
+                : "Select member to verify..."}
+            </p>
+            {verified ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800">
+                Verified
+                <BadgeCheck className="size-3.5" />
+              </span>
+            ) : null}
+            {verified && !lockedReview ? (
+              <button
+                type="button"
+                className="text-xs font-medium underline"
+                onClick={() =>
+                  setProxy((p) => ({ ...p, proxyProfileId: null, proxyName: "", proxyMembershipNo: "" }))
+                }
+              >
+                Clear
+              </button>
+            ) : null}
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="grid gap-1.5 text-sm font-medium">
           Proxy name
-          <Input
-            placeholder="Member name or 'The Chairman'"
-            value={proxy.proxyName}
-            disabled={lockedReview || Boolean(proxy.proxyProfileId)}
-            onChange={(e) =>
-              setProxy((p) => ({ ...p, proxyProfileId: null, proxyName: e.target.value }))
-            }
-          />
+          <Input value={proxy.proxyName} readOnly placeholder="Filled when a member is verified" />
         </label>
         <label className="grid gap-1.5 text-sm font-medium">
           Proxy membership number
-          <Input
-            placeholder="AC-0000"
-            value={proxy.proxyMembershipNo}
-            disabled={lockedReview || Boolean(proxy.proxyProfileId)}
-            onChange={(e) =>
-              setProxy((p) => ({ ...p, proxyProfileId: null, proxyMembershipNo: e.target.value }))
-            }
-          />
+          <Input value={proxy.proxyMembershipNo} readOnly placeholder="AC-0000" />
         </label>
       </div>
 
@@ -1341,14 +1490,27 @@ function ProxyTab({
 
       {deadlinePassed && !lockedReview ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-          The proxy cutoff has passed. You may still lodge the instrument, but it will be marked Late and
-          cannot count toward quorum or the tally (Article 65).
+          The cutoff has passed. A proxy lodged now cannot be recognised at the meeting.
         </p>
       ) : null}
 
+      {reviewStatus === "AWAITING_HOLDER" ? (
+        <p className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
+          Waiting for {data?.proxy?.proxyName || "the appointed member"} to accept or reject. A rejection
+          returns this appointment to you.
+        </p>
+      ) : null}
+      {reviewStatus === "RETURNED" ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          The appointed member sent this proxy back
+          {data?.proxy?.reviewReason ? `: ${data.proxy.reviewReason}` : ""}. Choose another member and submit
+          again.
+        </p>
+      ) : null}
       {reviewStatus === "PENDING" ? (
         <p className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
-          Your proxy is pending Returning Officer review. It will not count until it is approved.
+          The appointed member accepted. An admin or general manager must approve it at least 48 hours before
+          the meeting.
         </p>
       ) : null}
       {reviewStatus === "APPROVED" ? (
@@ -1385,13 +1547,22 @@ function ProxyTab({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-800">
           <Lock className="size-3.5" />
-          {lockedReview
-            ? "This proxy decision is final"
-            : "On-time instruments await Returning Officer review"}
+          {reviewStatus === "AWAITING_HOLDER"
+            ? "Waiting for the appointed member"
+            : reviewStatus === "PENDING"
+              ? "Waiting for admin or general manager approval"
+              : lockedReview
+                ? "This proxy decision is final"
+                : "The appointed member reviews first"}
         </span>
-        <Button type="button" className="rounded-lg px-5" disabled={!canSubmit} onClick={onSave}>
-          {pending ? "Submitting…" : lockedReview ? "Proxy locked after review" : "Submit proxy appointment"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" className="rounded-lg bg-teal-800 px-5 hover:bg-teal-900" disabled={!canSubmit} onClick={onSave}>
+            {pending ? "Submitting…" : "Confirm proxy appointment"}
+          </Button>
+          <Link to="/" className="inline-flex items-center gap-1 text-sm font-medium text-teal-800">
+            ← Back to dashboard
+          </Link>
+        </div>
       </div>
     </div>
   );

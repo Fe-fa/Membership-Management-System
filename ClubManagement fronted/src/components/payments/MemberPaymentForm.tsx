@@ -25,7 +25,7 @@ import { kenyaTodayISO } from "@/utils/kenyaDate";
 import { cn } from "@/utils/cn";
 import { useQueryClient } from "@tanstack/react-query";
 
-import type { FeePurpose, LookupOption, MemberSubscription, MpesaStkResult, PaymentAudience } from "./types";
+import { memberAccountPosition, type FeePurpose, type LookupOption, type MemberSubscription, type MpesaStkResult, type PaymentAudience } from "./types";
 import {
   APPLICANT_FEE_PURPOSES,
   CHEQUE_BANKS,
@@ -141,15 +141,22 @@ export function MemberPaymentForm({
     });
   }, [isApplicant, methods]);
 
-  const upcomingOutstanding = Math.max(0, Number(sub.upcomingOutstanding || 0));
+  const position = memberAccountPosition(sub);
+  const upcomingOutstanding = position.upcomingNet;
   const annualBillingYear =
-    sub.paysSubscription && sub.outstanding <= EPSILON && upcomingOutstanding > EPSILON && sub.upcomingYear
+    sub.paysSubscription && position.subscriptionNet <= EPSILON && upcomingOutstanding > EPSILON && sub.upcomingYear
       ? sub.upcomingYear
       : sub.year;
+  const grossAnnual =
+    sub.paysSubscription
+      ? sub.outstanding > EPSILON
+        ? position.currentYearNet
+        : position.upcomingNet
+      : 0;
   const annualOutstanding =
     sub.paysSubscription
       ? sub.outstanding > EPSILON
-        ? Math.max(0, sub.outstanding)
+        ? position.subscriptionNet
         : upcomingOutstanding
       : 0;
   const [purpose, setPurpose] = useState<FeePurpose>(initialPurpose ?? "annual");
@@ -157,6 +164,7 @@ export function MemberPaymentForm({
   const [lineDescription, setLineDescription] = useState(initialLineDescription ?? "");
   const [rows, setRows] = useState<PaymentRow[]>([newRow()]);
   const [error, setError] = useState("");
+  const [creditOwner, setCreditOwner] = useState<"MEMBER" | "CORPORATE">("MEMBER");
   const [chequeUploadingId, setChequeUploadingId] = useState<string | null>(null);
   const [stkByRow, setStkByRow] = useState<Record<string, MpesaStkResult | undefined>>({});
 
@@ -175,10 +183,10 @@ export function MemberPaymentForm({
   const billedChargeAmount = billedCharge ? Math.max(0, Number(billedCharge.amount || 0)) : 0;
 
   const suggestedAmount = useMemo(() => {
-    if (purpose === "joining") return Math.max(0, sub.joiningOutstanding);
+    if (purpose === "joining") return Math.max(0, position.joiningNet);
     if (purpose === "annual") return annualOutstanding;
     return billedChargeAmount;
-  }, [purpose, sub.joiningOutstanding, annualOutstanding, billedChargeAmount]);
+  }, [purpose, position.joiningNet, annualOutstanding, billedChargeAmount]);
 
   const defaultMethodId = useMemo(() => {
     const preferred = ["MPESA", "CASH", "CHEQUE", "CARD", "CLUB_CARD"];
@@ -194,7 +202,7 @@ export function MemberPaymentForm({
     if (!formOpen) return;
     const extras = openCharges.find((c) => c.amount > EPSILON);
     const fallbackPurpose: FeePurpose =
-      sub.joiningOutstanding > 0 && (!sub.paysSubscription || annualOutstanding <= 0)
+      position.joiningNet > 0 && (!sub.paysSubscription || annualOutstanding <= 0)
         ? "joining"
         : sub.paysSubscription && annualOutstanding > 0
           ? "annual"
@@ -214,7 +222,7 @@ export function MemberPaymentForm({
       initialAmount != null && initialAmount > 0
         ? initialAmount
         : nextPurpose === "joining"
-          ? sub.joiningOutstanding
+          ? position.joiningNet
           : nextPurpose === "annual" && sub.paysSubscription
             ? annualOutstanding
             : Number(chargedPurpose(nextPurpose)[0]?.amount || 0);
@@ -232,7 +240,7 @@ export function MemberPaymentForm({
   }, [
     formOpen,
     defaultMethodId,
-    sub.joiningOutstanding,
+    position.joiningNet,
     annualOutstanding,
     sub.paysSubscription,
     initialPurpose,
@@ -274,7 +282,7 @@ export function MemberPaymentForm({
   const stkPush = useMpesaStkPush();
 
   const purposeEnabled = (p: FeePurpose) => {
-    if (p === "joining") return sub.joiningOutstanding > 0;
+    if (p === "joining") return position.joiningNet > 0;
     if (p === "annual") return sub.paysSubscription && annualOutstanding > 0;
     if (isApplicant) return false;
     return chargedPurpose(p).some((c) => c.amount > EPSILON);
@@ -418,7 +426,9 @@ export function MemberPaymentForm({
       const result = await stkPush.mutateAsync({
         phone: row.mpesaPhone.trim(),
         amount: roundKes(amount),
-        feeTypeCode: FEE_PURPOSE_CODE[purpose],
+        feeTypeCode: !isApplicant && purposes.every((p) => !purposeEnabled(p))
+          ? "ADVANCE"
+          : FEE_PURPOSE_CODE[purpose],
         accountReference: sub.membershipNo ?? undefined,
       });
       setStkByRow((prev) => ({ ...prev, [row.id]: result }));
@@ -461,11 +471,12 @@ export function MemberPaymentForm({
           stk ? `STK ${stk.checkoutRequestId}` : "",
         ].filter(Boolean);
 
+        const advanceOnly = !isApplicant && purposes.every((p) => !purposeEnabled(p));
         await apiRequest(endpoint, {
           method: "POST",
           body: JSON.stringify({
             paymentMethodId: Number(row.methodId),
-            feeTypeCode: FEE_PURPOSE_CODE[purpose],
+            feeTypeCode: advanceOnly ? "ADVANCE" : FEE_PURPOSE_CODE[purpose],
             amount: roundKes(toNum(row.amount)),
             paymentDate: paidAt,
             mpesaCode: isMpesa ? row.mpesaCode.trim().toUpperCase() || undefined : undefined,
@@ -477,6 +488,7 @@ export function MemberPaymentForm({
             chequeFileName: isCheque ? row.chequeFile?.fileName : undefined,
             chequeFileUrl: isCheque ? row.chequeFile?.url : undefined,
             referenceNote: noteParts.join(" | ") || undefined,
+            creditOwner: !isApplicant ? creditOwner : undefined,
             lineDescription:
               !isApplicant &&
               (purpose === "accommodation" || purpose === "corkage" || purpose === "other")
@@ -484,7 +496,7 @@ export function MemberPaymentForm({
                 : undefined,
             nmChargeId: !isApplicant ? billedCharge?.id || nmChargeId || undefined : undefined,
             subscriptionYear:
-              !isApplicant && purpose === "annual" ? annualBillingYear : undefined,
+              !isApplicant && !advanceOnly && purpose === "annual" ? annualBillingYear : undefined,
             paymentStatusCode:
               isCard || isCheque || (isMpesa && !row.mpesaCode.trim()) ? "PENDING" : undefined,
           }),
@@ -529,12 +541,12 @@ export function MemberPaymentForm({
               <div className="mt-3 space-y-2.5 text-sm">
                 <div className="flex justify-between gap-3">
                   <span className="text-muted-foreground">Annual Dues ({annualBillingYear})</span>
-                  <strong className="tabular-nums">{formatKes(sub.paysSubscription ? Math.max(0, annualOutstanding - Number(sub.broughtForward || 0)) : 0)}</strong>
+                  <strong className="tabular-nums">{formatKes(grossAnnual)}</strong>
                 </div>
-                {Number(sub.broughtForward || 0) > EPSILON ? (
+                {position.broughtForwardNet > EPSILON ? (
                   <div className="flex justify-between gap-3">
                     <span className="text-muted-foreground">Brought forward (prior years)</span>
-                    <strong className="tabular-nums text-amber-800">{formatKes(Number(sub.broughtForward))}</strong>
+                    <strong className="tabular-nums text-amber-800">{formatKes(position.broughtForwardNet)}</strong>
                   </div>
                 ) : null}
                 {(sub.joiningPaymentStatus ?? "") !== "NotBilled" ? (
@@ -543,10 +555,10 @@ export function MemberPaymentForm({
                     <strong
                       className={cn(
                         "tabular-nums",
-                        sub.joiningOutstanding <= EPSILON && "text-emerald-600",
+                        position.joiningNet <= EPSILON && "text-emerald-600",
                       )}
                     >
-                      {formatKes(sub.joiningOutstanding)}
+                      {formatKes(position.joiningNet)}
                     </strong>
                   </div>
                 ) : null}
@@ -565,7 +577,7 @@ export function MemberPaymentForm({
                 <div className="my-1 border-t border-border" />
                 <div className="flex justify-between gap-3 text-base">
                   <span className="font-semibold">Net Dues</span>
-                  <strong className="tabular-nums">{formatKes(sub.balance)}</strong>
+                  <strong className="tabular-nums">{formatKes(position.balanceNet)}</strong>
                 </div>
               </div>
             </div>
@@ -580,11 +592,15 @@ export function MemberPaymentForm({
               <select
                 id="modal-fee-type"
                 className="flex h-10 w-full rounded-xl border border-input bg-background px-3 text-sm shadow-sm"
-                value={purpose}
-                onChange={(e) => setPurpose(e.target.value as FeePurpose)}
+                value={purposes.filter(purposeEnabled).length === 0 ? "advance" : purpose}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  if (next === "advance") return;
+                  setPurpose(next as FeePurpose);
+                }}
               >
                 {purposes.filter(purposeEnabled).length === 0 ? (
-                  <option value={purpose}>No invoiced fees yet</option>
+                  <option value="advance">Advance payment / credit</option>
                 ) : (
                   purposes.filter(purposeEnabled).map((p) => (
                     <option key={p} value={p}>
@@ -636,7 +652,6 @@ export function MemberPaymentForm({
                 <Plus className="size-4" /> Add row
               </Button>
             </div>
-
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
               {rows.map((row, index) => {
                 const code = methodCodeOf(row);
@@ -955,6 +970,10 @@ export function MemberPaymentForm({
                 <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                   {error}
                 </div>
+              ) : purposes.filter(purposeEnabled).length === 0 && allocated > EPSILON ? (
+                <p className="text-xs text-muted-foreground">
+                  No invoice is open. This payment is held as available credit until finance issues an invoice.
+                </p>
               ) : (purpose === "joining" || purpose === "annual") && allocated > roundKes(suggestedAmount) + EPSILON ? (
                 <p className="text-xs text-muted-foreground">
                   The fee balance is cleared first. Any extra is applied to the other open fee, then carried forward.

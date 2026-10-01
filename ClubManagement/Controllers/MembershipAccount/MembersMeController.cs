@@ -18,19 +18,22 @@ public class MembersMeController : ControllerBase
     private readonly IFinanceService _finance;
     private readonly INonMembershipBillingService _nmBilling;
     private readonly IMembershipTransitionService _transitions;
+    private readonly IPaymentAllocationService _allocations;
 
     public MembersMeController(
         IMemberDashboardService dashboard,
         IMemberProfileService profiles,
         IFinanceService finance,
         INonMembershipBillingService nmBilling,
-        IMembershipTransitionService transitions)
+        IMembershipTransitionService transitions,
+        IPaymentAllocationService allocations)
     {
         _dashboard = dashboard;
         _profiles = profiles;
         _finance = finance;
         _nmBilling = nmBilling;
         _transitions = transitions;
+        _allocations = allocations;
     }
 
     [HttpGet]
@@ -122,6 +125,17 @@ public class MembersMeController : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
+    }
+
+    [HttpGet("advance-credit")]
+    public async Task<ActionResult<AdvanceCreditPositionDto>> AdvanceCredit(CancellationToken cancellationToken)
+    {
+        var profileId = User.ProfileId();
+        if (profileId is null) return Unauthorized();
+        var me = await _dashboard.GetMineAsync(profileId.Value, cancellationToken);
+        if (me is null) return NotFound();
+        try { return Ok(await _allocations.GetAdvanceCreditPositionAsync(me.AccountId, cancellationToken)); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
     [HttpGet("statement")]

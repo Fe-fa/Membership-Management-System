@@ -417,4 +417,13 @@ C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-reversal-check\ClubManagement.dep
 C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-reversal-check\ClubManagement.runtimeconfig.json
 C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-reversal-check\ClubManagement.dll
 C:\Users\fe-fa\AppData\Local\Temp\acea-invoice-reversal-check\ClubManagement.pdb
+D:\acea-election-build\appsettings.Development.json
+D:\acea-election-build\appsettings.json
+D:\acea-election-build\ClubManagement.staticwebassets.runtime.json
+D:\acea-election-build\ClubManagement.staticwebassets.endpoints.json
+D:\acea-election-build\ClubManagement.exe
+D:\acea-election-build\ClubManagement.deps.json
+D:\acea-election-build\ClubManagement.runtimeconfig.json
+D:\acea-election-build\ClubManagement.dll
+D:\acea-election-build\ClubManagement.pdb
 D:\Partition A\Desktop\AERO CLUB MANAGEMENT SYSTEM\TEST\ClubManagement\obj\Debug\net10.0\staticwebassets.upToDateCheck.txt

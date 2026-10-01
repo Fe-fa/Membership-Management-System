@@ -371,6 +371,9 @@ export type MemberProfile = {
     declarationSignature?: string | null;
     declarationDate?: string | null;
   };
+  invoiceTo?: "INDIVIDUAL" | "CORPORATE" | "BOTH" | string | null;
+  corporateCompanyId?: number | null;
+  corporateCompanyName?: string | null;
   governance: {
     membershipTypeId: number;
     membershipTypeCode: string;

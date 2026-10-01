@@ -73,11 +73,51 @@ const METHOD_OPTIONS = [
   { value: "MPESA", label: "M-Pesa Manual Reference" },
   { value: "CASH", label: "Cash" },
   { value: "CHEQUE", label: "Cheque" },
+  { value: "BANK_TRANSFER", label: "Bank transfer / EFT" },
   { value: "CARD", label: "Credit / Debit Card" },
 ] as const;
 
+function isMpesa(method: string) {
+  return method === "MPESA" || method === "MPESA_STK";
+}
+
 function needsReference(method: string) {
   return method !== "CASH";
+}
+
+function formatKesInput(value: number) {
+  const cents = Math.round(value * 100) % 100;
+  return `Ksh ${value.toLocaleString("en-KE", {
+    minimumFractionDigits: cents === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function parseKesInput(raw: string): number | null {
+  const cleaned = raw.replace(/ksh/gi, "").replace(/,/g, "").trim();
+  if (!cleaned || cleaned === ".") return null;
+  const amount = Number(cleaned);
+  return Number.isFinite(amount) ? amount : null;
+}
+
+function maskKesInput(raw: string) {
+  const cleaned = raw.replace(/ksh/gi, "").replace(/,/g, "").replace(/[^\d.]/g, "");
+  if (!cleaned) return "";
+  const [whole, fraction] = cleaned.split(".");
+  const grouped = Number(whole || "0").toLocaleString("en-KE");
+  return fraction === undefined ? `Ksh ${grouped}` : `Ksh ${grouped}.${fraction.slice(0, 2)}`;
+}
+
+function referenceError(method: string, reference: string) {
+  const code = reference.trim();
+  if (isMpesa(method)) {
+    if (!/^[A-Za-z0-9]{10}$/.test(code)) {
+      return "M-Pesa code must be 10 letters or numbers, for example SAB1234567.";
+    }
+    return null;
+  }
+  if (needsReference(method) && !code) return "Enter the cheque, EFT, or card reference.";
+  return null;
 }
 
 type Props = {
@@ -107,6 +147,11 @@ export function DirectSettlementModal({ open, year, seed, allowSearch, onClose, 
     const t = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
     return () => window.clearTimeout(t);
   }, [search]);
+
+  useEffect(() => {
+    if (!isMpesa(method)) return;
+    setReference((current) => current.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10));
+  }, [method]);
 
   useEffect(() => {
     if (!open) return;
@@ -146,14 +191,8 @@ export function DirectSettlementModal({ open, year, seed, allowSearch, onClose, 
     const base = applySenior
       ? context.data.suggestedAmountAfterSeniorDiscount
       : context.data.arrearsAmount;
-    const withReactivation =
-      includeReactivation && context.data.canIncludeReactivationFee
-        ? base + context.data.reactivationFeeAmount
-        : base;
-    // Amount paid field is annual portion only; reactivation is charged separately on submit.
-    setAmountPaid(String(base));
-    void withReactivation;
-  }, [context.data, applySenior, includeReactivation]);
+    setAmountPaid(formatKesInput(base));
+  }, [context.data, applySenior]);
 
   const suggestedAnnual = useMemo(() => {
     if (!context.data) return 0;
@@ -163,11 +202,13 @@ export function DirectSettlementModal({ open, year, seed, allowSearch, onClose, 
   const settle = useMutation({
     mutationFn: () => {
       if (selectedAccountId == null) throw new Error("Select a member first.");
-      const amount = Number(amountPaid);
-      if (!Number.isFinite(amount) || amount <= 0) throw new Error("Enter a valid amount paid.");
-      if (needsReference(method) && !reference.trim()) {
-        throw new Error("Transaction / reference code is required for this payment method.");
+      const amount = parseKesInput(amountPaid);
+      if (amount == null || amount <= 0) throw new Error("Enter an amount greater than zero.");
+      if (amount > suggestedAnnual + 0.009) {
+        throw new Error(`Amount paid cannot exceed arrears due (${formatKes(suggestedAnnual)}).`);
       }
+      const refError = referenceError(method, reference);
+      if (refError) throw new Error(refError);
       return apiRequest<DirectSettlementResult>("/api/finance/settlement", {
         method: "POST",
         body: JSON.stringify({
@@ -196,6 +237,21 @@ export function DirectSettlementModal({ open, year, seed, allowSearch, onClose, 
   });
 
   const ctx = context.data;
+  const paidAmount = parseKesInput(amountPaid);
+  const amountError =
+    !ctx || paidAmount == null
+      ? null
+      : paidAmount <= 0
+        ? "Enter an amount greater than zero."
+        : paidAmount > suggestedAnnual + 0.009
+          ? `Cannot exceed arrears due (${formatKes(suggestedAnnual)}).`
+          : null;
+  const remaining =
+    paidAmount != null && paidAmount > 0 && paidAmount < suggestedAnnual - 0.009
+      ? suggestedAnnual - paidAmount
+      : null;
+  const refError = ctx && needsReference(method) ? referenceError(method, reference) : null;
+  const canSubmit = Boolean(ctx) && selectedAccountId != null && paidAmount != null && !amountError && !refError;
   const statusLabel = ctx?.accountStatusCode === "REMOVED"
     ? "Removed"
     : ctx?.accountStatusCode === "POSTED"
@@ -206,39 +262,40 @@ export function DirectSettlementModal({ open, year, seed, allowSearch, onClose, 
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && !settle.isPending && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Wallet className="size-5 text-primary" />
+      <DialogContent className="flex max-h-[min(34rem,calc(100dvh-2rem))] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+        <DialogHeader className="shrink-0 space-y-1 px-5 pb-2 pr-12 pt-4">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Wallet className="size-4 text-primary" />
             Direct settlement
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs">
             Record payment against annual arrears
             {allowSearch && !seed?.accountId ? " — search for any member first." : "."}
           </DialogDescription>
         </DialogHeader>
 
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-2">
         {allowSearch && !seed?.accountId ? (
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label htmlFor="settle-search">Find member</Label>
             <Input
               id="settle-search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Name, membership no (AC-0008), or application id…"
+              placeholder="Name or membership no."
               autoFocus
             />
             {hits.isFetching ? (
               <p className="text-xs text-muted-foreground">Searching…</p>
             ) : null}
             {debouncedSearch.length >= 2 && (hits.data?.length ?? 0) > 0 ? (
-              <ul className="max-h-40 overflow-y-auto rounded-md border border-border">
+              <ul className="max-h-28 overflow-y-auto rounded-md border border-border">
                 {(hits.data ?? []).map((hit) => (
                   <li key={hit.accountId}>
                     <button
                       type="button"
                       className={cn(
-                        "flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-muted",
+                        "flex w-full flex-col items-start gap-0.5 px-3 py-1.5 text-left text-sm hover:bg-muted",
                         selectedAccountId === hit.accountId && "bg-muted",
                       )}
                       onClick={() => {
@@ -252,7 +309,6 @@ export function DirectSettlementModal({ open, year, seed, allowSearch, onClose, 
                       </span>
                       <span className="text-xs text-muted-foreground">
                         {hit.accountStatus}
-                        {hit.membershipType ? ` · ${hit.membershipType}` : ""}
                         {hit.arrearsAmount > 0 ? ` · arrears ${formatKes(hit.arrearsAmount)}` : ""}
                       </span>
                     </button>
@@ -272,148 +328,128 @@ export function DirectSettlementModal({ open, year, seed, allowSearch, onClose, 
         ) : context.isError ? (
           <p className="text-sm text-destructive">{extractErrorMessage(context.error)}</p>
         ) : ctx ? (
-          <div className="space-y-4">
-            <section className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Member summary</p>
-              <p className="mt-1 text-base font-semibold">{ctx.memberName}</p>
-              <dl className="mt-2 grid gap-1 sm:grid-cols-2">
+          <div className="space-y-3">
+            <section className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <dt className="text-xs text-muted-foreground">Member number</dt>
-                  <dd className="font-medium">{ctx.membershipNo || "—"}</dd>
+                  <p className="font-semibold leading-tight">{ctx.memberName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {ctx.membershipNo || "—"} · {ctx.year} · {statusLabel}
+                  </p>
                 </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">Account status</dt>
-                  <dd className="font-medium">{statusLabel}</dd>
+                <p className="shrink-0 text-right font-semibold text-amber-800">{formatKes(ctx.arrearsAmount)}</p>
+              </div>
+              {ctx.eligibleForSeniorDiscount || ctx.canIncludeReactivationFee ? (
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-border/70 pt-2">
+                  {ctx.eligibleForSeniorDiscount ? (
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={applySenior}
+                        onChange={(e) => setApplySenior(e.target.checked)}
+                      />
+                      Senior discount 50%
+                    </label>
+                  ) : null}
+                  {ctx.canIncludeReactivationFee ? (
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={includeReactivation}
+                        onChange={(e) => setIncludeReactivation(e.target.checked)}
+                      />
+                      Re-activation fee {formatKes(ctx.reactivationFeeAmount)}
+                    </label>
+                  ) : null}
                 </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">Year</dt>
-                  <dd className="font-medium">{ctx.year}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">Total arrears due</dt>
-                  <dd className="font-medium text-amber-800">{formatKes(ctx.arrearsAmount)}</dd>
-                </div>
-              </dl>
+              ) : null}
             </section>
 
-            <div className="grid gap-3">
+            <div className="grid gap-2.5">
               <label className="grid gap-1 text-sm">
-                <span className="text-muted-foreground">Amount paid (Ksh)</span>
+                <span className="text-muted-foreground">Amount paid</span>
                 <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
+                  inputMode="decimal"
                   value={amountPaid}
-                  onChange={(e) => setAmountPaid(e.target.value)}
+                  onChange={(e) => setAmountPaid(maskKesInput(e.target.value))}
+                  aria-invalid={Boolean(amountError)}
                 />
-                <span className="text-xs text-muted-foreground">
-                  Defaults to outstanding balance ({formatKes(suggestedAnnual)}). Edit for partial payment.
-                </span>
-              </label>
-
-              <label className="grid gap-1 text-sm">
-                <span className="text-muted-foreground">Payment method</span>
-                <select
-                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                  value={method}
-                  onChange={(e) => setMethod(e.target.value)}
-                >
-                  {METHOD_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="grid gap-1 text-sm">
-                <span className="text-muted-foreground">
-                  Transaction / reference code
-                  {needsReference(method) ? " *" : " (optional)"}
-                </span>
-                <Input
-                  value={reference}
-                  onChange={(e) => setReference(e.target.value)}
-                  placeholder="M-Pesa code, cheque no, or card ref…"
-                />
-              </label>
-
-              <label
-                className={cn(
-                  "flex items-start gap-2 rounded-md border border-border p-3 text-sm",
-                  !ctx.eligibleForSeniorDiscount && "opacity-60",
-                )}
-              >
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={applySenior}
-                  disabled={!ctx.eligibleForSeniorDiscount}
-                  onChange={(e) => setApplySenior(e.target.checked)}
-                />
-                <span>
-                  <span className="font-medium">Apply senior member discount</span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {ctx.eligibleForSeniorDiscount
-                      ? ctx.seniorDiscountReason || "50% on annual subscription for eligible members."
-                      : "Not eligible (requires age 55+ with 25+ years membership)."}
+                {amountError ? (
+                  <span className="text-xs text-destructive">{amountError}</span>
+                ) : remaining != null ? (
+                  <span className="text-xs font-medium text-amber-800">
+                    Remaining balance after clearance: {formatKes(remaining)}
                   </span>
-                </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    Defaults to {formatKes(suggestedAnnual)}. A lower amount is a partial payment.
+                  </span>
+                )}
               </label>
 
-              <label
-                className={cn(
-                  "flex items-start gap-2 rounded-md border border-border p-3 text-sm",
-                  !ctx.canIncludeReactivationFee && "opacity-60",
-                )}
-              >
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={includeReactivation}
-                  disabled={!ctx.canIncludeReactivationFee}
-                  onChange={(e) => setIncludeReactivation(e.target.checked)}
-                />
-                <span>
-                  <span className="font-medium">Include re-activation fee</span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {ctx.canIncludeReactivationFee
-                      ? `Appends club entrance / re-application fee (${formatKes(ctx.reactivationFeeAmount)}) for Removed members.`
-                      : "Only available when account status is Removed."}
+              <div className="grid gap-2.5 sm:grid-cols-2">
+                <label className="grid gap-1 text-sm">
+                  <span className="text-muted-foreground">Payment method</span>
+                  <select
+                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                    value={method}
+                    onChange={(e) => setMethod(e.target.value)}
+                  >
+                    {METHOD_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="grid gap-1 text-sm">
+                  <span className="text-muted-foreground">
+                    Reference{needsReference(method) ? " *" : ""}
                   </span>
-                </span>
-              </label>
+                  <Input
+                    value={reference}
+                    maxLength={isMpesa(method) ? 10 : 40}
+                    onChange={(e) =>
+                      setReference(
+                        isMpesa(method)
+                          ? e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10)
+                          : e.target.value,
+                      )
+                    }
+                    placeholder={isMpesa(method) ? "SAB1234567" : method === "CASH" ? "Optional" : "Cheque or EFT no."}
+                    aria-invalid={Boolean(reference.trim()) && Boolean(refError)}
+                  />
+                  {refError && reference.trim() ? (
+                    <span className="text-xs text-destructive">{refError}</span>
+                  ) : needsReference(method) && !reference.trim() ? (
+                    <span className="text-xs text-muted-foreground">
+                      {isMpesa(method) ? "10 letters or numbers." : "Required."}
+                    </span>
+                  ) : null}
+                </label>
+              </div>
 
               {includeReactivation && ctx.canIncludeReactivationFee ? (
                 <p className="text-xs text-muted-foreground">
-                  Total collected today: {formatKes(Number(amountPaid || 0) + ctx.reactivationFeeAmount)}{" "}
-                  (annual {formatKes(Number(amountPaid || 0))} + reactivation{" "}
-                  {formatKes(ctx.reactivationFeeAmount)}).
+                  Collected today {formatKes((paidAmount ?? 0) + ctx.reactivationFeeAmount)} including the re-activation fee.
                 </p>
               ) : null}
             </div>
           </div>
         ) : null}
+        </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0 gap-2 border-t bg-background px-5 py-3 sm:space-x-0">
           <Button type="button" variant="outline" disabled={settle.isPending} onClick={onClose}>
             Cancel
           </Button>
           <Button
             type="button"
-            disabled={settle.isPending || selectedAccountId == null || !ctx}
+            disabled={settle.isPending || !canSubmit}
             onClick={() => {
-              if (selectedAccountId == null) {
-                toast.error("Select a member first.");
-                return;
-              }
-              const amount = Number(amountPaid);
-              if (!Number.isFinite(amount) || amount <= 0) {
-                toast.error("Enter a valid amount paid.");
-                return;
-              }
-              if (needsReference(method) && !reference.trim()) {
-                toast.error("Transaction / reference code is required for this payment method.");
+              if (!canSubmit) {
+                toast.error(amountError || refError || "Complete the payment details.");
                 return;
               }
               settle.mutate();

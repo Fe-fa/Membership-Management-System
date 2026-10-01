@@ -128,6 +128,7 @@ public partial class FinanceService
         PagedRequest paging,
         CancellationToken cancellationToken)
     {
+        await SeparatePendingAnnualInvoicesAsync(cancellationToken);
         var query = _db.BillingDocuments.AsNoTracking().AsQueryable();
         if (!string.IsNullOrWhiteSpace(kind))
             query = query.Where(d => d.Kind == NormalizeKind(kind));
@@ -196,11 +197,17 @@ public partial class FinanceService
         doc.ReviewNotes = string.IsNullOrWhiteSpace(request.Notes) ? doc.ReviewNotes : request.Notes.Trim();
         doc.PublishedAt = DateTime.UtcNow;
 
+        InvoiceDeliveryPlan? delivery = null;
+        if (doc.Kind == "INVOICE"
+            && doc.FeeType is "ANNUAL" or "JOINING"
+            && doc.AccountId is long routedAccountId)
+            delivery = await ResolveInvoiceDeliveryAsync(routedAccountId, cancellationToken);
+
         if (doc.MembershipInvoiceId is long invoiceId)
         {
             var invoice = await _db.MembershipInvoices.FirstOrDefaultAsync(i => i.InvoiceId == invoiceId, cancellationToken);
             if (invoice is not null)
-                invoice.PublishedToMember = true;
+                invoice.PublishedToMember = delivery?.PublishToMember ?? true;
         }
         else if (doc.Kind == "INVOICE" && doc.FeeType == "ANNUAL" && doc.AccountId is long accountId && doc.Year is int year)
         {
@@ -208,44 +215,56 @@ public partial class FinanceService
                 .FirstOrDefaultAsync(i => i.AccountId == accountId && i.Year == year, cancellationToken);
             if (invoice is not null)
             {
-                invoice.PublishedToMember = true;
+                invoice.PublishedToMember = delivery?.PublishToMember ?? true;
                 doc.MembershipInvoiceId = invoice.InvoiceId;
             }
         }
 
+        if (delivery?.EmailList is { Length: > 0 } routedEmail)
+            doc.Email = routedEmail;
+
         await _db.SaveChangesAsync(cancellationToken);
 
-        if (sendEmail && !string.IsNullOrWhiteSpace(doc.Email) && !string.IsNullOrWhiteSpace(doc.DocumentHtml))
+        var recipients = (delivery?.Emails ?? SplitEmails(doc.Email)).ToList();
+        if (sendEmail && recipients.Count > 0 && !string.IsNullOrWhiteSpace(doc.DocumentHtml))
         {
-            try
+            var subject = doc.Kind == "STATEMENT"
+                ? $"Aero Club statement {doc.DocumentNo}"
+                : $"Aero Club invoice {doc.DocumentNo}";
+            var html = doc.Kind == "INVOICE" ? WithEmailPayNow(doc.DocumentHtml) : doc.DocumentHtml;
+            var sentTo = new List<string>();
+            foreach (var recipient in recipients)
             {
-                var subject = doc.Kind == "STATEMENT"
-                    ? $"Aero Club statement {doc.DocumentNo}"
-                    : $"Aero Club invoice {doc.DocumentNo}";
-                var html = doc.Kind == "INVOICE" ? WithEmailPayNow(doc.DocumentHtml) : doc.DocumentHtml;
-                var sent = await _email.SendHtmlAsync(doc.Email.Trim(), subject, html, cancellationToken);
-                if (sent)
+                try
                 {
-                    doc.SentAt = DateTime.UtcNow;
-                    doc.SentToEmail = doc.Email.Trim();
-                    doc.Status = "PUBLISHED";
-                    if (doc.MembershipInvoiceId is long mid)
-                    {
-                        var invoice = await _db.MembershipInvoices.FirstOrDefaultAsync(i => i.InvoiceId == mid, cancellationToken);
-                        if (invoice is not null)
-                        {
-                            invoice.SentAt = doc.SentAt;
-                            invoice.SentToEmail = doc.SentToEmail;
-                        }
-                    }
-                    await _db.SaveChangesAsync(cancellationToken);
+                    var sent = await _email.SendHtmlAsync(recipient, subject, html, cancellationToken);
+                    if (sent) sentTo.Add(recipient);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Could not email billing document {DocumentNo} to {Email}", doc.DocumentNo, recipient);
                 }
             }
-            catch (Exception ex)
+            if (sentTo.Count > 0)
             {
-                _logger.LogWarning(ex, "Could not email billing document {DocumentNo}", doc.DocumentNo);
+                doc.SentAt = DateTime.UtcNow;
+                doc.SentToEmail = string.Join("; ", sentTo);
+                doc.Status = "PUBLISHED";
+                if (doc.MembershipInvoiceId is long mid)
+                {
+                    var invoice = await _db.MembershipInvoices.FirstOrDefaultAsync(i => i.InvoiceId == mid, cancellationToken);
+                    if (invoice is not null)
+                    {
+                        invoice.SentAt = doc.SentAt;
+                        invoice.SentToEmail = doc.SentToEmail;
+                    }
+                }
+                await _db.SaveChangesAsync(cancellationToken);
             }
         }
+
+        if (doc.Kind == "INVOICE" && doc.AccountId is long billedAccountId)
+            await ReconcileAccountDuesAsync(billedAccountId, cancellationToken);
 
         return (await GetBillingDocumentAsync(billingDocumentId, cancellationToken))!;
     }
@@ -654,6 +673,72 @@ public partial class FinanceService
         return true;
     }
 
+    /// <summary>
+    /// Invoices already waiting for approval were stored as this year plus earlier unpaid years.
+    /// Each pending annual invoice is put back to that year's subscription only.
+    /// </summary>
+    private async Task SeparatePendingAnnualInvoicesAsync(CancellationToken cancellationToken)
+    {
+        var docs = await _db.BillingDocuments
+            .Where(d =>
+                d.Kind == "INVOICE"
+                && d.FeeType == "ANNUAL"
+                && d.Status == "PENDING_GM"
+                && d.AccountId != null
+                && d.Year != null)
+            .ToListAsync(cancellationToken);
+        if (docs.Count == 0) return;
+
+        var accountIds = docs.Select(d => d.AccountId!.Value).Distinct().ToList();
+        var years = docs.Select(d => d.Year!.Value).Distinct().ToList();
+        var subs = await _db.Subscriptions.AsNoTracking()
+            .Where(s => accountIds.Contains(s.AccountId) && years.Contains(s.SubscriptionYear))
+            .Select(s => new { s.AccountId, s.SubscriptionYear, s.WaivedFlag, s.AmountDue, s.AmountPaid })
+            .ToListAsync(cancellationToken);
+
+        var changed = false;
+        foreach (var doc in docs)
+        {
+            var sub = subs.FirstOrDefault(s => s.AccountId == doc.AccountId && s.SubscriptionYear == doc.Year);
+            if (sub is null) continue;
+            var due = sub.WaivedFlag ? 0m : sub.AmountDue;
+            var paid = sub.AmountPaid;
+            var balance = Math.Max(0m, due - paid);
+            if (doc.Amount == due && doc.AmountPaid == paid && doc.Balance == balance) continue;
+
+            if (!string.IsNullOrWhiteSpace(doc.DocumentHtml))
+            {
+                var ke = System.Globalization.CultureInfo.GetCultureInfo("en-KE");
+                doc.DocumentHtml = doc.DocumentHtml
+                    .Replace(doc.Amount.ToString("N2", ke), due.ToString("N2", ke), StringComparison.Ordinal)
+                    .Replace("Balance brought forward", "Annual subscription", StringComparison.OrdinalIgnoreCase);
+            }
+
+            doc.Amount = due;
+            doc.AmountPaid = paid;
+            doc.Balance = balance;
+            changed = true;
+        }
+
+        if (!changed) return;
+
+        var invoiceIds = docs.Where(d => d.MembershipInvoiceId != null).Select(d => d.MembershipInvoiceId!.Value).ToList();
+        if (invoiceIds.Count > 0)
+        {
+            var invoices = await _db.MembershipInvoices
+                .Where(i => invoiceIds.Contains(i.InvoiceId) && !i.PublishedToMember)
+                .ToListAsync(cancellationToken);
+            foreach (var invoice in invoices)
+            {
+                var doc = docs.First(d => d.MembershipInvoiceId == invoice.InvoiceId);
+                invoice.Amount = doc.Amount;
+                invoice.Status = doc.Balance <= 0.009m ? "PAID" : doc.AmountPaid > 0.009m ? "PARTIAL" : "ISSUED";
+            }
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
     private async Task<PartySnapshot?> ResolvePartySnapshotAsync(
         string feeType,
         int year,
@@ -669,19 +754,16 @@ public partial class FinanceService
                 .FirstOrDefaultAsync(s => s.AccountId == annualId && s.SubscriptionYear == year, cancellationToken);
             if (sub is null) return null;
             var name = DisplayName(sub.Account.Profile?.FirstName, sub.Account.Profile?.LastName, sub.Account.MembershipNo);
-            var brought = PriorYearUnpaid(
-                await _db.Subscriptions.AsNoTracking()
-                    .Where(s => s.AccountId == annualId && s.SubscriptionYear < year)
-                    .ToListAsync(cancellationToken),
-                year);
+            var yearDue = sub.WaivedFlag ? 0m : sub.AmountDue;
+            var annualDelivery = await ResolveInvoiceDeliveryAsync(annualId, cancellationToken);
             return new PartySnapshot(
                 "MEMBER",
                 name,
                 sub.Account.MembershipNo ?? "",
-                sub.Account.Profile?.Email,
-                sub.AmountDue + brought,
+                annualDelivery.EmailList ?? sub.Account.Profile?.Email,
+                yearDue,
                 sub.AmountPaid,
-                Math.Max(0, sub.AmountDue - sub.AmountPaid) + brought);
+                Math.Max(0, yearDue - sub.AmountPaid));
         }
 
         if (feeType == "ANNUAL" && applicationId is long annualAppId && accountId is null)
@@ -712,7 +794,8 @@ public partial class FinanceService
             var due = account.EntranceFeeWaivedFlag ? 0 : (account.EntranceFeeAmount ?? 0);
             var paid = await JoiningPaidForAccountAsync(memberId, cancellationToken);
             var name = DisplayName(account.Profile?.FirstName, account.Profile?.LastName, account.MembershipNo);
-            return new PartySnapshot("MEMBER", name, account.MembershipNo ?? "", account.Profile?.Email, due, paid, Math.Max(0, due - paid));
+            var joiningDelivery = await ResolveInvoiceDeliveryAsync(memberId, cancellationToken);
+            return new PartySnapshot("MEMBER", name, account.MembershipNo ?? "", joiningDelivery.EmailList ?? account.Profile?.Email, due, paid, Math.Max(0, due - paid));
         }
 
         if (feeType == "JOINING" && applicationId is long appId)
@@ -798,6 +881,12 @@ public partial class FinanceService
             .ToListAsync(cancellationToken);
         return txs.Where(t => CountsTowardDues(t.PaymentStatus?.Code)).Sum(t => t.Amount);
     }
+
+    private static IEnumerable<string> SplitEmails(string? value) =>
+        (value ?? "")
+            .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(email => email.Contains('@'))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
 
     private static string DisplayName(string? first, string? last, string? fallback)
     {

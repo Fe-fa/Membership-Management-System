@@ -257,6 +257,11 @@ public class OfficePermissionService : IOfficePermissionService
                 ["ADMIN"] = VW(), ["GENERAL_MANAGER"] = VW(), ["CHAIRMAN"] = V(),
                 ["TREASURER"] = V(), ["COMMITTEE_MEMBER"] = N(), ["RECEPTIONIST"] = VW()
             }),
+            Mod("events", "Events", "Club events, registrations, attendance and announcements.", new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ADMIN"] = VW(), ["GENERAL_MANAGER"] = VW(), ["CHAIRMAN"] = VW(),
+                ["TREASURER"] = V(), ["COMMITTEE_MEMBER"] = VW(), ["RECEPTIONIST"] = N()
+            }),
             Mod("support", "Support", "Help desk, tickets and member queries.", new(StringComparer.OrdinalIgnoreCase)
             {
                 ["ADMIN"] = VW(), ["GENERAL_MANAGER"] = VW(), ["CHAIRMAN"] = VW(),

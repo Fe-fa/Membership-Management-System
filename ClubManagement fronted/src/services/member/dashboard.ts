@@ -41,6 +41,14 @@ export type MemberDashboard = {
   pendingEndorsements: number;
   pendingProxies: number;
   childrenRequiringOwnMembership: number;
+  outstandingBalance?: number;
+  availableCredit?: number;
+  creditStatus?: string;
+  totalInvoiced?: number;
+  totalAllocated?: number;
+  annualSubscription?: number;
+  annualPaid?: number;
+  accountFinancialStatus?: string;
 };
 
 export const memberMeQueryKey = ["member-me"] as const;

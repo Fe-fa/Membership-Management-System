@@ -17,6 +17,7 @@ public interface IElectionService
     Task<MemberElectionDto> GetMineAsync(long profileId, CancellationToken cancellationToken);
     Task<VoteReceiptDto> CastVoteAsync(long meetingId, long profileId, CastMemberBallotRequest request, long? actorUserId, CancellationToken cancellationToken);
     Task AppointProxyAsync(long meetingId, long profileId, AppointProxyRequest request, long? actorUserId, CancellationToken cancellationToken);
+    Task RespondToProxyAsync(long meetingId, long proxyId, long holderProfileId, ReviewProxyRequest request, CancellationToken cancellationToken);
     Task<ElectionDeskDto> ReviewProxyAsync(long meetingId, long proxyId, ReviewProxyRequest request, long? actorProfileId, bool privilegedReviewer, long? actorUserId, CancellationToken cancellationToken);
     Task<NominationDto> NominateAsync(long meetingId, CreateNominationRequest request, long? actorUserId, CancellationToken cancellationToken);
     Task<IReadOnlyList<ElectionDeskDto>> ListDeskAsync(CancellationToken cancellationToken);
@@ -193,7 +194,10 @@ END", cancellationToken);
         var priv = MemberClassPrivileges.ForCode(code);
         var classOk = VotingClasses.Contains(code ?? "");
         var years = YearsBetween(account?.JoinedDate ?? account?.StartDate, DateOnly.FromDateTime(DateTime.UtcNow));
-        var paidUp = account is null || await SubscriptionsPaidUpAsync(account.AccountId, priv, account.CurrentMemberStatus?.Code, cancellationToken);
+        var subscriptionExempt = SubscriptionExempt(code, account?.MembershipType?.CanAccessSubscriptions);
+        var paidUp = account is null
+            || subscriptionExempt
+            || await SubscriptionsPaidUpAsync(account.AccountId, priv, account.CurrentMemberStatus?.Code, cancellationToken);
         var classReason = classOk
             ? null
             : "Your class does not carry a vote. Electronic voting is for Full, Life, Country or Overseas members (Article 65).";
@@ -317,11 +321,12 @@ END", cancellationToken);
         EnsureWindowOpen(meeting);
         await EnsureCanVoteAsync(profileId, cancellationToken);
 
-        var approvedProxy = meeting.Proxies.FirstOrDefault(p =>
-            p.AppointingProfileId == profileId && IsApprovedProxy(p));
-        if (approvedProxy is not null)
+        var liveProxy = meeting.Proxies.FirstOrDefault(p =>
+            p.AppointingProfileId == profileId
+            && ProxyReviewStatus(p) is "APPROVED" or "PENDING" or "AWAITING_HOLDER");
+        if (liveProxy is not null)
             throw new InvalidOperationException(
-                "Your approved proxy already records your vote. You cannot also vote electronically.");
+                "A proxy is already lodged for this meeting. You cannot also vote electronically on the same matter.");
 
         var value = (request.VoteValue ?? "").Trim().ToUpperInvariant();
         if (value is not ("FOR" or "AGAINST"))
@@ -369,12 +374,19 @@ END", cancellationToken);
         var hoursRequired = request.IsPoll ? 24 : 48;
         var deadline = meetingStart.AddHours(-hoursRequired);
         var onTime = DateTime.UtcNow <= deadline;
+        if (!onTime)
+            throw new InvalidOperationException(
+                request.IsPoll
+                    ? "A poll proxy must be deposited at least 24 hours before the poll. A late instrument cannot be recognised."
+                    : "A proxy must be deposited at least 48 hours before the meeting. A late instrument cannot be recognised.");
 
-        await EnsureCanVoteAsync(profileId, cancellationToken);
+        await EnsureCanAppointProxyAsync(profileId, meeting, cancellationToken);
 
-        var linked = await ResolveProxyMemberAsync(request, cancellationToken);
-        if (linked?.ProfileId == profileId)
+        var linked = await ResolveProxyMemberAsync(request, cancellationToken)
+            ?? throw new InvalidOperationException("Select a current and active member. Temporary and Honorary members cannot be appointed, and a name alone cannot be verified.");
+        if (linked.ProfileId == profileId)
             throw new InvalidOperationException("You cannot appoint yourself as proxy.");
+        await EnsureProxyHolderAsync(linked.ProfileId, cancellationToken);
 
         var name = (linked?.Name ?? request.ProxyName ?? "").Trim();
         if (name.Length < 2)
@@ -398,8 +410,8 @@ END", cancellationToken);
 
         var existing = meeting.Proxies.FirstOrDefault(p => p.AppointingProfileId == profileId);
         var existingStatus = existing is null ? null : ProxyReviewStatus(existing);
-        if (existingStatus is "APPROVED" or "REJECTED")
-            throw new InvalidOperationException("This proxy has already been reviewed and cannot be changed.");
+        if (existingStatus is "APPROVED" or "REJECTED" or "AWAITING_HOLDER" or "PENDING")
+            throw new InvalidOperationException("This proxy is already with the appointed member or an officer and cannot be changed.");
         if (existingStatus == "LATE")
             throw new InvalidOperationException(
                 request.IsPoll
@@ -407,7 +419,7 @@ END", cancellationToken);
                     : "This proxy was lodged after the 48-hour cutoff and cannot count (Article 65).");
 
         var previousProxyProfileId = existing?.ProxyProfileId;
-        var status = onTime ? "PENDING" : "LATE";
+        var status = "AWAITING_HOLDER";
         if (existing is null)
         {
             existing = new Proxy
@@ -438,11 +450,14 @@ END", cancellationToken);
         existing.DepositedOnTimeFlag = onTime;
         existing.InstrumentReceivedAt ??= DateTime.UtcNow;
         existing.ReviewStatus = status;
+        existing.ReviewReason = null;
+        existing.ReviewedAt = null;
+        existing.ReviewedByProfileId = null;
         existing.IsValidFlag = false;
         existing.UpdatedByUserId = actorUserId;
         await _db.SaveChangesAsync(cancellationToken);
 
-        if (linked is not null && (previousProxyProfileId != linked.ProfileId || existingStatus is null or "PENDING"))
+        if (previousProxyProfileId != linked.ProfileId || existingStatus is null or "RETURNED")
         {
             var appointingName = string.IsNullOrWhiteSpace(existing.AppointingName)
                 ? await ProfileNameAsync(profileId, cancellationToken) ?? "A member"
@@ -455,9 +470,55 @@ END", cancellationToken);
                 packed,
                 existing.LeaveToDiscretion,
                 deadline,
-                force: previousProxyProfileId != linked.ProfileId,
+                force: previousProxyProfileId != linked.ProfileId || existingStatus == "RETURNED",
                 cancellationToken);
         }
+    }
+
+    public async Task RespondToProxyAsync(
+        long meetingId,
+        long proxyId,
+        long holderProfileId,
+        ReviewProxyRequest request,
+        CancellationToken cancellationToken)
+    {
+        var meeting = await LoadMeetingAsync(meetingId, cancellationToken);
+        var proxy = meeting.Proxies.FirstOrDefault(p => p.ProxyId == proxyId)
+            ?? throw new InvalidOperationException("Proxy appointment was not found.");
+        if (proxy.ProxyProfileId != holderProfileId)
+            throw new InvalidOperationException("Only the appointed member can accept or reject this proxy.");
+        if (ProxyReviewStatus(proxy) != "AWAITING_HOLDER")
+            throw new InvalidOperationException("This proxy is not waiting for your decision.");
+
+        var decision = (request.Decision ?? "").Trim().ToUpperInvariant();
+        if (decision is not ("ACCEPT" or "REJECT"))
+            throw new InvalidOperationException("Decision must be ACCEPT or REJECT.");
+
+        var deadline = ProxyDeadline(meeting, proxy);
+        if (decision == "ACCEPT" && DateTime.UtcNow > deadline)
+            throw new InvalidOperationException(
+                proxy.IsPoll
+                    ? "The 24-hour poll cutoff has passed, so this proxy can no longer be accepted."
+                    : "The 48-hour cutoff has passed, so this proxy can no longer be accepted.");
+
+        if (decision == "ACCEPT")
+        {
+            await EnsureProxyHolderAsync(holderProfileId, cancellationToken);
+            proxy.ReviewStatus = "PENDING";
+            proxy.ReviewReason = null;
+        }
+        else
+        {
+            proxy.ReviewStatus = "RETURNED";
+            var reason = (request.Reason ?? "").Trim();
+            proxy.ReviewReason = string.IsNullOrWhiteSpace(reason) ? "The appointed member declined the proxy." : reason[..Math.Min(reason.Length, 500)];
+            await NotifyProxyReturnedAsync(proxy, meeting, cancellationToken);
+        }
+
+        proxy.IsValidFlag = false;
+        proxy.ReviewedAt = DateTime.UtcNow;
+        proxy.ReviewedByProfileId = holderProfileId;
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
     private sealed record LinkedProxyMember(long ProfileId, string Name, string? MembershipNo, string? Email);
@@ -522,6 +583,8 @@ END", cancellationToken);
             $"Voting instruction: {instructionLabel}.\n" +
             $"Proxy authority ends at the lodging deadline: {deadline:dd MMM yyyy HH:mm} UTC " +
             $"(48 hours before the meeting; 24 hours for a poll).\n\n" +
+            $"Accept or reject this appointment before the cutoff. If you reject it, it returns to the appointing member. " +
+            $"If you accept it, an admin or general manager must approve it before the same cutoff.\n\n" +
             $"Open Election to review appointments made to you:\n{_app.PublicBaseUrl.TrimEnd('/')}/election";
 
         var type = await _db.NotificationTypes.FirstOrDefaultAsync(t => t.Code == "PROXY_APPOINTMENT", cancellationToken);
@@ -602,6 +665,19 @@ END", cancellationToken);
             .Take(20)
             .ToListAsync(cancellationToken);
 
+        var meetingIds = rows.Select(r => r.GeneralMeetingId).Distinct().ToList();
+        var approvedHeldByMeeting = new Dictionary<long, int>();
+        if (meetingIds.Count > 0)
+        {
+            var held = await _db.Proxies.AsNoTracking()
+                .Where(p => meetingIds.Contains(p.GeneralMeetingId) && p.ProxyProfileId == profileId)
+                .ToListAsync(cancellationToken);
+            approvedHeldByMeeting = held
+                .Where(IsApprovedProxy)
+                .GroupBy(p => p.GeneralMeetingId)
+                .ToDictionary(g => g.Key, g => g.Count());
+        }
+
         var appointingIds = rows.Select(r => r.AppointingProfileId).Distinct().ToList();
         var membershipNos = await _db.Accounts.AsNoTracking()
             .Where(a => appointingIds.Contains(a.ProfileId) && !a.IsDeleted)
@@ -630,7 +706,12 @@ END", cancellationToken);
                 VoteInstruction = p.VoteInstruction,
                 LeaveToDiscretion = p.LeaveToDiscretion,
                 InstructionLabel = InstructionLabel(p.VoteInstruction, p.LeaveToDiscretion),
+                Notes = p.ProxyNotes,
                 ReviewStatus = ProxyReviewStatus(p),
+                ReviewReason = p.ReviewReason,
+                VotingWeight = p.ProxyProfileId is > 0
+                    ? 1 + approvedHeldByMeeting.GetValueOrDefault(p.GeneralMeetingId)
+                    : 0,
                 ProxyDeadlineAt = meetingStart.AddHours(-hours),
                 InstrumentReceivedAt = p.InstrumentReceivedAt,
                 Resolutions = p.GeneralMeeting.MeetingAgendaItems
@@ -653,15 +734,21 @@ END", cancellationToken);
         var meeting = await LoadMeetingAsync(meetingId, cancellationToken);
         var isReturningOfficer = actorProfileId is > 0 && actorProfileId == meeting.BallotConductorProfileId;
         if (!isReturningOfficer && !privilegedReviewer)
-            throw new InvalidOperationException("Only the Returning Officer may approve or reject a lodged proxy.");
+            throw new InvalidOperationException("Only an admin, general manager, or the Returning Officer may approve a proxy the appointed member has accepted.");
 
         var proxy = meeting.Proxies.FirstOrDefault(p => p.ProxyId == proxyId)
             ?? throw new InvalidOperationException("Proxy appointment was not found.");
         var current = ProxyReviewStatus(proxy);
+        if (current == "AWAITING_HOLDER")
+            throw new InvalidOperationException("The appointed member must accept this proxy before an officer can approve it.");
+        if (current == "RETURNED")
+            throw new InvalidOperationException("This proxy was returned to the appointing member.");
         if (current is "APPROVED" or "REJECTED")
             throw new InvalidOperationException("This proxy has already been reviewed and cannot be changed.");
         if (current == "LATE")
             throw new InvalidOperationException("A late proxy cannot be approved. It was lodged after the cutoff (Article 65).");
+        if (current != "PENDING")
+            throw new InvalidOperationException("This proxy is not waiting for officer approval.");
 
         var decision = (request.Decision ?? "").Trim().ToUpperInvariant();
         if (decision is not ("APPROVE" or "REJECT"))
@@ -669,6 +756,15 @@ END", cancellationToken);
 
         if (decision == "APPROVE")
         {
+            var deadline = ProxyDeadline(meeting, proxy);
+            if (DateTime.UtcNow > deadline)
+                throw new InvalidOperationException(
+                    proxy.IsPoll
+                        ? "A poll proxy must be approved at least 24 hours before the poll."
+                        : "This proxy must be approved at least 48 hours before the meeting.");
+            if (proxy.ProxyProfileId is not > 0)
+                throw new InvalidOperationException("Only a verified active member can hold an approved proxy.");
+            await EnsureProxyHolderAsync(proxy.ProxyProfileId.Value, cancellationToken);
             proxy.ReviewStatus = "APPROVED";
             proxy.IsValidFlag = true;
             proxy.ReviewReason = null;
@@ -860,10 +956,24 @@ END", cancellationToken);
             if (conductor is null or 0)
                 throw new InvalidOperationException("Appoint the electronic-ballot returning officer first.");
             await EnsureSittingCommitteeAsync(conductor.Value, "returning officer", cancellationToken);
-            meeting.BallotWindowOpen = true;
             meeting.BallotConductorProfileId = conductor;
-            meeting.BallotOpensAt = DateTime.UtcNow;
-            meeting.BallotClosesAt = meeting.MeetingDate.ToDateTime(TimeOnly.MinValue).AddHours(-48);
+            var opens = request.OpensAt ?? DateTime.UtcNow;
+            var statutoryClose = meeting.MeetingDate.ToDateTime(TimeOnly.MinValue).AddHours(-48);
+            var closes = request.ClosesAt ?? (statutoryClose > opens ? statutoryClose : opens.AddHours(48));
+            if (closes <= opens)
+                throw new InvalidOperationException("Close time must be after the start time.");
+            var earliestMeeting = closes.AddHours(48);
+            var meetingInstant = meeting.MeetingDate.ToDateTime(TimeOnly.MinValue);
+            if (meetingInstant < earliestMeeting)
+            {
+                var shifted = DateOnly.FromDateTime(earliestMeeting);
+                if (shifted.ToDateTime(TimeOnly.MinValue) < earliestMeeting)
+                    shifted = shifted.AddDays(1);
+                meeting.MeetingDate = shifted;
+            }
+            meeting.BallotWindowOpen = true;
+            meeting.BallotOpensAt = opens;
+            meeting.BallotClosesAt = closes;
         }
         else
         {
@@ -1090,7 +1200,8 @@ END", cancellationToken);
                         DepositedOnTime = p.DepositedOnTimeFlag,
                         IsValid = status == "APPROVED",
                         ReviewStatus = status,
-                        ReviewReason = p.ReviewReason
+                        ReviewReason = p.ReviewReason,
+                        VotingWeight = VotingWeight(meeting, p.ProxyProfileId)
                     };
                 })
                 .ToList()
@@ -1149,6 +1260,87 @@ END", cancellationToken);
             .CountAsync(cancellationToken);
     }
 
+    private static DateTime ProxyDeadline(GeneralMeeting meeting, Proxy proxy) =>
+        meeting.MeetingDate.ToDateTime(TimeOnly.MinValue).AddHours(proxy.IsPoll ? -24 : -48);
+
+    private static int VotingWeight(GeneralMeeting meeting, long? proxyProfileId)
+    {
+        if (proxyProfileId is not > 0) return 0;
+        var held = meeting.Proxies.Count(p => p.ProxyProfileId == proxyProfileId && IsApprovedProxy(p));
+        return 1 + held;
+    }
+
+    private async Task EnsureCanAppointProxyAsync(long profileId, GeneralMeeting meeting, CancellationToken cancellationToken)
+    {
+        await EnsureCanVoteAsync(profileId, cancellationToken);
+        var account = await _db.Accounts.AsNoTracking()
+            .Include(a => a.CurrentMemberStatus)
+            .Include(a => a.Profile)
+            .Where(a => a.ProfileId == profileId && !a.IsDeleted && a.IsActive)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new InvalidOperationException("Membership account was not found.");
+        var status = (account.CurrentMemberStatus?.Code ?? "").Trim().ToUpperInvariant();
+        if (status is "POSTED" or "SUSPENDED" or "REMOVED" or "VOID" or "CANCELLED" or "INACTIVE")
+            throw new InvalidOperationException("Members who are suspended or posted for unpaid dues cannot appoint a proxy.");
+        if (meeting.MemberVotes.Any(v =>
+                v.VoterProfileId == profileId
+                && string.Equals(v.VoteMethod, "ELECTRONIC", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException(
+                "You have already cast an electronic vote for this meeting, so you cannot appoint a proxy on the same matter.");
+        await EnsureVerifiedRegisterEmailAsync(profileId, account.Profile?.Email, cancellationToken);
+    }
+
+    private async Task EnsureProxyHolderAsync(long profileId, CancellationToken cancellationToken)
+    {
+        var account = await _db.Accounts.AsNoTracking()
+            .Include(a => a.MembershipType)
+            .Include(a => a.CurrentMemberStatus)
+            .Where(a => a.ProfileId == profileId && !a.IsDeleted && a.IsActive)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new InvalidOperationException("The appointed proxy must be a current active member.");
+        var code = account.MembershipType?.Code ?? "";
+        if (!VotingClasses.Contains(code) || !MemberClassPrivileges.ForCode(code).CanVote)
+            throw new InvalidOperationException("Temporary and Honorary members cannot hold a proxy.");
+        var status = (account.CurrentMemberStatus?.Code ?? "").Trim().ToUpperInvariant();
+        if (status is "POSTED" or "SUSPENDED" or "REMOVED" or "VOID" or "CANCELLED" or "INACTIVE")
+            throw new InvalidOperationException("The appointed member is suspended or posted and cannot hold a proxy.");
+        var priv = MemberClassPrivileges.ForCode(code);
+        if (!await SubscriptionsPaidUpAsync(account.AccountId, priv, status, cancellationToken))
+            throw new InvalidOperationException("The appointed member is not in good standing.");
+    }
+
+    private async Task EnsureVerifiedRegisterEmailAsync(long profileId, string? registerEmail, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(registerEmail))
+            throw new InvalidOperationException("Electronic proxy submissions must use a verified email on the Club register.");
+        var verified = await _db.UserAccounts.AsNoTracking().AnyAsync(u =>
+            u.ProfileId == profileId
+            && u.IsActive
+            && u.EmailVerifiedAt != null
+            && u.AccountStatus != "SUSPENDED"
+            && u.AccountStatus != "BLOCKED"
+            && u.AccountStatus != "DEACTIVATED", cancellationToken);
+        if (!verified)
+            throw new InvalidOperationException("Electronic proxy submissions must come from a verified email address on the Club register.");
+    }
+
+    private async Task NotifyProxyReturnedAsync(Proxy proxy, GeneralMeeting meeting, CancellationToken cancellationToken)
+    {
+        var profile = await _db.Profiles.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.ProfileId == proxy.AppointingProfileId, cancellationToken);
+        if (profile is null) return;
+        var subject = $"Your proxy appointment was returned";
+        var body =
+            $"{proxy.ProxyName} declined the proxy for the {meeting.MeetingType} on {meeting.MeetingDate:dd MMM yyyy}. " +
+            $"It is back with you to appoint another member.\n" +
+            (string.IsNullOrWhiteSpace(proxy.ReviewReason) ? "" : $"Reason: {proxy.ReviewReason}\n");
+        if (!string.IsNullOrWhiteSpace(profile.Email))
+        {
+            try { await _email.SendAsync(profile.Email, subject, body, cancellationToken); }
+            catch { /* the appointment status still shows as returned */ }
+        }
+    }
+
     private async Task EnsureCanVoteAsync(long profileId, CancellationToken cancellationToken)
     {
         var account = await _db.Accounts.AsNoTracking()
@@ -1160,9 +1352,23 @@ END", cancellationToken);
         var code = account.MembershipType?.Code ?? "";
         if (!VotingClasses.Contains(code) || !MemberClassPrivileges.ForCode(code).CanVote)
             throw new InvalidOperationException("Your class does not carry a vote (Article 65).");
+        if (SubscriptionExempt(code, account.MembershipType?.CanAccessSubscriptions))
+            return;
         var priv = MemberClassPrivileges.ForCode(code);
         if (!await SubscriptionsPaidUpAsync(account.AccountId, priv, account.CurrentMemberStatus?.Code, cancellationToken))
             throw new InvalidOperationException("Voting is blocked because your subscription is not paid up (Article 62).");
+    }
+
+    /// <summary>
+    /// Life, Senior Life and Honorary members do not pay an annual subscription.
+    /// A class with subscriptions turned off in Assign privileges is treated the same way.
+    /// </summary>
+    private static bool SubscriptionExempt(string? code, bool? canAccessSubscriptions)
+    {
+        var key = (code ?? "").Trim().ToUpperInvariant().Replace(" ", "_").Replace("-", "_");
+        if (key is "LIFE" or "SENIOR_LIFE" or "HONORARY") return true;
+        if (canAccessSubscriptions == false) return true;
+        return !MemberClassPrivileges.ForCode(code).PaysSubscription;
     }
 
     private async Task<bool> SubscriptionsPaidUpAsync(
@@ -1176,12 +1382,35 @@ END", cancellationToken);
             || string.Equals(statusCode, "POSTED", StringComparison.OrdinalIgnoreCase))
             return false;
         var year = DateTime.UtcNow.Year;
-        return !await _db.Subscriptions.AsNoTracking()
-            .AnyAsync(s =>
+        var openYears = await _db.Subscriptions.AsNoTracking()
+            .Where(s =>
                 s.AccountId == accountId
                 && s.SubscriptionYear <= year
                 && !s.WaivedFlag
-                && s.AmountPaid < s.AmountDue,
+                && s.AmountPaid < s.AmountDue)
+            .Select(s => s.SubscriptionYear)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        foreach (var subYear in openYears)
+        {
+            if (await HasPublishedSubscriptionInvoiceAsync(accountId, subYear, cancellationToken))
+                return false;
+        }
+        return true;
+    }
+
+    private async Task<bool> HasPublishedSubscriptionInvoiceAsync(long accountId, int year, CancellationToken cancellationToken)
+    {
+        if (await _db.MembershipInvoices.AsNoTracking()
+            .AnyAsync(i => i.AccountId == accountId && i.Year == year && i.PublishedToMember, cancellationToken))
+            return true;
+        return await _db.BillingDocuments.AsNoTracking()
+            .AnyAsync(d =>
+                d.AccountId == accountId
+                && d.Year == year
+                && d.Kind == "INVOICE"
+                && d.FeeType == "ANNUAL"
+                && (d.Status == "APPROVED" || d.Status == "PUBLISHED"),
                 cancellationToken);
     }
 
@@ -1246,7 +1475,7 @@ END", cancellationToken);
     private static string ProxyReviewStatus(Proxy proxy)
     {
         var status = (proxy.ReviewStatus ?? "").Trim().ToUpperInvariant();
-        if (status is "PENDING" or "APPROVED" or "REJECTED" or "LATE")
+        if (status is "PENDING" or "APPROVED" or "REJECTED" or "LATE" or "AWAITING_HOLDER" or "RETURNED")
             return status;
         return proxy.DepositedOnTimeFlag ? "PENDING" : "LATE";
     }
@@ -1370,10 +1599,24 @@ END", cancellationToken);
             RequiredClearDays = required,
             ActualClearDays = Math.Max(clear, 0),
             NoticePeriodMet = met,
-            //NoticePeriodDetail = met
-            //    ? $"{type} notice period met ({clear} clear days; ≥{required})."
-            //    : $"{type} notice needs at least {required} clear days. This notice gives {Math.Max(clear, 0)}."
+            NoticePeriodDetail = NoticePeriodMessage(type, required, clear, met, notice, meeting.MeetingDate),
         };
+    }
+
+    private static string NoticePeriodMessage(
+        string type,
+        int required,
+        int clear,
+        bool met,
+        DateOnly notice,
+        DateOnly meetingDate)
+    {
+        if (met)
+            return $"{type} notice period met ({clear} clear days; at least {required}).";
+        var earliest = notice.AddDays(required + 1).ToString("dd MMM yyyy");
+        if (notice > meetingDate)
+            return $"Notice sent ({notice:dd MMM yyyy}) is after the meeting ({meetingDate:dd MMM yyyy}). An {type} needs at least {required} clear days, so the meeting must be on or after {earliest}.";
+        return $"An {type} needs at least {required} clear days. These dates give {Math.Max(clear, 0)}. The meeting must be on or after {earliest}.";
     }
 
     private static string Name(string? first, string? last) =>

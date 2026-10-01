@@ -186,7 +186,7 @@ function dateOnly(value?: string | null) {
 function statusLabel(status: string) {
   const key = status.toUpperCase();
   if (key === "CREDITED") return "Credited";
-  if (key === "PARTIAL") return "Partial";
+  if (key === "PARTIAL" || key === "PARTIALLY_PAID") return "Partially paid";
   if (key === "PAID") return "Paid";
   if (key === "ISSUED") return "Issued";
   return status;
@@ -237,6 +237,16 @@ export function IssuedInvoicesPage() {
     queryKey: ["issued-invoice", viewId],
     enabled: viewId != null,
     queryFn: () => apiRequest<IssuedDetail>(`/api/finance/invoices/issued/${viewId}`),
+  });
+  const memberCredit = useQuery({
+    queryKey: ["account-advance-credit", detail.data?.invoice.accountId],
+    enabled: viewId != null && (detail.data?.invoice.accountId ?? 0) > 0,
+    queryFn: () => apiRequest<{
+      availableCredit: number;
+      corporateCredit: number;
+      status: string;
+      sourceReceipt?: string | null;
+    }>(`/api/finance/accounts/${detail.data!.invoice.accountId}/advance-credit`),
   });
 
   useEffect(() => {
@@ -303,6 +313,25 @@ export function IssuedInvoicesPage() {
       setCreditReason("");
       setCreditAmount(String(next.balance));
       await refreshLists();
+    },
+    onError: (err) => toast.error(extractErrorMessage(err)),
+  });
+
+  const applyCredit = useMutation({
+    mutationFn: async () => {
+      const available = Number(memberCredit.data?.availableCredit || 0);
+      const balance = Number(detail.data?.balance || 0);
+      const amount = Math.min(available, balance);
+      if (amount <= 0) throw new Error("There is no member credit to apply to this invoice.");
+      return apiRequest<{ amountApplied: number; invoiceOutstanding: number; availableCredit: number }>(
+        `/api/finance/invoices/${viewId}/apply-credit`,
+        { method: "POST", body: JSON.stringify({ amount }) },
+      );
+    },
+    onSuccess: async (result) => {
+      toast.success(`Applied ${formatKes(result.amountApplied)}. Invoice balance ${formatKes(result.invoiceOutstanding)}.`);
+      await refreshLists();
+      await queryClient.invalidateQueries({ queryKey: ["account-advance-credit"] });
     },
     onError: (err) => toast.error(extractErrorMessage(err)),
   });
@@ -559,6 +588,34 @@ export function IssuedInvoicesPage() {
                     <Button type="button" size="sm" disabled={saveInvoice.isPending} onClick={() => saveInvoice.mutate()}>
                       {saveInvoice.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
                       Save invoice
+                    </Button>
+                  </div>
+                  <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Available member credit</p>
+                    <p className="text-lg font-semibold tabular-nums">{formatKes(Number(memberCredit.data?.availableCredit || 0))}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {Number(memberCredit.data?.availableCredit || 0) > 0.009
+                        ? `${memberCredit.data?.status || "AVAILABLE"}${memberCredit.data?.sourceReceipt ? ` · ${memberCredit.data.sourceReceipt}` : ""}`
+                        : "No available credit"}
+                    </p>
+                    <p className="text-sm">
+                      Invoice amount {formatKes(detail.data.amount)}
+                      <br />
+                      Amount remaining if applied {formatKes(Math.max(0, detail.data.balance - Number(memberCredit.data?.availableCredit || 0)))}
+                    </p>
+                    {Number(memberCredit.data?.corporateCredit || 0) > 0.009 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Corporate credit {formatKes(memberCredit.data?.corporateCredit || 0)} is not applied as member credit.
+                      </p>
+                    ) : null}
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={applyCredit.isPending || detail.data.balance <= 0 || Number(memberCredit.data?.availableCredit || 0) <= 0.009}
+                      onClick={() => applyCredit.mutate()}
+                    >
+                      {applyCredit.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+                      Apply available credit
                     </Button>
                   </div>
                   <div className="space-y-3 rounded-lg border border-slate-200 p-3">

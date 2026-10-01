@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Data;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using ClubManagement.DTOs.Common;
 using ClubManagement.Entities;
@@ -57,8 +58,17 @@ public partial class FinanceService
         string? status,
         decimal amount,
         string kind,
-        long? transactionId = null)
-        => new(date, fee, method, receipt, status, Math.Abs(amount), kind, transactionId);
+        long? transactionId = null,
+        bool informational = false)
+        => new(date, fee, method, receipt, status, Math.Abs(amount), kind, transactionId, informational);
+
+    /// <summary>Joining and annual invoices billed to a company, not to the member personally.</summary>
+    private static bool IsSponsoredSubscriptionFee(string? feeType)
+    {
+        var code = (feeType ?? "").Trim().ToUpperInvariant().Replace("-", "_").Replace(" ", "_");
+        return code is "ANNUAL" or "SUBSCRIPTION" or "ANNUAL_SUBSCRIPTION"
+            or "JOINING" or "ENTRANCE" or "JOINING_FEE" or "ENTRANCE_FEE";
+    }
 
     private static int StatementLineSort(string? kind) => kind switch
     {
@@ -130,14 +140,12 @@ public partial class FinanceService
             sub.ArrearsAmount = Math.Max(0m, due - applied);
             remaining -= applied;
         }
+    }
 
-        if (remaining > 0.01m)
-        {
-            var last = subs.OrderBy(s => s.SubscriptionYear).LastOrDefault();
-            if (last is null) return;
-            last.AmountPaid += remaining;
-            last.ArrearsAmount = Math.Max(0m, (last.WaivedFlag ? 0m : last.AmountDue) - last.AmountPaid);
-        }
+    private static string? NormalizeCreditOwner(string? value)
+    {
+        var code = (value ?? "").Trim().ToUpperInvariant();
+        return code is "MEMBER" or "CORPORATE" ? code : null;
     }
 
     private static string NormalizeStatus(string? code) =>
@@ -221,29 +229,43 @@ public partial class FinanceService
                     due = dues.AnnualSubscription;
             }
         }
-        else if (isJoining)
+            else if (isJoining)
         {
             if (accountId is long joiningAccountId)
             {
-                var account = await _db.Accounts.AsNoTracking()
-                    .Include(a => a.Profile)
-                    .FirstOrDefaultAsync(a => a.AccountId == joiningAccountId && !a.IsDeleted, cancellationToken);
-                if (account is null) return null;
-                due = account.EntranceFeeWaivedFlag ? 0 : (account.EntranceFeeAmount ?? 0);
-                if (!account.EntranceFeeWaivedFlag && due <= 0 && account.Profile?.DateOfBirth is DateOnly dob)
+                var hasJoiningInvoice = await _db.BillingDocuments.AsNoTracking()
+                    .AnyAsync(d =>
+                        d.Kind == "INVOICE"
+                        && d.FeeType == "JOINING"
+                        && (d.Status == "APPROVED" || d.Status == "PUBLISHED")
+                        && d.AccountId == joiningAccountId,
+                        cancellationToken);
+                if (!hasJoiningInvoice)
                 {
-                    try
+                    due = 0;
+                }
+                else
+                {
+                    var account = await _db.Accounts.AsNoTracking()
+                        .Include(a => a.Profile)
+                        .FirstOrDefaultAsync(a => a.AccountId == joiningAccountId && !a.IsDeleted, cancellationToken);
+                    if (account is null) return null;
+                    due = account.EntranceFeeWaivedFlag ? 0 : (account.EntranceFeeAmount ?? 0);
+                    if (!account.EntranceFeeWaivedFlag && due <= 0 && account.Profile?.DateOfBirth is DateOnly dob)
                     {
-                        var quote = await QuoteAsync(
-                            account.MembershipTypeId,
-                            dob,
-                            DateOnly.FromDateTime(DateTime.UtcNow),
-                            cancellationToken);
-                        due = quote.PayableJoining;
-                    }
-                    catch
-                    {
-                        // Keep due at 0 when no fee schedule exists.
+                        try
+                        {
+                            var quote = await QuoteAsync(
+                                account.MembershipTypeId,
+                                dob,
+                                DateOnly.FromDateTime(DateTime.UtcNow),
+                                cancellationToken);
+                            due = quote.PayableJoining;
+                        }
+                        catch
+                        {
+                            // Keep due at 0 when no fee schedule exists.
+                        }
                     }
                 }
             }
@@ -307,7 +329,9 @@ public partial class FinanceService
 
     /// <summary>
     /// Pays the selected fee up to its balance, then any other open joining or annual balance.
-    /// Money still left stays on the selected fee and is carried forward.
+    /// Money still left on a member account is recorded as advance credit, not as another annual receipt.
+    /// Once the receipt is cleared, <see cref="AutoAllocateReceiptsToInvoicesAsync"/> pins it to open
+    /// membership invoices without changing the receipt amount.
     /// </summary>
     private async Task<IReadOnlyList<PaymentSlice>> BuildPaymentAllocationsAsync(
         RecordPaymentRequest request,
@@ -357,20 +381,37 @@ public partial class FinanceService
             }
         }
 
-        var note = request.ReferenceNote;
-        if (extra > 0.009m)
-        {
-            var credit = decimal.Round(extra, 2, MidpointRounding.AwayFromZero);
-            var creditNote = $"Credit Ksh {credit:0.00} carried forward.";
-            note = string.IsNullOrWhiteSpace(note) ? creditNote : $"{note} | {creditNote}";
-        }
-
         var slices = new List<PaymentSlice>();
-        var primaryAmount = decimal.Round(applied + extra, 2, MidpointRounding.AwayFromZero);
+        var primaryAmount = decimal.Round(applied, 2, MidpointRounding.AwayFromZero);
         if (primaryAmount > 0.009m)
-            slices.Add(new PaymentSlice(request.FeeTypeId, primaryAmount, note));
+            slices.Add(new PaymentSlice(request.FeeTypeId, primaryAmount, request.ReferenceNote));
         if (otherFeeId is long otherId && otherApplied > 0.009m)
             slices.Add(new PaymentSlice(otherId, decimal.Round(otherApplied, 2, MidpointRounding.AwayFromZero), request.ReferenceNote));
+        if (extra > 0.009m && request.AccountId is not null)
+        {
+            var advanceFee = await _db.FeeTypes.AsNoTracking()
+                .FirstOrDefaultAsync(f => f.Code == "ADVANCE", cancellationToken);
+            if (advanceFee is not null)
+            {
+                var surplus = decimal.Round(extra, 2, MidpointRounding.AwayFromZero);
+                var note = string.IsNullOrWhiteSpace(request.ReferenceNote)
+                    ? "Advance payment — held as credit"
+                    : request.ReferenceNote;
+                slices.Add(new PaymentSlice(advanceFee.FeeTypeId, surplus, note));
+                extra = 0;
+            }
+        }
+        if (extra > 0.009m)
+        {
+            var surplus = decimal.Round(extra, 2, MidpointRounding.AwayFromZero);
+            if (slices.Count > 0)
+            {
+                var last = slices[^1];
+                slices[^1] = last with { Amount = last.Amount + surplus };
+            }
+            else
+                slices.Add(new PaymentSlice(request.FeeTypeId, surplus, request.ReferenceNote));
+        }
         if (slices.Count == 0)
             slices.Add(new PaymentSlice(request.FeeTypeId, request.Amount, request.ReferenceNote));
         return slices;
@@ -531,19 +572,19 @@ public partial class FinanceService
         var account = await _db.Accounts
             .Include(a => a.Profile)
             .Include(a => a.MembershipType)
+            .Include(a => a.CorporateCompany)
             .FirstOrDefaultAsync(a => a.AccountId == accountId && !a.IsDeleted, cancellationToken)
             ?? throw new InvalidOperationException("Member account was not found.");
+        var delivery = InvoiceDeliveryPlan.For(account);
+        if (publishToMember)
+            publishToMember = delivery.PublishToMember;
 
         var sub = await _db.Subscriptions
             .FirstOrDefaultAsync(s => s.AccountId == accountId && s.SubscriptionYear == y, cancellationToken)
             ?? throw new InvalidOperationException($"No {y} subscription was found for this member. Run annual renewal first.");
 
-        var priorUnpaid = PriorYearUnpaid(
-            await _db.Subscriptions.AsNoTracking()
-                .Where(s => s.AccountId == accountId && s.SubscriptionYear < y)
-                .ToListAsync(cancellationToken),
-            y);
-        var billedAmount = sub.AmountDue + priorUnpaid;
+        var billedAmount = sub.WaivedFlag ? 0m : sub.AmountDue;
+        var yearUnpaid = Math.Max(0m, billedAmount - sub.AmountPaid);
 
         var invoice = await _db.MembershipInvoices
             .FirstOrDefaultAsync(i => i.AccountId == accountId && i.Year == y, cancellationToken);
@@ -558,7 +599,7 @@ public partial class FinanceService
                 IssuedAt = DateTime.UtcNow,
                 DueDate = InvoiceDueDate(y),
                 Amount = billedAmount,
-                Status = sub.ArrearsAmount <= 0 && priorUnpaid <= 0 ? "PAID" : sub.AmountPaid > 0 || priorUnpaid > 0 ? "PARTIAL" : "ISSUED",
+                Status = yearUnpaid <= 0.009m ? "PAID" : sub.AmountPaid > 0 ? "PARTIAL" : "ISSUED",
                 PublishedToMember = publishToMember,
                 CreatedAt = DateTime.UtcNow,
                 CreatedByUserId = actorUserId
@@ -570,16 +611,19 @@ public partial class FinanceService
         {
             invoice.Amount = billedAmount;
             invoice.SubscriptionId = sub.SubscriptionId;
-            invoice.Status = sub.ArrearsAmount <= 0 ? "PAID" : sub.AmountPaid > 0 ? "PARTIAL" : "ISSUED";
+            invoice.Status = yearUnpaid <= 0.009m ? "PAID" : sub.AmountPaid > 0 ? "PARTIAL" : "ISSUED";
             invoice.DueDate = InvoiceDueDate(y);
             if (publishToMember)
                 invoice.PublishedToMember = true;
             await _db.SaveChangesAsync(cancellationToken);
         }
 
+        if (invoice.PublishedToMember)
+            await ReconcileAccountDuesAsync(accountId, cancellationToken);
+
         var dto = await MapInvoiceAsync(invoice, account, sub, cancellationToken);
         if (sendEmail)
-            await TryEmailInvoiceAsync(invoice, dto, account.Profile?.Email, invoiceHtml, cancellationToken);
+            await TryEmailInvoiceAsync(invoice, dto, delivery, invoiceHtml, cancellationToken);
         return invoice.SentAt is not null ? await MapInvoiceAsync(invoice, account, sub, cancellationToken) : dto;
     }
 
@@ -631,7 +675,6 @@ public partial class FinanceService
             .ToListAsync(cancellationToken);
 
         var accountIds = rows.Select(s => s.AccountId).Distinct().ToList();
-        var priorUnpaid = await PriorUnpaidByAccountAsync(accountIds, y, cancellationToken);
         var invoices = accountIds.Count == 0
             ? new Dictionary<long, string>()
             : (await _db.MembershipInvoices.AsNoTracking()
@@ -647,7 +690,6 @@ public partial class FinanceService
             if (string.IsNullOrWhiteSpace(name))
                 name = s.Account.MembershipNo ?? "Member";
             invoices.TryGetValue(s.AccountId, out var invoiceNo);
-            priorUnpaid.TryGetValue(s.AccountId, out var brought);
             return new InvoiceQueueRowDto(
                 s.AccountId,
                 s.SubscriptionId,
@@ -655,9 +697,9 @@ public partial class FinanceService
                 name,
                 s.Account.MembershipType?.Name,
                 s.Account.MembershipType?.Code,
-                s.AmountDue + brought,
+                s.AmountDue,
                 s.AmountPaid,
-                s.ArrearsAmount + brought,
+                s.ArrearsAmount,
                 s.Account.Profile?.Email,
                 invoiceNo,
                 InvoiceEmailSent: false);
@@ -693,7 +735,6 @@ public partial class FinanceService
             .ToListAsync(cancellationToken);
 
         var accountIds = rows.Select(s => s.AccountId).Distinct().ToList();
-        var priorUnpaid = await PriorUnpaidByAccountAsync(accountIds, y, cancellationToken);
         var invoices = accountIds.Count == 0
             ? new Dictionary<long, string>()
             : (await _db.MembershipInvoices.AsNoTracking()
@@ -711,7 +752,6 @@ public partial class FinanceService
             if (string.IsNullOrWhiteSpace(name))
                 name = s.Account.MembershipNo ?? "Member";
             invoices.TryGetValue(s.AccountId, out var invoiceNo);
-            priorUnpaid.TryGetValue(s.AccountId, out var brought);
             return new InvoiceRosterRowDto(
                 s.AccountId,
                 s.SubscriptionId,
@@ -719,9 +759,9 @@ public partial class FinanceService
                 name,
                 s.Account.MembershipType?.Name,
                 s.Account.MembershipType?.Code,
-                s.AmountDue + brought,
+                s.AmountDue,
                 s.AmountPaid,
-                s.ArrearsAmount + brought,
+                s.ArrearsAmount,
                 s.Account.Profile?.Email,
                 invoiceNo,
                 deliveredSet.Contains(s.AccountId));
@@ -821,6 +861,8 @@ public partial class FinanceService
             .ToListAsync(cancellationToken);
         if (subs.Count == 0) return;
 
+        await AutoAllocateReceiptsToInvoicesAsync(accountId, cancellationToken);
+
         var txs = await _db.Transactions.AsNoTracking()
             .Include(t => t.PaymentStatus)
             .Where(t => t.AccountId == accountId && annualIds.Contains(t.FeeTypeId) && t.Amount > 0)
@@ -831,12 +873,83 @@ public partial class FinanceService
             cancellationToken);
         var paidStatus = await _db.MemberStatuses.FirstOrDefaultAsync(s => s.Code == "PAID", cancellationToken);
 
-        var paidPool = txs.Where(t => CountsTowardDues(t.PaymentStatus?.Code)).Sum(t => t.Amount);
+        foreach (var sub in subs)
+        {
+            sub.AmountPaid = 0m;
+            sub.ArrearsAmount = sub.WaivedFlag ? 0m : Math.Max(0m, sub.AmountDue);
+        }
+
+        var recognized = new[] { "PAID", "WAIVED", "PARTIALLY_PAID", "SETTLED" };
+        var annualPayments = txs
+            .Where(t => recognized.Contains(t.PaymentStatus?.Code ?? "", StringComparer.OrdinalIgnoreCase))
+            .OrderBy(t => t.PaymentDate)
+            .ThenBy(t => t.TransactionId)
+            .ToList();
+        var invoicedYears = (await _db.MembershipInvoices.AsNoTracking()
+            .Where(i => i.AccountId == accountId && i.PublishedToMember)
+            .Select(i => i.Year)
+            .ToListAsync(cancellationToken)).ToHashSet();
+        var paymentIds = annualPayments.Select(t => t.TransactionId).ToList();
+        var explicitAllocations = new List<(long TransactionId, int Year, decimal Amount)>();
+        if (paymentIds.Count > 0)
+        {
+            var explicitRaw = await (
+                from allocation in _db.TransactionAllocations.AsNoTracking()
+                join invoice in _db.MembershipInvoices.AsNoTracking() on allocation.InvoiceId equals invoice.InvoiceId
+                where paymentIds.Contains(allocation.TransactionId)
+                select new { allocation.TransactionId, invoice.Year, allocation.Amount }
+            ).ToListAsync(cancellationToken);
+            explicitAllocations = explicitRaw.Select(x => (x.TransactionId, x.Year, x.Amount)).ToList();
+        }
+
+        foreach (var payment in annualPayments)
+        {
+            var reserved = explicitAllocations.Where(a => a.TransactionId == payment.TransactionId).Sum(a => a.Amount);
+            var auto = Math.Max(0m, payment.Amount - reserved);
+            var payYear = payment.PaymentDate?.Year ?? payment.CreatedAt.Year;
+            foreach (var sub in subs.OrderBy(s => s.SubscriptionYear))
+            {
+                // Invoiced years are covered by MTransactionAllocation rows, not by this remainder.
+                if (sub.WaivedFlag || sub.SubscriptionYear > payYear || auto <= 0.009m) continue;
+                if (invoicedYears.Contains(sub.SubscriptionYear)) continue;
+                var due = Math.Max(0m, sub.AmountDue);
+                var room = Math.Max(0m, due - sub.AmountPaid);
+                var take = Math.Min(room, auto);
+                if (take <= 0) continue;
+                sub.AmountPaid += take;
+                auto -= take;
+            }
+        }
+
+        foreach (var allocation in explicitAllocations)
+        {
+            var sub = subs.FirstOrDefault(s => s.SubscriptionYear == allocation.Year && !s.WaivedFlag);
+            if (sub is null) continue;
+            sub.AmountPaid += allocation.Amount;
+        }
+
+        await ApplyAdvanceAllocationsAsync(accountId, annualIds, subs, cancellationToken);
+
         var awaitingRefund = await _db.InvoiceCreditNotes.AsNoTracking()
             .Where(c => c.AccountId == accountId)
             .SumAsync(c => (decimal?)c.AwaitingRefundAmount, cancellationToken) ?? 0m;
-        paidPool = Math.Max(0, paidPool - awaitingRefund);
-        ApplyAnnualPaymentWaterfall(subs, paidPool);
+        if (awaitingRefund > 0.01m)
+        {
+            var left = awaitingRefund;
+            foreach (var sub in subs.OrderByDescending(s => s.SubscriptionYear))
+            {
+                var take = Math.Min(left, Math.Max(0m, sub.AmountPaid));
+                sub.AmountPaid -= take;
+                left -= take;
+                if (left <= 0.01m) break;
+            }
+        }
+
+        foreach (var sub in subs)
+        {
+            var due = sub.WaivedFlag ? 0m : Math.Max(0m, sub.AmountDue);
+            sub.ArrearsAmount = Math.Max(0m, due - sub.AmountPaid);
+        }
         foreach (var sub in subs)
         {
             if (sub.ArrearsAmount > 0.01m && unpaid is not null)
@@ -872,13 +985,327 @@ public partial class FinanceService
         {
             var sub = subs.FirstOrDefault(s => s.SubscriptionYear == invoice.Year);
             if (sub is null) continue;
-            var brought = PriorYearUnpaid(subs, invoice.Year);
-            var remaining = sub.ArrearsAmount + brought;
-            invoice.Status = remaining <= 0.01m ? "PAID" : (sub.AmountPaid + brought) > 0.01m ? "PARTIAL" : "ISSUED";
+            var remaining = sub.ArrearsAmount;
+            invoice.Status = remaining <= 0.01m ? "PAID" : sub.AmountPaid > 0.01m ? "PARTIAL" : "ISSUED";
         }
 
         await _db.SaveChangesAsync(cancellationToken);
         await TryRestoreActiveMembershipAsync(accountId, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Pins cleared annual and advance receipts to published invoices, oldest receipt and oldest
+    /// invoice first. The receipt amount is never reduced. Money that does not fit an invoice
+    /// stays unallocated and is available credit. An annual receipt cannot fund an invoice year
+    /// after its payment year; an advance receipt can fund any open invoice.
+    /// </summary>
+    private async Task AutoAllocateReceiptsToInvoicesAsync(long accountId, CancellationToken cancellationToken)
+    {
+        var recognized = new[] { "PAID", "WAIVED", "PARTIALLY_PAID", "SETTLED", "REFUNDED" };
+        var stale = await (
+            from allocation in _db.TransactionAllocations
+            join payment in _db.Transactions on allocation.TransactionId equals payment.TransactionId
+            join status in _db.PaymentStatuses on payment.PaymentStatusId equals status.PaymentStatusId
+            where payment.AccountId == accountId
+                && (payment.Amount <= 0 || !recognized.Contains(status.Code))
+            select allocation
+        ).ToListAsync(cancellationToken);
+        if (stale.Count > 0)
+        {
+            _db.TransactionAllocations.RemoveRange(stale);
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        var invoiceTo = await _db.Accounts.AsNoTracking()
+            .Where(a => a.AccountId == accountId)
+            .Select(a => a.InvoiceTo)
+            .FirstOrDefaultAsync(cancellationToken);
+        var corporateBilled = InvoiceDeliveryPlan.Normalize(invoiceTo) is "CORPORATE" or "BOTH";
+        var payable = new[] { "PAID", "WAIVED", "PARTIALLY_PAID", "SETTLED" };
+        var payments = await _db.Transactions
+            .Include(t => t.PaymentStatus)
+            .Include(t => t.FeeType)
+            .Where(t => t.AccountId == accountId && t.Amount > 0)
+            .OrderBy(t => t.PaymentDate)
+            .ThenBy(t => t.TransactionId)
+            .ToListAsync(cancellationToken);
+        payments = payments
+            .Where(t => payable.Contains(t.PaymentStatus?.Code ?? "", StringComparer.OrdinalIgnoreCase))
+            .Where(t => IsAnnualFee(t.FeeType?.Code) || IsAdvanceFee(t.FeeType?.Code))
+            .Where(t =>
+            {
+                var corporate = string.Equals(t.CreditOwner, "CORPORATE", StringComparison.OrdinalIgnoreCase);
+                return corporate ? corporateBilled : !corporate;
+            })
+            .ToList();
+        if (payments.Count == 0)
+            return;
+
+        var invoices = await _db.MembershipInvoices
+            .Where(i => i.AccountId == accountId && i.PublishedToMember && i.Amount > 0)
+            .OrderBy(i => i.Year)
+            .ThenBy(i => i.InvoiceId)
+            .ToListAsync(cancellationToken);
+        if (invoices.Count == 0)
+            return;
+
+        var paymentIds = payments.Select(p => p.TransactionId).ToList();
+        var invoiceIds = invoices.Select(i => i.InvoiceId).ToList();
+        var existing = await _db.TransactionAllocations
+            .Where(a => paymentIds.Contains(a.TransactionId) || invoiceIds.Contains(a.InvoiceId))
+            .Select(a => new { a.TransactionId, a.InvoiceId, a.Amount })
+            .ToListAsync(cancellationToken);
+        var usedOnPayment = existing
+            .Where(a => paymentIds.Contains(a.TransactionId))
+            .GroupBy(a => a.TransactionId)
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
+        var usedOnInvoice = existing
+            .Where(a => invoiceIds.Contains(a.InvoiceId))
+            .GroupBy(a => a.InvoiceId)
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
+
+        var pools = payments
+            .Select(p =>
+            {
+                usedOnPayment.TryGetValue(p.TransactionId, out var used);
+                var left = Math.Round(Math.Max(0m, p.Amount - used), 2, MidpointRounding.AwayFromZero);
+                var advance = IsAdvanceFee(p.FeeType?.Code);
+                var payYear = p.PaymentDate?.Year ?? p.CreatedAt.Year;
+                return (Id: p.TransactionId, Left: left, Advance: advance, PayYear: payYear);
+            })
+            .Where(p => p.Left > 0.009m)
+            .ToList();
+        if (pools.Count == 0)
+            return;
+
+        var added = false;
+        foreach (var invoice in invoices)
+        {
+            usedOnInvoice.TryGetValue(invoice.InvoiceId, out var already);
+            var room = Math.Round(Math.Max(0m, invoice.Amount - already), 2, MidpointRounding.AwayFromZero);
+            if (room <= 0.009m) continue;
+
+            for (var i = 0; i < pools.Count && room > 0.009m; i++)
+            {
+                var pool = pools[i];
+                if (pool.Left <= 0.009m) continue;
+                if (!pool.Advance && invoice.Year > pool.PayYear) continue;
+                var take = Math.Round(Math.Min(room, pool.Left), 2, MidpointRounding.AwayFromZero);
+                if (take <= 0.009m) continue;
+                _db.TransactionAllocations.Add(new MTransactionAllocation
+                {
+                    TransactionId = pool.Id,
+                    InvoiceId = invoice.InvoiceId,
+                    Amount = take,
+                    AllocatedAt = DateTime.UtcNow,
+                    CreatedAt = DateTime.UtcNow
+                });
+                _db.AuditLogs.Add(new AuditLog
+                {
+                    TableName = "MTransactionAllocation",
+                    RecordId = pool.Id,
+                    Action = "INSERT",
+                    NewValues = $"auto; transaction={pool.Id}; invoice={invoice.InvoiceId}; amount={take}",
+                    ChangedAt = DateTime.UtcNow
+                });
+                pools[i] = (pool.Id, Math.Round(pool.Left - take, 2, MidpointRounding.AwayFromZero), pool.Advance, pool.PayYear);
+                room = Math.Round(room - take, 2, MidpointRounding.AwayFromZero);
+                added = true;
+            }
+        }
+
+        if (added)
+            await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task SettleAdvanceAgainstOpenInvoicesAsync(CancellationToken cancellationToken)
+    {
+        foreach (var accountId in await AccountsWithUnappliedAdvanceAsync(cancellationToken))
+        {
+            try
+            {
+                await ReconcileAccountDuesAsync(accountId, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not apply advance credit for account {AccountId}", accountId);
+            }
+        }
+    }
+
+    private async Task<List<long>> AccountsWithUnappliedAdvanceAsync(CancellationToken cancellationToken)
+    {
+        var recognized = new[] { "PAID", "WAIVED", "PARTIALLY_PAID", "SETTLED" };
+        var payments = await _db.Transactions.AsNoTracking()
+            .Where(t =>
+                t.AccountId != null
+                && t.Amount > 0
+                && (t.FeeType.Code == "ADVANCE"
+                    || t.FeeType.Code == "ANNUAL"
+                    || t.FeeType.Code == "SUBSCRIPTION"
+                    || t.FeeType.Code == "ANNUAL_SUBSCRIPTION")
+                && recognized.Contains(t.PaymentStatus.Code))
+            .Select(t => new { AccountId = t.AccountId!.Value, t.TransactionId, t.Amount })
+            .ToListAsync(cancellationToken);
+        if (payments.Count == 0) return [];
+
+        var paymentIds = payments.Select(p => p.TransactionId).ToList();
+        var used = await _db.TransactionAllocations.AsNoTracking()
+            .Where(a => paymentIds.Contains(a.TransactionId))
+            .GroupBy(a => a.TransactionId)
+            .Select(g => new { TransactionId = g.Key, Amount = g.Sum(x => x.Amount) })
+            .ToListAsync(cancellationToken);
+        var usedById = used.ToDictionary(x => x.TransactionId, x => x.Amount);
+        var accountIds = payments
+            .Where(p =>
+            {
+                usedById.TryGetValue(p.TransactionId, out var allocated);
+                return p.Amount - allocated > 0.009m;
+            })
+            .Select(p => p.AccountId)
+            .Distinct()
+            .ToList();
+        if (accountIds.Count == 0) return [];
+
+        var invoices = await _db.MembershipInvoices.AsNoTracking()
+            .Where(i => accountIds.Contains(i.AccountId) && i.PublishedToMember && i.Amount > 0)
+            .Select(i => new { i.InvoiceId, i.AccountId, i.Year, i.Amount })
+            .ToListAsync(cancellationToken);
+        if (invoices.Count == 0) return [];
+
+        var invoiceIds = invoices.Select(i => i.InvoiceId).ToList();
+        var invoiceUsed = await _db.TransactionAllocations.AsNoTracking()
+            .Where(a => invoiceIds.Contains(a.InvoiceId))
+            .GroupBy(a => a.InvoiceId)
+            .Select(g => new { InvoiceId = g.Key, Amount = g.Sum(x => x.Amount) })
+            .ToListAsync(cancellationToken);
+        var invoiceUsedById = invoiceUsed.ToDictionary(x => x.InvoiceId, x => x.Amount);
+
+        return invoices
+            .Where(invoice =>
+            {
+                invoiceUsedById.TryGetValue(invoice.InvoiceId, out var allocated);
+                return invoice.Amount - allocated > 0.009m;
+            })
+            .Select(invoice => invoice.AccountId)
+            .Distinct()
+            .ToList();
+    }
+
+    private async Task<Dictionary<long, decimal>> MemberAdvanceCreditAsync(
+        IReadOnlyCollection<long> accountIds,
+        CancellationToken cancellationToken)
+    {
+        if (accountIds.Count == 0) return [];
+        var recognized = new[] { "PAID", "WAIVED", "PARTIALLY_PAID", "SETTLED" };
+        var payments = await _db.Transactions.AsNoTracking()
+            .Where(t =>
+                t.AccountId != null
+                && accountIds.Contains(t.AccountId.Value)
+                && t.Amount > 0
+                && (t.FeeType.Code == "ADVANCE"
+                    || t.FeeType.Code == "ANNUAL"
+                    || t.FeeType.Code == "SUBSCRIPTION"
+                    || t.FeeType.Code == "ANNUAL_SUBSCRIPTION")
+                && recognized.Contains(t.PaymentStatus.Code)
+                && (t.CreditOwner == null || t.CreditOwner != "CORPORATE"))
+            .Select(t => new
+            {
+                AccountId = t.AccountId!.Value,
+                t.TransactionId,
+                t.Amount,
+                t.CreditOwner,
+                FeeCode = t.FeeType.Code,
+                t.PaymentDate,
+            })
+            .ToListAsync(cancellationToken);
+        payments = payments
+            .Where(t => !string.Equals(t.CreditOwner, "CORPORATE", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (payments.Count == 0) return [];
+
+        var ids = payments.Select(p => p.TransactionId).ToList();
+        var used = await _db.TransactionAllocations.AsNoTracking()
+            .Where(a => ids.Contains(a.TransactionId))
+            .GroupBy(a => a.TransactionId)
+            .Select(g => new { TransactionId = g.Key, Amount = g.Sum(x => x.Amount) })
+            .ToListAsync(cancellationToken);
+        var usedById = used.ToDictionary(x => x.TransactionId, x => x.Amount);
+        var invoiced = await _db.MembershipInvoices.AsNoTracking()
+            .Where(i => accountIds.Contains(i.AccountId) && i.PublishedToMember)
+            .Select(i => new { i.AccountId, i.Year })
+            .ToListAsync(cancellationToken);
+        var invoicedYears = invoiced.Select(i => (i.AccountId, i.Year)).ToHashSet();
+        var legacyPaidRows = await _db.Subscriptions.AsNoTracking()
+            .Where(s => accountIds.Contains(s.AccountId) && !s.WaivedFlag)
+            .Select(s => new { s.AccountId, s.SubscriptionYear, s.AmountPaid })
+            .ToListAsync(cancellationToken);
+        var legacyRoom = legacyPaidRows
+            .Where(s => !invoicedYears.Contains((s.AccountId, s.SubscriptionYear)))
+            .GroupBy(s => s.AccountId)
+            .ToDictionary(g => g.Key, g => g.Sum(s => Math.Max(0m, s.AmountPaid)));
+
+        var credit = new Dictionary<long, decimal>();
+        foreach (var group in payments.GroupBy(p => p.AccountId))
+        {
+            legacyRoom.TryGetValue(group.Key, out var room);
+            decimal available = 0m;
+            foreach (var payment in group.OrderBy(p => p.PaymentDate).ThenBy(p => p.TransactionId))
+            {
+                usedById.TryGetValue(payment.TransactionId, out var allocated);
+                var raw = Math.Max(0m, payment.Amount - allocated);
+                if (IsAnnualFee(payment.FeeCode))
+                {
+                    var legacyTake = Math.Min(raw, Math.Max(0m, room));
+                    room -= legacyTake;
+                    available += raw - legacyTake;
+                }
+                else
+                    available += raw;
+            }
+            credit[group.Key] = Math.Round(available, 2, MidpointRounding.AwayFromZero);
+        }
+        return credit;
+    }
+
+    internal static string AccountFinancialStatus(decimal outstanding, decimal availableCredit, decimal paid)
+    {
+        if (outstanding > 0.009m)
+            return paid > 0.009m ? "PARTIALLY_PAID" : "UNPAID";
+        return availableCredit > 0.009m ? "ADVANCE_CREDIT" : "PAID";
+    }
+
+    private async Task ApplyAdvanceAllocationsAsync(
+        long accountId,
+        IReadOnlyCollection<long> annualFeeTypeIds,
+        IReadOnlyList<Subscription> subs,
+        CancellationToken cancellationToken)
+    {
+        var recognized = new[] { "PAID", "WAIVED", "PARTIALLY_PAID", "SETTLED" };
+        var appliedByYear = await (
+            from allocation in _db.TransactionAllocations.AsNoTracking()
+            join payment in _db.Transactions.AsNoTracking() on allocation.TransactionId equals payment.TransactionId
+            join invoice in _db.MembershipInvoices.AsNoTracking() on allocation.InvoiceId equals invoice.InvoiceId
+            where payment.AccountId == accountId
+                && payment.Amount > 0
+                && !annualFeeTypeIds.Contains(payment.FeeTypeId)
+                && recognized.Contains(payment.PaymentStatus.Code)
+            group allocation by invoice.Year
+            into yearGroup
+            select new { Year = yearGroup.Key, Amount = yearGroup.Sum(x => x.Amount) }
+        ).ToListAsync(cancellationToken);
+
+        foreach (var bucket in appliedByYear)
+        {
+            var sub = subs.FirstOrDefault(s => s.SubscriptionYear == bucket.Year);
+            if (sub is null || sub.WaivedFlag) continue;
+            var due = Math.Max(0m, sub.AmountDue);
+            var room = Math.Max(0m, due - sub.AmountPaid);
+            var take = Math.Min(bucket.Amount, room);
+            if (take <= 0.009m) continue;
+            sub.AmountPaid += take;
+            sub.ArrearsAmount = Math.Max(0m, due - sub.AmountPaid);
+        }
     }
 
     private async Task HealReversedLedgersAsync(CancellationToken cancellationToken)
@@ -913,14 +1340,24 @@ public partial class FinanceService
         if (to < from)
             throw new InvalidOperationException("Statement end date must be on or after the start date.");
 
+        await ReconcileAccountDuesAsync(accountId, cancellationToken);
+
         var account = await _db.Accounts.AsNoTracking()
             .Include(a => a.Profile)
             .Include(a => a.MembershipType)
+            .Include(a => a.CorporateCompany)
             .FirstOrDefaultAsync(a => a.AccountId == accountId && !a.IsDeleted, cancellationToken)
             ?? throw new InvalidOperationException("Member account was not found.");
 
-        var opening = await MembershipBalanceAsOfAsync(accountId, from.AddDays(-1), cancellationToken);
-        var closing = await MembershipBalanceAsOfAsync(accountId, to, cancellationToken);
+        var companyLiable = InvoiceDeliveryPlan.Normalize(account.InvoiceTo) == "CORPORATE"
+            && account.CorporateCompanyId != null;
+        var payerName = account.CorporateCompany?.Name?.Trim();
+        if (string.IsNullOrWhiteSpace(payerName)) payerName = "the corporate company";
+
+        var opening = await SignedInvoiceBalanceAsOfAsync(
+            accountId, account.ApplicationId, account.ProfileId, from.AddDays(-1), cancellationToken, companyLiable);
+        var closing = await SignedInvoiceBalanceAsOfAsync(
+            accountId, account.ApplicationId, account.ProfileId, to, cancellationToken, companyLiable);
 
         var lines = await BuildMemberLedgerStatementLinesAsync(
             accountId,
@@ -928,12 +1365,16 @@ public partial class FinanceService
             account.ProfileId,
             from,
             to,
-            cancellationToken);
+            cancellationToken,
+            companyLiable ? payerName : null);
 
         var memberName = $"{account.Profile?.FirstName} {account.Profile?.LastName}".Trim();
         if (string.IsNullOrWhiteSpace(memberName))
             memberName = account.MembershipNo ?? "Member";
         var club = await ClubHeaderAsync(cancellationToken);
+        var credit = await MemberAdvanceCreditAsync([accountId], cancellationToken);
+        credit.TryGetValue(accountId, out var availableCredit);
+        var outstanding = await InvoicedSubscriptionOutstandingAsync(accountId, cancellationToken);
         return new StatementDocumentDto(
             accountId,
             memberName,
@@ -947,7 +1388,157 @@ public partial class FinanceService
             lines,
             account.ApplicationId,
             "MEMBER",
-            account.Profile?.Email);
+            account.Profile?.Email,
+            outstanding,
+            availableCredit);
+    }
+
+    private async Task<decimal> InvoicedSubscriptionOutstandingAsync(long accountId, CancellationToken cancellationToken)
+    {
+        var years = await _db.MembershipInvoices.AsNoTracking()
+            .Where(i => i.AccountId == accountId && i.PublishedToMember)
+            .Select(i => i.Year)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        if (years.Count == 0) return 0m;
+        var rows = await _db.Subscriptions.AsNoTracking()
+            .Where(s => s.AccountId == accountId && years.Contains(s.SubscriptionYear) && !s.WaivedFlag)
+            .Select(s => new { s.AmountDue, s.AmountPaid })
+            .ToListAsync(cancellationToken);
+        return Math.Round(rows.Sum(s => Math.Max(0m, s.AmountDue - s.AmountPaid)), 2, MidpointRounding.AwayFromZero);
+    }
+
+    public async Task<StatementDocumentDto> GetCorporateStatementAsync(
+        long companyId,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken)
+    {
+        if (to < from)
+            throw new InvalidOperationException("Statement end date must be on or after the start date.");
+
+        var company = await _db.CorporateCompanies.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.CorporateCompanyId == companyId, cancellationToken)
+            ?? throw new InvalidOperationException("Corporate company was not found.");
+
+        var accounts = await _db.Accounts.AsNoTracking()
+            .Include(a => a.Profile)
+            .Where(a => !a.IsDeleted && a.CorporateCompanyId == companyId)
+            .ToListAsync(cancellationToken);
+        accounts = accounts
+            .Where(a => InvoiceDeliveryPlan.Normalize(a.InvoiceTo) is "CORPORATE" or "BOTH")
+            .ToList();
+
+        decimal opening = 0;
+        decimal closing = 0;
+        var lines = new List<StatementLineDto>();
+        foreach (var account in accounts)
+        {
+            var memberName = $"{account.Profile?.FirstName} {account.Profile?.LastName}".Trim();
+            if (string.IsNullOrWhiteSpace(memberName))
+                memberName = account.MembershipNo ?? "Member";
+            opening += await SponsoredBalanceAsOfAsync(account, from.AddDays(-1), cancellationToken);
+            closing += await SponsoredBalanceAsOfAsync(account, to, cancellationToken);
+            lines.AddRange(await BuildSponsoredStatementLinesAsync(account, memberName, from, to, cancellationToken));
+        }
+
+        var club = await ClubHeaderAsync(cancellationToken);
+        return new StatementDocumentDto(
+            0,
+            company.Name,
+            company.Code,
+            "Corporate account",
+            from,
+            to,
+            opening,
+            closing,
+            string.IsNullOrWhiteSpace(club.ClubName) ? "Aero Club of East Africa" : club.ClubName,
+            lines
+                .OrderBy(l => l.Date)
+                .ThenBy(l => StatementLineSort(l.Kind))
+                .ThenBy(l => l.Receipt)
+                .ToList(),
+            null,
+            "CORPORATE",
+            company.Email);
+    }
+
+    private async Task<decimal> SponsoredBalanceAsOfAsync(
+        Entities.MembershipAccount.MAccount account,
+        DateOnly asOfInclusive,
+        CancellationToken cancellationToken)
+    {
+        var charged = (await ListPublishedInvoiceEntriesAsync(account.AccountId, account.ApplicationId, cancellationToken))
+            .Where(e => e.IssuedOn <= asOfInclusive && e.Amount > 0 && IsSponsoredSubscriptionFee(e.FeeType))
+            .Sum(e => e.Amount);
+        var paid = await SumSponsoredPaymentsAsOfAsync(account.AccountId, account.ProfileId, asOfInclusive, cancellationToken);
+        return charged - paid;
+    }
+
+    private async Task<List<StatementLineDto>> BuildSponsoredStatementLinesAsync(
+        Entities.MembershipAccount.MAccount account,
+        string memberName,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken)
+    {
+        var lines = new List<StatementLineDto>();
+        var who = string.IsNullOrWhiteSpace(account.MembershipNo)
+            ? memberName
+            : $"{memberName} ({account.MembershipNo})";
+        foreach (var entry in (await ListPublishedInvoiceEntriesAsync(account.AccountId, account.ApplicationId, cancellationToken))
+            .Where(e => e.IssuedOn >= from && e.IssuedOn <= to && e.Amount > 0.01m && IsSponsoredSubscriptionFee(e.FeeType)))
+        {
+            lines.Add(CreateStatementLine(
+                entry.IssuedOn,
+                $"{FeeTypeStatementLabel(entry.FeeType)} – {who}",
+                null,
+                entry.DocumentNo,
+                "Invoiced",
+                entry.Amount,
+                StatementLineKind.Invoice));
+        }
+
+        if (account.AccountId <= 0 && account.ProfileId <= 0) return lines;
+        var txs = await _db.Transactions.AsNoTracking()
+            .Include(t => t.PaymentStatus)
+            .Include(t => t.FeeType)
+            .Include(t => t.Receipt)
+            .Where(t =>
+                t.PaymentDate != null
+                && t.PaymentDate >= from
+                && t.PaymentDate <= to
+                && (t.AccountId == account.AccountId || t.ProfileId == account.ProfileId))
+            .ToListAsync(cancellationToken);
+        foreach (var t in txs.Where(t => IsSponsoredSubscriptionFee(t.FeeType?.Code)))
+        {
+            var postedOn = t.PaymentDate ?? DateOnly.FromDateTime(t.CreatedAt);
+            if (IsMoneyInTransaction(t.PaymentStatus?.Code, t.Amount))
+            {
+                lines.Add(CreateStatementLine(
+                    postedOn,
+                    $"Payment – {who}",
+                    t.PaymentMethod?.Name,
+                    t.Receipt?.ReceiptNumber,
+                    t.PaymentStatus?.Name,
+                    t.Amount,
+                    StatementLineKind.Payment,
+                    t.TransactionId));
+            }
+            else if (IsMoneyOutTransaction(t.PaymentStatus?.Code, t.Amount))
+            {
+                lines.Add(CreateStatementLine(
+                    postedOn,
+                    $"Refund – {who}",
+                    t.PaymentMethod?.Name,
+                    t.Receipt?.ReceiptNumber,
+                    t.PaymentStatus?.Name,
+                    t.Amount,
+                    StatementLineKind.Refund,
+                    t.TransactionId));
+            }
+        }
+        return lines;
     }
 
     private sealed record InvoiceStatementEntry(DateOnly IssuedOn, string FeeType, string DocumentNo, decimal Amount);
@@ -1011,11 +1602,13 @@ public partial class FinanceService
         long? accountId,
         long? profileId,
         DateOnly asOfInclusive,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool omitSponsoredFees = false)
     {
         if (accountId is null && profileId is null) return 0;
         var txs = await _db.Transactions.AsNoTracking()
             .Include(t => t.PaymentStatus)
+            .Include(t => t.FeeType)
             .Where(t =>
                 t.Amount > 0
                 && t.PaymentDate != null
@@ -1024,7 +1617,33 @@ public partial class FinanceService
                     (accountId != null && t.AccountId == accountId)
                     || (profileId != null && t.ProfileId == profileId)))
             .ToListAsync(cancellationToken);
-        return txs.Where(t => RecognizesPayment(t.PaymentStatus?.Code)).Sum(t => t.Amount);
+        return txs
+            .Where(t => RecognizesPayment(t.PaymentStatus?.Code))
+            .Where(t => !(omitSponsoredFees && IsSponsoredSubscriptionFee(t.FeeType?.Code)))
+            .Sum(t => t.Amount);
+    }
+
+    private async Task<decimal> SumSponsoredPaymentsAsOfAsync(
+        long? accountId,
+        long? profileId,
+        DateOnly asOfInclusive,
+        CancellationToken cancellationToken)
+    {
+        if (accountId is null && profileId is null) return 0;
+        var txs = await _db.Transactions.AsNoTracking()
+            .Include(t => t.PaymentStatus)
+            .Include(t => t.FeeType)
+            .Where(t =>
+                t.Amount > 0
+                && t.PaymentDate != null
+                && t.PaymentDate <= asOfInclusive
+                && (
+                    (accountId != null && t.AccountId == accountId)
+                    || (profileId != null && t.ProfileId == profileId)))
+            .ToListAsync(cancellationToken);
+        return txs
+            .Where(t => RecognizesPayment(t.PaymentStatus?.Code) && IsSponsoredSubscriptionFee(t.FeeType?.Code))
+            .Sum(t => t.Amount);
     }
 
     private async Task<decimal> InvoiceRegisterBalanceAsOfAsync(
@@ -1041,69 +1660,55 @@ public partial class FinanceService
         return Math.Max(0, charged - paid);
     }
 
+    /// <summary>
+    /// Statement balance uses issued invoices only. A subscription amount is not a charge until an invoice is issued.
+    /// </summary>
+    private async Task<decimal> SignedInvoiceBalanceAsOfAsync(
+        long? accountId,
+        long? applicationId,
+        long? profileId,
+        DateOnly asOfInclusive,
+        CancellationToken cancellationToken,
+        bool omitSponsoredFees = false)
+    {
+        var charged = (await ListPublishedInvoiceEntriesAsync(accountId, applicationId, cancellationToken))
+            .Where(e => e.IssuedOn <= asOfInclusive && e.Amount > 0)
+            .Where(e => !(omitSponsoredFees && IsSponsoredSubscriptionFee(e.FeeType)))
+            .Sum(e => e.Amount);
+        var paid = await SumRecognizedPaymentsAsOfAsync(
+            accountId, profileId, asOfInclusive, cancellationToken, omitSponsoredFees);
+        return charged - paid;
+    }
+
     private async Task<List<StatementLineDto>> BuildMemberLedgerStatementLinesAsync(
         long accountId,
         long? applicationId,
         long? profileId,
         DateOnly from,
         DateOnly to,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? corporatePayer = null)
     {
         var lines = new List<StatementLineDto>();
-        var account = await _db.Accounts.AsNoTracking()
-            .FirstOrDefaultAsync(a => a.AccountId == accountId && !a.IsDeleted, cancellationToken);
         var invoices = (await ListPublishedInvoiceEntriesAsync(accountId, applicationId, cancellationToken))
             .Where(e => e.IssuedOn >= from && e.IssuedOn <= to && e.Amount > 0.01m)
             .ToList();
 
-        var joined = account?.JoinedDate ?? account?.StartDate;
-        if (joined is DateOnly jd && jd >= from && jd <= to)
-        {
-            var joiningDue = account!.EntranceFeeWaivedFlag ? 0m : (account.EntranceFeeAmount ?? 0m);
-            if (joiningDue > 0.01m)
-            {
-                var joiningInvoice = invoices.FirstOrDefault(e => e.FeeType == "JOINING");
-                lines.Add(CreateStatementLine(
-                    jd,
-                    joiningInvoice is null
-                        ? "Joining / entrance fee"
-                        : $"Joining invoice {joiningInvoice.DocumentNo}",
-                    null,
-                    joiningInvoice?.DocumentNo,
-                    "Invoiced",
-                    joiningDue,
-                    StatementLineKind.Invoice));
-            }
-        }
-
-        var billedYears = new HashSet<int>();
-        var subs = await _db.Subscriptions.AsNoTracking()
-            .Where(s => s.AccountId == accountId && !s.WaivedFlag && s.AmountDue > 0)
-            .OrderBy(s => s.SubscriptionYear)
-            .ToListAsync(cancellationToken);
-        foreach (var billed in subs)
-        {
-            var billedOn = new DateOnly(billed.SubscriptionYear, 1, 1);
-            if (billedOn < from || billedOn > to) continue;
-            billedYears.Add(billed.SubscriptionYear);
-            var annualInvoice = invoices.FirstOrDefault(e =>
-                e.FeeType == "ANNUAL" && e.IssuedOn.Year == billed.SubscriptionYear);
-            lines.Add(CreateStatementLine(
-                billedOn,
-                annualInvoice is null
-                    ? $"Annual subscription {billed.SubscriptionYear}"
-                    : $"Annual subscription {billed.SubscriptionYear} invoice {annualInvoice.DocumentNo}",
-                null,
-                annualInvoice?.DocumentNo,
-                "Invoiced",
-                billed.AmountDue,
-                StatementLineKind.Invoice));
-        }
-
         foreach (var entry in invoices)
         {
-            if (entry.FeeType == "ANNUAL" && billedYears.Contains(entry.IssuedOn.Year)) continue;
-            if (entry.FeeType == "JOINING" && joined is DateOnly joinDay && joinDay >= from && joinDay <= to) continue;
+            if (corporatePayer != null && IsSponsoredSubscriptionFee(entry.FeeType))
+            {
+                lines.Add(CreateStatementLine(
+                    entry.IssuedOn,
+                    $"{FeeTypeStatementLabel(entry.FeeType)} – Corporate billed",
+                    null,
+                    entry.DocumentNo,
+                    "Corporate billed",
+                    0,
+                    StatementLineKind.Invoice,
+                    informational: true));
+                continue;
+            }
             lines.Add(CreateStatementLine(
                 entry.IssuedOn,
                 $"{FeeTypeStatementLabel(entry.FeeType)} invoice {entry.DocumentNo}",
@@ -1130,14 +1735,26 @@ public partial class FinanceService
             .ThenBy(t => t.TransactionId)
             .ToListAsync(cancellationToken);
 
-        decimal txPaid = 0;
         foreach (var t in txs)
         {
             var statusCode = t.PaymentStatus?.Code;
             var postedOn = t.PaymentDate ?? DateOnly.FromDateTime(t.CreatedAt);
+            if (corporatePayer != null && IsSponsoredSubscriptionFee(t.FeeType?.Code)
+                && (IsMoneyInTransaction(statusCode, t.Amount) || IsMoneyOutTransaction(statusCode, t.Amount)))
+            {
+                lines.Add(CreateStatementLine(
+                    postedOn,
+                    $"Paid by {corporatePayer}",
+                    null,
+                    t.Receipt?.ReceiptNumber,
+                    "Corporate billed",
+                    0,
+                    StatementLineKind.Payment,
+                    informational: true));
+                continue;
+            }
             if (IsMoneyInTransaction(statusCode, t.Amount))
             {
-                txPaid += t.Amount;
                 lines.Add(CreateStatementLine(
                     postedOn,
                     t.FeeType?.Name,
@@ -1162,22 +1779,6 @@ public partial class FinanceService
                     StatementLineKind.Refund,
                     t.TransactionId));
             }
-        }
-
-        var allocated = subs
-            .Where(s => new DateOnly(s.SubscriptionYear, 1, 1) >= from && new DateOnly(s.SubscriptionYear, 1, 1) <= to)
-            .Sum(s => Math.Max(0m, s.AmountPaid));
-        var residual = Math.Max(0m, allocated - txPaid);
-        if (residual > 0.01m)
-        {
-            lines.Add(CreateStatementLine(
-                to,
-                "Subscription payment applied",
-                null,
-                null,
-                "Paid",
-                residual,
-                StatementLineKind.Payment));
         }
 
         return lines
@@ -1267,12 +1868,6 @@ public partial class FinanceService
             .ThenBy(l => l.TransactionId ?? 0)
             .ToList();
     }
-
-    /// <summary>
-    /// Outstanding as of a calendar date. Uses charges that had already started
-    /// and cash dated on or before that day. Later receipts that were waterfalled
-    /// onto an older year must not rewrite that year's opening.
-    /// </summary>
     private async Task<decimal> MembershipBalanceAsOfAsync(
         long accountId,
         DateOnly asOfInclusive,
@@ -1346,8 +1941,45 @@ public partial class FinanceService
             if (residualYear is int year && new DateOnly(year, 12, 31) <= asOfInclusive)
                 datedPaid += undated;
         }
+        return joiningOut + charges - datedPaid;
+    }
+    private static List<StatementLineDto> SplitPaymentSurplus(decimal opening, List<StatementLineDto> lines)
+    {
+        var running = opening;
+        var result = new List<StatementLineDto>(lines.Count);
+        foreach (var line in lines)
+        {
+            var amount = Math.Abs(line.Amount);
+            if (line.Kind == StatementLineKind.Payment && amount > 0.009m)
+            {
+                var applied = Math.Min(amount, Math.Max(0m, running));
+                var surplus = Math.Round(amount - applied, 2, MidpointRounding.AwayFromZero);
+                applied = Math.Round(applied, 2, MidpointRounding.AwayFromZero);
+                var receipt = string.IsNullOrWhiteSpace(line.Receipt) ? null : line.Receipt.Trim();
+                if (applied > 0.009m)
+                {
+                    var appliedFee = string.IsNullOrWhiteSpace(receipt)
+                        ? line.Fee
+                        : $"Receipt {receipt}";
+                    result.Add(line with { Fee = appliedFee, Amount = applied });
+                    running -= applied;
+                }
+                if (surplus > 0.009m)
+                {
+                    var creditFee = string.IsNullOrWhiteSpace(receipt)
+                        ? "Advance payment / credit"
+                        : $"Advance payment / credit · {receipt}";
+                    result.Add(line with { Fee = creditFee, Amount = surplus });
+                    running -= surplus;
+                }
+                continue;
+            }
 
-        return Math.Max(0, joiningOut + charges - datedPaid);
+            if (line.Kind == StatementLineKind.Invoice || line.Kind == StatementLineKind.Refund)
+                running += amount;
+            result.Add(line);
+        }
+        return result;
     }
 
     public async Task<StatementDocumentDto> GetApplicantStatementAsync(
@@ -1743,21 +2375,6 @@ public partial class FinanceService
         }).ToList();
     }
 
-    private async Task<Dictionary<long, decimal>> PriorUnpaidByAccountAsync(
-        IReadOnlyCollection<long> accountIds,
-        int year,
-        CancellationToken cancellationToken)
-    {
-        if (accountIds.Count == 0) return new Dictionary<long, decimal>();
-        var rows = await _db.Subscriptions.AsNoTracking()
-            .Where(s => accountIds.Contains(s.AccountId) && s.SubscriptionYear < year && !s.WaivedFlag)
-            .Select(s => new { s.AccountId, Unpaid = s.AmountDue - s.AmountPaid })
-            .ToListAsync(cancellationToken);
-        return rows
-            .GroupBy(r => r.AccountId)
-            .ToDictionary(g => g.Key, g => g.Sum(x => Math.Max(0m, x.Unpaid)));
-    }
-
     internal IQueryable<Subscription> InvoiceArrearsQuery(int year, string? membershipType, string? search)
     {
         var query = _db.Subscriptions.AsNoTracking()
@@ -1837,37 +2454,26 @@ public partial class FinanceService
         ClubManagement.Entities.Subscriptions.Subscription? sub,
         CancellationToken cancellationToken)
     {
-        var priorSubs = await _db.Subscriptions.AsNoTracking()
-            .Where(s => s.AccountId == account.AccountId && s.SubscriptionYear < invoice.Year && !s.WaivedFlag)
-            .ToListAsync(cancellationToken);
-        var broughtForward = priorSubs.Sum(SubscriptionUnpaid);
-        // Invoice.Amount is the bill as issued (year fee + brought forward). Credit notes
-        // reduce the subscription balance afterwards, so the document must not read AmountDue.
-        var yearCharges = invoice.Amount > broughtForward + 0.009m
-            ? decimal.Round(invoice.Amount - broughtForward, 2, MidpointRounding.AwayFromZero)
-            : broughtForward <= 0.009m
-                ? invoice.Amount
-                : Math.Max(0, sub?.AmountDue ?? 0);
+        var yearCharges = sub is null
+            ? invoice.Amount
+            : sub.WaivedFlag ? 0m : sub.AmountDue;
+        var allocated = await _db.TransactionAllocations.AsNoTracking()
+            .Where(a => a.InvoiceId == invoice.InvoiceId)
+            .SumAsync(a => (decimal?)a.Amount, cancellationToken) ?? 0m;
+        var legacyPaid = Math.Max(0m, sub?.AmountPaid ?? 0m);
+        var displayPaid = Math.Min(yearCharges, Math.Max(allocated, legacyPaid));
+        var displayBalance = Math.Max(0m, yearCharges - displayPaid);
         var category = account.MembershipType?.Name;
-        var lines = new List<InvoiceLineDto>();
-        if (broughtForward > 0.01m)
+        var lines = new List<InvoiceLineDto>
         {
-            lines.Add(new(
-                "Balance brought forward",
-                (invoice.Year - 1).ToString(),
-                broughtForward,
-                0,
-                broughtForward));
-        }
-        lines.Add(new(
-            string.IsNullOrWhiteSpace(category) ? "Annual subscription" : $"{category} Membership",
-            invoice.Year.ToString(),
-            yearCharges,
-            0,
-            yearCharges));
-        var displayDue = decimal.Round(broughtForward + yearCharges, 2, MidpointRounding.AwayFromZero);
-        var displayPaid = 0m;
-        var displayBalance = displayDue;
+            new(
+                string.IsNullOrWhiteSpace(category) ? "Annual subscription" : $"{category} Membership",
+                invoice.Year.ToString(),
+                yearCharges,
+                displayPaid,
+                displayBalance)
+        };
+        var displayDue = yearCharges;
         var memberName = $"{account.Profile?.FirstName} {account.Profile?.LastName}".Trim();
         if (string.IsNullOrWhiteSpace(memberName))
             memberName = account.MembershipNo ?? "Member";
@@ -1944,11 +2550,18 @@ public partial class FinanceService
     private async Task TryEmailInvoiceAsync(
         MembershipInvoice invoice,
         InvoiceDocumentDto dto,
-        string? email,
+        InvoiceDeliveryPlan delivery,
         string? invoiceHtml,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(email)) return;
+        if (delivery.Emails.Count == 0)
+        {
+            _logger.LogWarning(
+                "Skipped email for {InvoiceNo}: no {Target} billing address is on file.",
+                invoice.InvoiceNo,
+                delivery.Target);
+            return;
+        }
         if (string.IsNullOrWhiteSpace(invoiceHtml))
         {
             _logger.LogWarning(
@@ -1956,24 +2569,36 @@ public partial class FinanceService
                 invoice.InvoiceNo);
             return;
         }
-        try
+        var sentTo = new List<string>();
+        foreach (var email in delivery.Emails)
         {
-            var sent = await _email.SendHtmlAsync(
-                email.Trim(),
-                $"Aero Club invoice {dto.InvoiceNo} - {dto.Year} subscription",
-                WithEmailPayNow(invoiceHtml),
-                cancellationToken);
-            if (sent)
+            try
             {
-                invoice.SentAt = DateTime.UtcNow;
-                invoice.SentToEmail = email.Trim();
-                await _db.SaveChangesAsync(cancellationToken);
+                var sent = await _email.SendHtmlAsync(
+                    email,
+                    $"Aero Club invoice {dto.InvoiceNo} - {dto.Year} subscription",
+                    WithEmailPayNow(invoiceHtml),
+                    cancellationToken);
+                if (sent) sentTo.Add(email);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Invoice email failed for {InvoiceNo} to {Email}", invoice.InvoiceNo, email);
             }
         }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Invoice email failed for {InvoiceNo}", invoice.InvoiceNo);
-        }
+        if (sentTo.Count == 0) return;
+        invoice.SentAt = DateTime.UtcNow;
+        invoice.SentToEmail = string.Join("; ", sentTo);
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<InvoiceDeliveryPlan> ResolveInvoiceDeliveryAsync(long accountId, CancellationToken cancellationToken)
+    {
+        var account = await _db.Accounts.AsNoTracking()
+            .Include(a => a.Profile)
+            .Include(a => a.CorporateCompany)
+            .FirstOrDefaultAsync(a => a.AccountId == accountId && !a.IsDeleted, cancellationToken);
+        return InvoiceDeliveryPlan.For(account);
     }
 
     private async Task<(string ClubName, string? Address, string? Email, string? Phone)> ClubHeaderAsync(
@@ -2138,7 +2763,7 @@ public partial class FinanceService
                 ShowOnInvoice = true,
                 Fields = new List<PaymentFieldDto>
                 {
-                    F("bank-note", "Remittance note", "Bank remittance charges must be paid by the sender — use “OUR” code"),
+                    F("bank-note", "Remittance note", "Bank remittance charges must be paid by the sender"),
                     F("bank-name", "Bank name", "I & M Bank Ltd"),
                     F("bank-branch", "Branch", "Wilson Airport Branch"),
                     F("bank-account-name", "Account name", "Aero Club of East Africa"),
@@ -2265,12 +2890,27 @@ public partial class FinanceService
         PagedRequest paging,
         CancellationToken cancellationToken)
     {
+        await SettleAdvanceAgainstOpenInvoicesAsync(cancellationToken);
         var query = IssuedInvoiceQuery(filter).OrderByDescending(i => i.IssuedAt).ThenByDescending(i => i.InvoiceId);
         var page = await query.ToPagedResultAsync(paging, cancellationToken);
-        var credits = await CreditTotalsAsync(page.Items.Select(i => i.InvoiceId).ToList(), cancellationToken);
+        var invoiceIds = page.Items.Select(i => i.InvoiceId).ToList();
+        var credits = await CreditTotalsAsync(invoiceIds, cancellationToken);
+        var allocatedByInvoice = await AllocationTotalsAsync(invoiceIds, cancellationToken);
+        var accountIds = page.Items.Select(i => i.AccountId).Distinct().ToList();
+        var years = page.Items.Select(i => i.Year).Distinct().ToList();
+        var paidRows = accountIds.Count == 0
+            ? []
+            : await _db.Subscriptions.AsNoTracking()
+                .Where(s => accountIds.Contains(s.AccountId) && years.Contains(s.SubscriptionYear))
+                .Select(s => new { s.AccountId, s.SubscriptionYear, s.AmountPaid })
+                .ToListAsync(cancellationToken);
+        var paidByYear = paidRows.ToDictionary(s => (s.AccountId, s.SubscriptionYear), s => s.AmountPaid);
         var rows = page.Items.Select(invoice =>
         {
             var credited = credits.GetValueOrDefault(invoice.InvoiceId);
+            allocatedByInvoice.TryGetValue(invoice.InvoiceId, out var allocated);
+            paidByYear.TryGetValue((invoice.AccountId, invoice.Year), out var paid);
+            var applied = Math.Max(allocated, Math.Min(invoice.Amount, Math.Max(0m, paid)));
             return new IssuedInvoiceRowDto(
                 invoice.InvoiceId,
                 invoice.InvoiceNo,
@@ -2282,7 +2922,7 @@ public partial class FinanceService
                 invoice.DueDate,
                 invoice.Amount,
                 credited,
-                Math.Max(0, invoice.Amount - credited),
+                Math.Max(0, invoice.Amount - credited - applied),
                 invoice.Status,
                 invoice.IssuedAt);
         }).ToList();
@@ -2399,12 +3039,6 @@ public partial class FinanceService
             await ApplyInvoiceReversalEffectsAsync(invoice, note, paidOnYear <= 0.01m, actorUserId, cancellationToken);
         return await LoadIssuedInvoiceDetailAsync(invoiceId, cancellationToken);
     }
-
-    /// <summary>
-    /// A fully reversed invoice drops the access that issuing it granted.
-    /// Unpaid joiner invoices become Cancelled or Void. Unpaid renewals become Pending payment.
-    /// Paid reversals leave a credit awaiting refund and still suspend access.
-    /// </summary>
     private async Task ApplyInvoiceReversalEffectsAsync(
         MembershipInvoice invoice,
         InvoiceCreditNote note,
@@ -2589,6 +3223,19 @@ public partial class FinanceService
             .Where(c => c.InvoiceId == invoiceId)
             .SumAsync(c => (decimal?)c.Amount, cancellationToken) ?? 0m;
 
+    private async Task<Dictionary<long, decimal>> AllocationTotalsAsync(
+        IReadOnlyCollection<long> invoiceIds,
+        CancellationToken cancellationToken)
+    {
+        if (invoiceIds.Count == 0) return [];
+        var rows = await _db.TransactionAllocations.AsNoTracking()
+            .Where(a => invoiceIds.Contains(a.InvoiceId))
+            .GroupBy(a => a.InvoiceId)
+            .Select(g => new { InvoiceId = g.Key, Amount = g.Sum(x => x.Amount) })
+            .ToListAsync(cancellationToken);
+        return rows.ToDictionary(x => x.InvoiceId, x => x.Amount);
+    }
+
     private async Task ApplyCreditStatusAsync(MembershipInvoice invoice, CancellationToken cancellationToken)
     {
         var credited = await CreditedAmountAsync(invoice.InvoiceId, cancellationToken);
@@ -2601,6 +3248,13 @@ public partial class FinanceService
 
     private async Task<IssuedInvoiceDetailDto> LoadIssuedInvoiceDetailAsync(long invoiceId, CancellationToken cancellationToken)
     {
+        var ownerId = await _db.MembershipInvoices.AsNoTracking()
+            .Where(i => i.InvoiceId == invoiceId)
+            .Select(i => (long?)i.AccountId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (ownerId is long accountId)
+            await ReconcileAccountDuesAsync(accountId, cancellationToken);
+
         var invoice = await _db.MembershipInvoices.AsNoTracking()
             .Include(i => i.Account).ThenInclude(a => a.Profile)
             .Include(i => i.Account).ThenInclude(a => a.MembershipType)
@@ -2615,11 +3269,16 @@ public partial class FinanceService
             .OrderByDescending(c => c.IssuedAt)
             .ToListAsync(cancellationToken);
         var credited = notes.Sum(c => c.Amount);
+        var allocated = await _db.TransactionAllocations.AsNoTracking()
+            .Where(a => a.InvoiceId == invoiceId)
+            .SumAsync(a => (decimal?)a.Amount, cancellationToken) ?? 0m;
+        var paid = Math.Max(0m, invoice.Subscription?.AmountPaid ?? 0m);
+        var applied = Math.Max(allocated, Math.Min(invoice.Amount, paid));
         return new IssuedInvoiceDetailDto(
             mapped,
             invoice.Amount,
             credited,
-            Math.Max(0, invoice.Amount - credited),
+            Math.Max(0, invoice.Amount - credited - applied),
             invoice.DueDate,
             notes.Select(MapCreditNote).ToList());
     }

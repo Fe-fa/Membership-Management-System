@@ -1,6 +1,6 @@
-﻿using ClubManagement.Entities.Lookups;
+﻿using ClubManagement.Entities.Finance;
+using ClubManagement.Entities.Lookups;
 using ClubManagement.Entities.MembershipAccount;
-using ClubManagement.Entities.Subscriptions;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -61,6 +61,18 @@ namespace ClubManagement.Entities.Subscriptions
         [Column("reference_note")]
         public string? ReferenceNote { get; set; }
 
+        /// <summary>
+        /// Optional single-invoice hint. Advance receipts keep this null.
+        /// Applied amounts live in <see cref="MTransactionAllocation"/>, not in this column.
+        /// </summary>
+        [Column("invoice_id")]
+        public long? InvoiceId { get; set; }
+
+        /// <summary>MEMBER or CORPORATE. Names who owns any surplus on this receipt.</summary>
+        [Column("credit_owner")]
+        [MaxLength(20)]
+        public string? CreditOwner { get; set; }
+
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 
@@ -83,6 +95,10 @@ namespace ClubManagement.Entities.Subscriptions
         public virtual PaymentStatus PaymentStatus { get; set; } = null!;
 
         public virtual MReceiptMaster? Receipt { get; set; }
+
+        public virtual MembershipInvoice? Invoice { get; set; }
+
+        public virtual ICollection<MTransactionAllocation> Allocations { get; set; } = new HashSet<MTransactionAllocation>();
 
         public virtual ICollection<Arrears> Arrearses { get; set; } = new HashSet<Arrears>();
 

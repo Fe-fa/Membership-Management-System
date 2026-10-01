@@ -20,11 +20,6 @@ public record MembershipFeeFacts(
     int? ParentContinuousYears,
     ProrationMode ProrationMode = ProrationMode.Daily);
 
-/// <summary>
-/// Result of prorating the first-year annual subscription.
-/// RemainingDays / DaysInYear are always populated (also in Monthly mode) so
-/// documents and quotes can display the full breakdown either way.
-/// </summary>
 public record AnnualProration(
     decimal FullAnnual,
     decimal PayableAnnual,

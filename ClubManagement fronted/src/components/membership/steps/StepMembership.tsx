@@ -23,6 +23,109 @@ type FeeQuote = {
   halfYear: boolean;
 };
 
+type CompanyOption = {
+  corporateCompanyId: number;
+  code: string;
+  name: string;
+  isActive: boolean;
+};
+
+function InvoiceToFields({
+  value,
+  errors,
+  onChange,
+}: {
+  value: Value;
+  errors: ErrorMap;
+  onChange: (patch: Partial<Value>) => void;
+}) {
+  const target = value.invoiceTo === "CORPORATE" || value.invoiceTo === "BOTH" ? value.invoiceTo : "INDIVIDUAL";
+  const needsCompany = target !== "INDIVIDUAL";
+  const companies = useQuery({
+    queryKey: ["finance", "companies", "active"],
+    queryFn: () => apiRequest<CompanyOption[]>("/api/finance/companies?activeOnly=true"),
+    enabled: needsCompany,
+    staleTime: 30_000,
+  });
+
+  return (
+    <section className="space-y-4">
+      <SectionTitle note="Joining fees and annual subscriptions follow this choice.">
+        Invoice to
+      </SectionTitle>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+        <div className="relative w-full max-w-xs shrink-0">
+          <select
+            value={target}
+            onChange={(event) => {
+              const next = event.target.value;
+              onChange(
+                next === "INDIVIDUAL"
+                  ? { invoiceTo: "INDIVIDUAL", corporateCompanyId: null, corporateCompanyName: "" }
+                  : { invoiceTo: next === "BOTH" ? "BOTH" : "CORPORATE" },
+              );
+            }}
+            className="w-full appearance-none rounded-xl border border-border bg-card p-4 pr-10 text-left font-display text-lg transition-all focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+          >
+            <option value="INDIVIDUAL">Individual</option>
+            <option value="CORPORATE">Corporate company</option>
+            {/* <option value="BOTH">Both</option> */}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        </div>
+      {needsCompany ? (
+        <div className="w-full max-w-md space-y-2">
+          <label className="grid gap-1.5 text-sm">
+            <span className="font-medium">Corporate company</span>
+            <span className="relative">
+              <select
+                value={value.corporateCompanyId ? String(value.corporateCompanyId) : ""}
+                onChange={(event) => {
+                  const id = Number(event.target.value);
+                  const company = companies.data?.find((row) => row.corporateCompanyId === id);
+                  onChange({
+                    corporateCompanyId: id || null,
+                    corporateCompanyName: company ? `${company.name} (${company.code})` : "",
+                  });
+                }}
+                aria-invalid={Boolean(errors["corporateCompanyId"])}
+                className={cn(
+                  "w-full appearance-none rounded-xl border p-4 pr-10 text-left transition-all",
+                  "border-border bg-card focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20",
+                  !value.corporateCompanyId && "text-muted-foreground",
+                )}
+              >
+                <option value="">Select a company</option>
+                {(companies.data ?? []).map((company) => (
+                  <option key={company.corporateCompanyId} value={company.corporateCompanyId}>
+                    {company.name} ({company.code})
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            </span>
+          </label>
+          {companies.isLoading ? (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="size-3.5 animate-spin" /> Loading companies…
+            </p>
+          ) : companies.isError ? (
+            <p className="text-xs font-medium text-destructive">Could not load corporate companies.</p>
+          ) : companies.data?.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+             
+            </p>
+          ) : null}
+          {errors["corporateCompanyId"] ? (
+            <p className="text-xs font-medium text-destructive">{errors["corporateCompanyId"]}</p>
+          ) : null}
+        </div>
+      ) : null}
+      </div>
+    </section>
+  );
+}
+
 function money(value?: number | null) {
   return formatKes(Number(value ?? 0));
 }
@@ -160,6 +263,8 @@ export const StepMembership = memo(function StepMembership({
           <p className="text-xs font-medium text-destructive">{errors["membershipType"]}</p>
         )}
       </section>
+
+      <InvoiceToFields value={value} errors={errors} onChange={onChange} />
 
       {onMembershipNoChange ? (
         <section className="space-y-4">

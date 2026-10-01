@@ -61,6 +61,8 @@ export type MemberSubscription = {
   canVote?: boolean;
   votingBlockedByArrears?: boolean;
   clubCreditBalance?: number;
+  /** Unallocated advance receipts plus club-card credit. */
+  availableCredit?: number;
   continuousMembershipYears?: number;
   ageYears?: number | null;
   statusCode?: string;
@@ -300,6 +302,58 @@ export function applicationDuesToSubscription(dues: ApplicationDues): MemberSubs
     halfYearProrated: Boolean(dues.halfYearAnnual),
     clubCreditBalance: 0,
     openCharges: [],
+  };
+}
+
+function roundMoney(value: number) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+/** Unallocated advance receipts the statement has already taken off the running balance. */
+export function memberAvailableCredit(
+  sub: Pick<MemberSubscription, "availableCredit" | "clubCreditBalance">,
+) {
+  return Math.max(0, roundMoney(Number(sub.availableCredit ?? sub.clubCreditBalance ?? 0)));
+}
+
+export type MemberAccountPosition = {
+  /** Full unallocated credit before it is set against open dues. */
+  credit: number;
+  /** Portion already used to reduce what the member still owes. */
+  creditApplied: number;
+  /** What is still available after open dues. Zero once the advance has been used up. */
+  creditRemaining: number;
+  joiningNet: number;
+  broughtForwardNet: number;
+  currentYearNet: number;
+  /** Current year plus brought forward, after credit. This is what annual payment should collect. */
+  subscriptionNet: number;
+  upcomingNet: number;
+  /** Same net as the statement closing balance: invoiced dues minus advance credit. */
+  balanceNet: number;
+};
+
+/**
+ * Outstanding and advance credit are already net of payment allocations.
+ * Do not subtract credit from the balance again.
+ */
+export function memberAccountPosition(sub: MemberSubscription): MemberAccountPosition {
+  const credit = memberAvailableCredit(sub);
+  const broughtForwardNet = Math.max(0, roundMoney(Number(sub.broughtForward || 0)));
+  const currentYearNet = Math.max(0, roundMoney(roundMoney(sub.outstanding) - broughtForwardNet));
+  const joiningNet = Math.max(0, roundMoney(sub.joiningOutstanding));
+  const upcomingNet = Math.max(0, roundMoney(Number(sub.upcomingOutstanding || 0)));
+  const balanceNet = Math.max(0, roundMoney(Number(sub.balance || 0)));
+  return {
+    credit,
+    creditApplied: 0,
+    creditRemaining: credit,
+    joiningNet,
+    broughtForwardNet,
+    currentYearNet,
+    subscriptionNet: roundMoney(currentYearNet + broughtForwardNet),
+    upcomingNet,
+    balanceNet,
   };
 }
 

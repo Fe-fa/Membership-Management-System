@@ -67,22 +67,6 @@ function writeLocal(key: string, value: unknown) {
   }
 }
 
-/**
- * Error thrown by `apiRequest` for any non-2xx response.
- *
- * `.message` always holds the **human-readable** reason the backend gave, so
- * toasts/UI can render it directly. The original body and HTTP status are
- * preserved on `.bodyText` / `.status` for callers that need them.
- *
- * The backend may respond with any of these shapes:
- *   1. `{ "message": "…" }` — produced by `BadRequest(new { message = ex.Message })`
- *      in `ApplicationsController.Submit`, and the source of the
- *      `{"message":"Applicant should visit the club at least three times before joining."}`
- *      string the wizard was previously rendering verbatim.
- *   2. `{ "messages": ["…", "…"] }` — ASP.NET Core's `BadRequest(ModelState)`.
- *   3. RFC 7807 `ProblemDetails`: `{ "title"|"detail": "…" }`.
- *   4. Plain text.
- */
 export class ApiError extends Error {
   status: number;
   bodyText: string;
@@ -134,11 +118,6 @@ function parseApiError(text: string, status: number): ApiError {
   return new ApiError(trimmed || `Request failed (${status})`, status, text);
 }
 
-/**
- * Best-effort extraction of a human-readable message from anything thrown by
- * `apiRequest` (or a plain JS error). Use this anywhere the UI wants to toast
- * a server failure.
- */
 export function extractErrorMessage(err: unknown): string {
   if (err instanceof ApiError) return err.message;
   if (err instanceof Error && err.message) return err.message;
@@ -288,12 +267,6 @@ function asProfileId(value: unknown): number | null {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
-
-/**
- * Creates the applicant profile on first submit, or updates the existing one on
- * every subsequent submit/retry — instead of creating a brand-new profile (and
- * silently orphaning the previous one) every time this function runs.
- */
 async function ensureApplicantProfile(draft: ApplicationDraft): Promise<number> {
   const profileId = readUser()?.profileId;
   if (!profileId) {

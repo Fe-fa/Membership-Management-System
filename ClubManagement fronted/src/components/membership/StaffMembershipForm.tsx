@@ -24,10 +24,22 @@ import { StepReview } from "./steps/StepReview";
 
 export type StaffFormVariant = "applicant" | "existingMember";
 
-const existingMembershipSchema = z.object({
-  membershipType: z.string().trim().min(1, "Membership type is required"),
-  signatureDate: z.string().trim().min(1, "Joining date is required"),
-});
+const existingMembershipSchema = z
+  .object({
+    membershipType: z.string().trim().min(1, "Membership type is required"),
+    signatureDate: z.string().trim().min(1, "Joining date is required"),
+    invoiceTo: z.enum(["INDIVIDUAL", "CORPORATE", "BOTH"]).optional(),
+    corporateCompanyId: z.coerce.number().int().positive().optional().nullable(),
+  })
+  .superRefine((value, ctx) => {
+    if ((value.invoiceTo === "CORPORATE" || value.invoiceTo === "BOTH") && !value.corporateCompanyId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["corporateCompanyId"],
+        message: "Select the corporate company to invoice",
+      });
+    }
+  });
 
 function validateStaffSection(
   variant: StaffFormVariant,
